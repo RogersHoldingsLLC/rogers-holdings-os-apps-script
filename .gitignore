@@ -1,0 +1,25 @@
+# macOS
+.DS_Store
+
+# Node
+node_modules/
+
+# Local backups
+backups/
+
+# Generated logo exports
+extracted-rogers-holdings-logos/
+
+# Old split experiments
+full-split-disabled-*/
+
+# Temporary files
+*.log
+*.tmp
+
+# Local environment
+.env
+.env.*
+
+# OS files
+Thumbs.db
