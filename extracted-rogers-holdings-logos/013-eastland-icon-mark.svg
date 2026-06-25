@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Eastland First Church of God Mark</title>
+  <desc id="desc">A transparent Eastland church mark with cross, sunrise, and hills.</desc>
+  <path d="M110 302C125 196 198 120 282 97c31-8 65-9 99-2" fill="none" stroke="#052544" stroke-width="22" stroke-linecap="round"/>
+  <path d="M264 96h34v163h-34z" fill="#052544"/>
+  <path d="M222 145h118v31H222z" fill="#052544"/>
+  <path d="M168 301c18-55 67-94 124-94s106 39 124 94" fill="#D9A93A"/>
+  <path d="M292 141v-31" stroke="#D9A93A" stroke-width="10" stroke-linecap="round"/>
+  <path d="M245 154l-20-32" stroke="#D9A93A" stroke-width="10" stroke-linecap="round"/>
+  <path d="M339 154l20-32" stroke="#D9A93A" stroke-width="10" stroke-linecap="round"/>
+  <path d="M211 190l-35-20" stroke="#D9A93A" stroke-width="10" stroke-linecap="round"/>
+  <path d="M373 190l35-20" stroke="#D9A93A" stroke-width="10" stroke-linecap="round"/>
+  <path d="M92 352c64-64 139-96 225-96 41 0 78 7 112 21-77 6-145 31-204 75H92z" fill="#052544"/>
+  <path d="M164 352c48-45 103-72 166-82 37-6 73-3 108 8-58 13-111 38-158 74H164z" fill="#163E66"/>
+  <path d="M270 352c38-39 82-59 132-59 31 0 60 8 86 23-28 5-54 16-79 36H270z" fill="#5D6132"/>
+</svg>
