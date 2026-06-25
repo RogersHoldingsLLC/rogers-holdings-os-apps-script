@@ -1,0 +1,17 @@
+# Rogers Holdings OS deploys authoritative Apps Script source from root .gs files only.
+
+*.js
+**/*.js
+scripts/**
+backups/**
+full-split-disabled-2026-06-24/**
+extracted-rogers-holdings-logos/**
+extracted-rogers-holdings-logos-clean/**
+node_modules/**
+
+package.json
+package-lock.json
+README.md
+.git/**
+.codex/**
+.agents/**
