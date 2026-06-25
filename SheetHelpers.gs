@@ -37,6 +37,220 @@ function refreshSalesOperatingSystem_() {
   applyRogersHoldingsVisualDesign_();
 }
 
+function resetTestData() {
+  const ui = SpreadsheetApp.getUi();
+  const response = ui.alert(
+    'Reset Test Data',
+    'This will delete test/prospect/client/follow-up/project/activity data but preserve Rogers Holdings OS structure. Continue?',
+    ui.ButtonSet.YES_NO
+  );
+
+  if (response !== ui.Button.YES) {
+    return;
+  }
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const results = [];
+  results.push(clearResetTableData_(ss, MASTER_PROSPECT_SHEET, ['Company']));
+  results.push(clearResetTableData_(ss, CLIENTS_SHEET, ['Company']));
+  results.push(clearResetTableData_(ss, FOLLOW_UPS_SHEET, ['Follow-Up ID']));
+  results.push(clearResetTableData_(ss, PROJECTS_SHEET, ['Project ID']));
+  results.push(clearResetTableData_(ss, ACTIVITY_FEED_SHEET, ['Date', 'Company', 'Activity Type']));
+  results.push(clearDashboardMetricsDemoRows_(ss));
+  results.push(clearResetWorkspaceContent_(ss, 'Prospect Workspace'));
+  results.push(clearResetWorkspaceContent_(ss, CLIENT_WORKSPACE_SHEET));
+
+  refreshFollowUps();
+  refreshProjects();
+  updatePipelineDashboardMetrics_();
+  refreshClientWorkspaceAfterTestReset_(ss);
+
+  if (ss.getSheetByName(ACTIVITY_FEED_SHEET)) {
+    logPipelineActivity_(
+      ss,
+      'Rogers Holdings OS',
+      'System Reset',
+      'Reset Test Data cleared operational records while preserving workbook structure.'
+    );
+  }
+
+  refreshExecutiveDashboard();
+  applyRogersHoldingsVisualDesign_();
+
+  const clearedRows = results.reduce(function(total, result) {
+    return total + (result && result.rowsCleared ? result.rowsCleared : 0);
+  }, 0);
+  const summary = results
+    .filter(function(result) {
+      return result && result.sheet;
+    })
+    .map(function(result) {
+      return `${result.sheet}: ${result.rowsCleared || 0} row(s)`;
+    })
+    .join('\n');
+
+  ui.alert(
+    'Rogers Holdings OS',
+    `Reset Test Data complete.\n\nRows cleared: ${clearedRows}\n${summary}`,
+    ui.ButtonSet.OK
+  );
+}
+
+function clearResetTableData_(ss, sheetName, requiredHeaders) {
+  const sheet = ss.getSheetByName(sheetName);
+  if (!sheet) {
+    return {
+      sheet: sheetName,
+      rowsCleared: 0,
+      skipped: true
+    };
+  }
+
+  try {
+    return {
+      sheet: sheetName,
+      rowsCleared: clearAllRowsBelowHeaderPreservingFormulas_(sheet, requiredHeaders || [])
+    };
+  } catch (error) {
+    console.warn(
+      `Reset Test Data skipped "${sheetName}": ` +
+      (error && error.message ? error.message : String(error))
+    );
+    return {
+      sheet: sheetName,
+      rowsCleared: 0,
+      skipped: true
+    };
+  }
+}
+
+function clearDashboardMetricsDemoRows_(ss) {
+  const sheet = ss.getSheetByName(DASHBOARD_METRICS_SHEET);
+  if (!sheet) {
+    return {
+      sheet: DASHBOARD_METRICS_SHEET,
+      rowsCleared: 0,
+      skipped: true
+    };
+  }
+
+  try {
+    const table = getHealthHeaderTable_(sheet);
+    const dataStartRow = table.headerRow + 1;
+    const rowCount = Math.max(sheet.getLastRow() - dataStartRow + 1, 0);
+    if (rowCount <= 0) {
+      return {
+        sheet: DASHBOARD_METRICS_SHEET,
+        rowsCleared: 0
+      };
+    }
+
+    const lastColumn = Math.max(table.lastColumn, sheet.getLastColumn());
+    const range = sheet.getRange(dataStartRow, 1, rowCount, lastColumn);
+    const values = range.getDisplayValues();
+    let clearedRows = 0;
+
+    values.forEach(function(row, index) {
+      const rowText = row.join(' ').toLowerCase();
+      if (!/\b(demo reset|demo data|sample data|test data)\b/.test(rowText)) {
+        return;
+      }
+
+      const rowRange = sheet.getRange(dataStartRow + index, 1, 1, lastColumn);
+      const formulas = rowRange.getFormulas();
+      rowRange.clearContent();
+      restoreFormulas_(rowRange, formulas);
+      clearedRows += 1;
+    });
+
+    return {
+      sheet: DASHBOARD_METRICS_SHEET,
+      rowsCleared: clearedRows
+    };
+  } catch (error) {
+    console.warn(
+      'Reset Test Data skipped Dashboard Metrics demo rows: ' +
+      (error && error.message ? error.message : String(error))
+    );
+    return {
+      sheet: DASHBOARD_METRICS_SHEET,
+      rowsCleared: 0,
+      skipped: true
+    };
+  }
+}
+
+function clearResetWorkspaceContent_(ss, sheetName) {
+  const sheet = ss.getSheetByName(sheetName);
+  if (!sheet) {
+    return {
+      sheet: sheetName,
+      rowsCleared: 0,
+      skipped: true
+    };
+  }
+
+  try {
+    const startRow = 4;
+    const rowCount = Math.max(sheet.getLastRow() - startRow + 1, 0);
+    const columnCount = Math.max(sheet.getLastColumn(), 1);
+    if (rowCount <= 0) {
+      return {
+        sheet: sheetName,
+        rowsCleared: 0
+      };
+    }
+
+    const range = sheet.getRange(startRow, 1, rowCount, columnCount);
+    const formulas = range.getFormulas();
+    range.clearContent();
+    restoreFormulas_(range, formulas);
+    return {
+      sheet: sheetName,
+      rowsCleared: rowCount
+    };
+  } catch (error) {
+    console.warn(
+      `Reset Test Data skipped workspace "${sheetName}": ` +
+      (error && error.message ? error.message : String(error))
+    );
+    return {
+      sheet: sheetName,
+      rowsCleared: 0,
+      skipped: true
+    };
+  }
+}
+
+function refreshClientWorkspaceAfterTestReset_(ss) {
+  const workspaceSheet = getOrCreateClientWorkspaceSheet_(ss);
+  renderClientWorkspace_(workspaceSheet, buildEmptyClientWorkspaceModel_());
+}
+
+function buildEmptyClientWorkspaceModel_() {
+  return {
+    clientId: '',
+    company: 'No Client Selected',
+    contact: '',
+    email: '',
+    phone: '',
+    website: '',
+    industry: '',
+    servicePackage: '',
+    status: '',
+    assignedTo: '',
+    currentProject: '',
+    projectStatus: '',
+    dueDate: '',
+    lastActivity: '',
+    notes: 'Select a client row to populate this workspace.',
+    activity: [],
+    documents: [],
+    followUps: [],
+    projects: []
+  };
+}
+
 function openExecutiveDashboard() {
   openRogersOsSheet_('Executive Dashboard', true);
 }
@@ -446,7 +660,7 @@ function formatFollowUpsSheet_(sheet, headers) {
   const headerRow = findBestHeaderRow_(sheet);
   const lastRow = Math.max(sheet.getLastRow(), headerRow);
   sheet.setHiddenGridlines(true);
-  sheet.setFrozenRows(headerRow);
+  safeSetFrozenRows_(sheet, headerRow);
   sheet.setTabColor(ROGERS_OS_THEME.gold);
   sheet.getRange(headerRow, 1, 1, Math.max(sheet.getLastColumn(), FOLLOW_UP_COLUMNS.length))
     .setBackground(ROGERS_OS_THEME.black)
@@ -473,6 +687,9 @@ function formatFollowUpsSheet_(sheet, headers) {
   setColumnWidthIfHeader_(sheet, headers, 'Completed', 110);
   setColumnWidthIfHeader_(sheet, headers, 'Completed Date', 130);
   applyAlternatingRows_(sheet, headerRow + 1, lastRow, Math.max(sheet.getLastColumn(), FOLLOW_UP_COLUMNS.length));
+  applyVisualComfortBody_(sheet, headerRow + 1, lastRow, Math.max(sheet.getLastColumn(), FOLLOW_UP_COLUMNS.length), {
+    rowHeight: 34
+  });
   applyWrapByHeader_(sheet, headers, headerRow, lastRow, ['Notes']);
   applyColumnFormattingByHeader_(sheet, headers, headerRow, lastRow, {
     'Due Date': { horizontalAlignment: 'center', numberFormat: 'yyyy-mm-dd' },
@@ -1033,7 +1250,7 @@ function formatProjectsSheet_(sheet, headers) {
   const headerRow = findBestHeaderRow_(sheet);
   const lastRow = Math.max(sheet.getLastRow(), headerRow);
   sheet.setHiddenGridlines(true);
-  sheet.setFrozenRows(headerRow);
+  safeSetFrozenRows_(sheet, headerRow);
   sheet.setTabColor(ROGERS_OS_THEME.charcoal);
   sheet.getRange(headerRow, 1, 1, Math.max(sheet.getLastColumn(), PROJECT_COLUMNS.length))
     .setBackground(ROGERS_OS_THEME.black)
@@ -1065,6 +1282,9 @@ function formatProjectsSheet_(sheet, headers) {
     'Last Updated': { horizontalAlignment: 'center', numberFormat: 'yyyy-mm-dd hh:mm' }
   });
   applyAlternatingRows_(sheet, headerRow + 1, lastRow, Math.max(sheet.getLastColumn(), PROJECT_COLUMNS.length));
+  applyVisualComfortBody_(sheet, headerRow + 1, lastRow, Math.max(sheet.getLastColumn(), PROJECT_COLUMNS.length), {
+    rowHeight: 36
+  });
   applyProjectStatusColors_(sheet, headers, headerRow, lastRow);
   applyWrapByHeader_(sheet, headers, headerRow, lastRow, ['Deliverables', 'Folder', 'Notes']);
   applyProjectValidation_(sheet, headers, headerRow);
@@ -1922,7 +2142,7 @@ function renderClientWorkspace_(sheet, model) {
 function writeClientWorkspaceSection_(sheet, startRow, startColumn, valueColumnSpan, title, rows) {
   const width = valueColumnSpan + 1;
   sheet.getRange(startRow, startColumn, 1, width).merge().setValue(title)
-    .setBackground(ROGERS_OS_THEME.black)
+    .setBackground(ROGERS_OS_THEME.charcoal)
     .setFontColor(ROGERS_OS_THEME.gold)
     .setFontWeight('bold')
     .setFontSize(11);
@@ -2467,17 +2687,18 @@ function buildProspectWorkspaceHtml_(workspace) {
         <style>
           body {
             margin: 0;
-            background: #111111;
-            color: #f7f3ea;
+            background: #f7f3ea;
+            color: #202020;
             font-family: Arial, Helvetica, sans-serif;
           }
           .wrap {
             padding: 18px;
           }
           .brand {
+            background: #111111;
             border-bottom: 2px solid #b88728;
-            margin-bottom: 16px;
-            padding-bottom: 12px;
+            margin: -18px -18px 16px;
+            padding: 18px 18px 14px;
           }
           .brand span {
             color: #d8ad4d;
@@ -2502,7 +2723,7 @@ function buildProspectWorkspaceHtml_(workspace) {
           }
           .section {
             border: 1px solid rgba(184, 135, 40, .45);
-            background: #181818;
+            background: #ffffff;
             padding: 12px;
             margin-bottom: 12px;
           }
@@ -2511,17 +2732,17 @@ function buildProspectWorkspaceHtml_(workspace) {
             gap: 8px;
           }
           .field {
-            border-bottom: 1px solid rgba(255,255,255,.09);
+            border-bottom: 1px solid #eee6d5;
             padding-bottom: 7px;
           }
           .label {
-            color: #a8a8a8;
+            color: #6f6a60;
             font-size: 10px;
             font-weight: 700;
             text-transform: uppercase;
           }
           .value {
-            color: #ffffff;
+            color: #202020;
             font-size: 13px;
             margin-top: 3px;
             overflow-wrap: anywhere;
@@ -2543,11 +2764,11 @@ function buildProspectWorkspaceHtml_(workspace) {
           }
           button.secondary {
             background: transparent;
-            color: #f7f3ea;
+            color: #111111;
           }
           .activity {
             border-left: 3px solid #b88728;
-            background: #202020;
+            background: #ffffff;
             margin-bottom: 8px;
             padding: 9px 10px;
           }
@@ -2555,16 +2776,16 @@ function buildProspectWorkspaceHtml_(workspace) {
             display: flex;
             justify-content: space-between;
             gap: 8px;
-            color: #ffffff;
+            color: #202020;
             font-size: 12px;
           }
           .activity-top span {
-            color: #bfb6a4;
+            color: #6f6a60;
             white-space: nowrap;
           }
           .activity p,
           .muted {
-            color: #d6d0c6;
+            color: #6f6a60;
             font-size: 12px;
             line-height: 1.45;
             margin: 6px 0 0;
@@ -4024,6 +4245,9 @@ function formatDashboardMetricsSheet_(sheet) {
     }
   });
   applyAlternatingRows_(sheet, table.headerRow + 1, lastRow, lastColumn);
+  applyVisualComfortBody_(sheet, table.headerRow + 1, lastRow, lastColumn, {
+    rowHeight: 28
+  });
 }
 
 function formatMasterProspectTrackerSheet_(sheet) {
@@ -4062,6 +4286,9 @@ function formatMasterProspectTrackerSheet_(sheet) {
     'Audit Package Date': { horizontalAlignment: 'center', numberFormat: 'yyyy-mm-dd hh:mm' },
     'Discovery Date': { horizontalAlignment: 'center', numberFormat: 'yyyy-mm-dd hh:mm' },
     'Closed Date': { horizontalAlignment: 'center', numberFormat: 'yyyy-mm-dd' }
+  });
+  applyVisualComfortBody_(sheet, table.headerRow + 1, lastRow, lastColumn, {
+    rowHeight: 34
   });
   applyWrapByHeader_(sheet, table.headers, table.headerRow, lastRow, [
     'Audit Outcome',
@@ -4121,6 +4348,9 @@ function formatClientsSheet_(sheet) {
     'Status': { horizontalAlignment: 'center' },
     'Project Status': { horizontalAlignment: 'center' }
   });
+  applyVisualComfortBody_(sheet, table.headerRow + 1, lastRow, lastColumn, {
+    rowHeight: 34
+  });
   applyWrapByHeader_(sheet, table.headers, table.headerRow, lastRow, [
     'Current Project',
     'Notes'
@@ -4164,6 +4394,11 @@ function formatActivityFeedSheet_(sheet) {
   runSheetFormattingStep_(sheet, 'Activity Feed row heights', function() {
     sheet.setRowHeights(table.headerRow + 1, Math.max(lastRow - table.headerRow, 1), 42);
   });
+  applyVisualComfortBody_(sheet, table.headerRow + 1, lastRow, lastColumn, {
+    rowHeight: 42,
+    wrap: true,
+    verticalAlignment: 'top'
+  });
 }
 
 function formatSettingsSheet_(sheet) {
@@ -4192,6 +4427,9 @@ function formatSettingsSheet_(sheet) {
   applyAlternatingRows_(sheet, table.headerRow + 1, lastRow, lastColumn);
   runSheetFormattingStep_(sheet, 'Settings column widths', function() {
     sheet.setColumnWidths(1, Math.min(lastColumn, 4), 190);
+  });
+  applyVisualComfortBody_(sheet, table.headerRow + 1, lastRow, lastColumn, {
+    rowHeight: 30
   });
 }
 
@@ -4227,6 +4465,30 @@ function applyAlternatingRows_(sheet, startRow, lastRow, lastColumn) {
   runSheetFormattingStep_(sheet, 'Alternating row backgrounds', function() {
     sheet.getRange(startRow, 1, rowCount, lastColumn).setBackgrounds(backgrounds);
   });
+}
+
+function applyVisualComfortBody_(sheet, startRow, lastRow, lastColumn, options) {
+  if (lastRow < startRow || lastColumn <= 0) {
+    return;
+  }
+
+  const settings = options || {};
+  const rowCount = lastRow - startRow + 1;
+  runSheetFormattingStep_(sheet, 'Visual comfort body styling', function() {
+    sheet.getRange(startRow, 1, rowCount, lastColumn)
+      .setFontFamily('Arial')
+      .setFontSize(settings.fontSize || 10)
+      .setFontColor(ROGERS_OS_THEME.text)
+      .setVerticalAlignment(settings.verticalAlignment || 'middle')
+      .setWrap(settings.wrap === true)
+      .setBorder(true, false, true, false, false, false, ROGERS_OS_THEME.border, SpreadsheetApp.BorderStyle.SOLID);
+  });
+
+  if (settings.rowHeight) {
+    runSheetFormattingStep_(sheet, 'Visual comfort row height', function() {
+      sheet.setRowHeights(startRow, rowCount, settings.rowHeight);
+    });
+  }
 }
 
 function applySectionHeaderStyle_(sheet, startColumn, columnCount) {

@@ -54,6 +54,7 @@ function onOpen(e) {
   const systemMenu = ui.createMenu('System')
     .addItem('Refresh Executive Dashboard', 'refreshExecutiveDashboard')
     .addItem('System Health Check', 'runSystemHealthCheck')
+    .addItem('Reset Test Data', 'resetTestData')
     .addItem('Reset Demo Data', 'resetDemoData');
 
   ui.createMenu('Rogers Holdings OS')
