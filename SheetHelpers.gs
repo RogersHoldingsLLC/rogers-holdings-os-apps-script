@@ -28,6 +28,8 @@ function refreshSalesOperatingSystem_() {
   ensureAuditPackageColumns_();
   getOrCreateClientsSheet_(ss);
   getOrCreateClientWorkspaceSheet_(ss);
+  getOrCreateDailyFrictionLogSheet_(ss);
+  getOrCreateProductFeedbackSheet_(ss);
   refreshFollowUps();
   refreshProjects();
   updatePipelineDashboardMetrics_();
@@ -94,6 +96,131 @@ function resetTestData() {
     `Reset Test Data complete.\n\nRows cleared: ${clearedRows}\n${summary}`,
     ui.ButtonSet.OK
   );
+}
+
+function repairInvalidDropdownValues() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ui = SpreadsheetApp.getUi();
+  const sheet = ss.getSheetByName(MASTER_PROSPECT_SHEET);
+  if (!sheet) {
+    ui.alert('Rogers Holdings OS', 'Master Prospect Tracker not found.', ui.ButtonSet.OK);
+    return;
+  }
+
+  const table = getHeaderTable_(sheet, ['Company']);
+  const result = repairInvalidDropdownValuesForSheet_(sheet, table);
+  if (result.changedCells > 0) {
+    logPipelineActivity_(
+      ss,
+      'Rogers Holdings OS',
+      'Dropdown Values Repaired',
+      `Repaired ${result.changedCells} invalid dropdown value(s) across ${result.changedRows} prospect row(s).`
+    );
+  }
+  refreshExecutiveDashboard();
+
+  ui.alert(
+    'Rogers Holdings OS',
+    `Dropdown repair complete.\n\nCells repaired: ${result.changedCells}\nRows affected: ${result.changedRows}`,
+    ui.ButtonSet.OK
+  );
+}
+
+function repairInvalidDropdownValuesForSheet_(sheet, table) {
+  const headers = table.headers;
+  const dataStartRow = table.headerRow + 1;
+  const rowCount = Math.max(sheet.getLastRow() - table.headerRow, 0);
+  const targetHeaders = getProspectDropdownRepairHeaders_(headers);
+  if (rowCount <= 0 || !targetHeaders.length) {
+    return {
+      changedCells: 0,
+      changedRows: 0
+    };
+  }
+
+  const values = sheet.getRange(dataStartRow, 1, rowCount, table.lastColumn).getValues();
+  let changedCells = 0;
+  const changedRows = {};
+
+  values.forEach(function(rowValues, rowIndex) {
+    targetHeaders.forEach(function(header) {
+      const columnIndex = headers[header] - 1;
+      const originalValue = rowValues[columnIndex];
+      if (originalValue === null || originalValue === undefined || String(originalValue).trim() === '') {
+        return;
+      }
+
+      const normalizedValue = normalizeProspectDropdownValue_(sheet, headers, header, originalValue);
+      if (String(normalizedValue || '').trim() !== String(originalValue || '').trim()) {
+        rowValues[columnIndex] = normalizedValue;
+        changedCells += 1;
+        changedRows[dataStartRow + rowIndex] = true;
+      }
+    });
+  });
+
+  if (changedCells > 0) {
+    sheet.getRange(dataStartRow, 1, rowCount, table.lastColumn).setValues(values);
+  }
+
+  return {
+    changedCells: changedCells,
+    changedRows: Object.keys(changedRows).length
+  };
+}
+
+function getProspectDropdownRepairHeaders_(headers) {
+  return [
+    'Audit Outcome',
+    'Priority Tier',
+    'Status',
+    'Next Action',
+    'Offer / Service',
+    'Moved to CRM'
+  ].filter(function(header) {
+    return !!headers[header];
+  });
+}
+
+function findInvalidProspectDropdownValues_(sheet, table) {
+  const headers = table.headers;
+  const dataStartRow = table.headerRow + 1;
+  const rowCount = Math.max(sheet.getLastRow() - table.headerRow, 0);
+  const targetHeaders = getProspectDropdownRepairHeaders_(headers);
+  const issues = [];
+  if (rowCount <= 0 || !targetHeaders.length) {
+    return issues;
+  }
+
+  const allowedByHeader = targetHeaders.reduce(function(result, header) {
+    result[header] = approvedProspectDropdownValues_(
+      getApprovedProspectDropdownValues_(sheet, headers, header),
+      header
+    );
+    return result;
+  }, {});
+  const values = sheet.getRange(dataStartRow, 1, rowCount, table.lastColumn).getValues();
+  values.forEach(function(rowValues, rowIndex) {
+    targetHeaders.forEach(function(header) {
+      const value = getValueByHeader_(rowValues, headers, header);
+      const text = String(value || '').trim();
+      if (!text) {
+        return;
+      }
+
+      const allowedValues = allowedByHeader[header] || [];
+      if (!inferAllowedDropdownValue_(allowedValues, text)) {
+        issues.push({
+          row: dataStartRow + rowIndex,
+          header: header,
+          value: text,
+          suggestedValue: normalizeProspectDropdownValue_(sheet, headers, header, text)
+        });
+      }
+    });
+  });
+
+  return issues;
 }
 
 function clearResetTableData_(ss, sheetName, requiredHeaders) {
@@ -276,6 +403,16 @@ function openProjectsSheet() {
 
 function openActivityFeedSheet() {
   openRogersOsSheet_(ACTIVITY_FEED_SHEET, true);
+}
+
+function openDailyFrictionLog() {
+  getOrCreateDailyFrictionLogSheet_(SpreadsheetApp.getActiveSpreadsheet());
+  openRogersOsSheet_(DAILY_FRICTION_LOG_SHEET, true);
+}
+
+function openProductFeedback() {
+  getOrCreateProductFeedbackSheet_(SpreadsheetApp.getActiveSpreadsheet());
+  openRogersOsSheet_(PRODUCT_FEEDBACK_SHEET, true);
 }
 
 function openRogersOsSheet_(sheetName, showAlert) {
@@ -659,10 +796,12 @@ function refreshFollowUpDaysUntilDue_(sheet, headers) {
 function formatFollowUpsSheet_(sheet, headers) {
   const headerRow = findBestHeaderRow_(sheet);
   const lastRow = Math.max(sheet.getLastRow(), headerRow);
+  const lastColumn = Math.max(sheet.getLastColumn(), FOLLOW_UP_COLUMNS.length);
   sheet.setHiddenGridlines(true);
   safeSetFrozenRows_(sheet, headerRow);
   sheet.setTabColor(ROGERS_OS_THEME.gold);
-  sheet.getRange(headerRow, 1, 1, Math.max(sheet.getLastColumn(), FOLLOW_UP_COLUMNS.length))
+  applyOperatingSystemSheetChrome_(sheet, 'FOLLOW-UPS', headerRow, lastColumn);
+  sheet.getRange(headerRow, 1, 1, lastColumn)
     .setBackground(ROGERS_OS_THEME.black)
     .setFontColor(ROGERS_OS_THEME.gold)
     .setFontWeight('bold')
@@ -686,8 +825,9 @@ function formatFollowUpsSheet_(sheet, headers) {
   setColumnWidthIfHeader_(sheet, headers, 'Notes', 360);
   setColumnWidthIfHeader_(sheet, headers, 'Completed', 110);
   setColumnWidthIfHeader_(sheet, headers, 'Completed Date', 130);
-  applyAlternatingRows_(sheet, headerRow + 1, lastRow, Math.max(sheet.getLastColumn(), FOLLOW_UP_COLUMNS.length));
-  applyVisualComfortBody_(sheet, headerRow + 1, lastRow, Math.max(sheet.getLastColumn(), FOLLOW_UP_COLUMNS.length), {
+  applyAlternatingRows_(sheet, headerRow + 1, lastRow, lastColumn);
+  applyOperatingSystemTableSurface_(sheet, headerRow, lastRow, lastColumn);
+  applyVisualComfortBody_(sheet, headerRow + 1, lastRow, lastColumn, {
     rowHeight: 34
   });
   applyWrapByHeader_(sheet, headers, headerRow, lastRow, ['Notes']);
@@ -1249,10 +1389,12 @@ function getProjectsForClient_(ss, clientId, company, limit) {
 function formatProjectsSheet_(sheet, headers) {
   const headerRow = findBestHeaderRow_(sheet);
   const lastRow = Math.max(sheet.getLastRow(), headerRow);
+  const lastColumn = Math.max(sheet.getLastColumn(), PROJECT_COLUMNS.length);
   sheet.setHiddenGridlines(true);
   safeSetFrozenRows_(sheet, headerRow);
   sheet.setTabColor(ROGERS_OS_THEME.charcoal);
-  sheet.getRange(headerRow, 1, 1, Math.max(sheet.getLastColumn(), PROJECT_COLUMNS.length))
+  applyOperatingSystemSheetChrome_(sheet, 'PROJECTS', headerRow, lastColumn);
+  sheet.getRange(headerRow, 1, 1, lastColumn)
     .setBackground(ROGERS_OS_THEME.black)
     .setFontColor(ROGERS_OS_THEME.gold)
     .setFontWeight('bold')
@@ -1281,8 +1423,9 @@ function formatProjectsSheet_(sheet, headers) {
     Priority: { horizontalAlignment: 'center' },
     'Last Updated': { horizontalAlignment: 'center', numberFormat: 'yyyy-mm-dd hh:mm' }
   });
-  applyAlternatingRows_(sheet, headerRow + 1, lastRow, Math.max(sheet.getLastColumn(), PROJECT_COLUMNS.length));
-  applyVisualComfortBody_(sheet, headerRow + 1, lastRow, Math.max(sheet.getLastColumn(), PROJECT_COLUMNS.length), {
+  applyAlternatingRows_(sheet, headerRow + 1, lastRow, lastColumn);
+  applyOperatingSystemTableSurface_(sheet, headerRow, lastRow, lastColumn);
+  applyVisualComfortBody_(sheet, headerRow + 1, lastRow, lastColumn, {
     rowHeight: 36
   });
   applyProjectStatusColors_(sheet, headers, headerRow, lastRow);
@@ -1806,6 +1949,251 @@ function normalizeDropdownValue_(value) {
   return String(value || '').trim().toLowerCase();
 }
 
+function normalizeProspectDropdownWriteValue_(sheet, headers, header, value) {
+  if (!sheet || sheet.getName() !== MASTER_PROSPECT_SHEET) {
+    return value;
+  }
+
+  return normalizeProspectDropdownValue_(sheet, headers, header, value);
+}
+
+function normalizeProspectDropdownValue_(sheet, headers, header, value) {
+  if (value === null || value === undefined || String(value).trim() === '') {
+    return value;
+  }
+
+  if (header === 'Audit Outcome') {
+    return normalizeAuditOutcome_(value, getApprovedProspectDropdownValues_(sheet, headers, header));
+  }
+  if (header === 'Priority Tier' || header === 'Opportunity Level') {
+    return normalizePriorityTier_(value, getApprovedProspectDropdownValues_(sheet, headers, 'Priority Tier'));
+  }
+  if (header === 'Status') {
+    return normalizeProspectStatus_(value, getApprovedProspectDropdownValues_(sheet, headers, header));
+  }
+  if (header === 'Next Action') {
+    return normalizeNextAction_(value, getApprovedProspectDropdownValues_(sheet, headers, header));
+  }
+  if (header === 'Offer / Service') {
+    return normalizeOfferService_(value, getApprovedProspectDropdownValues_(sheet, headers, header));
+  }
+  if (header === 'Moved to CRM') {
+    return normalizeMovedToCrm_(value, getApprovedProspectDropdownValues_(sheet, headers, header));
+  }
+
+  return value;
+}
+
+function normalizeAuditOutcome_(value, allowedValues) {
+  const text = String(value || '').trim();
+  const key = normalizeDropdownValue_(text);
+  const candidatesByKey = {
+    'high opportunity': ['Strong Fit', 'Good Fit'],
+    high: ['Strong Fit', 'Good Fit'],
+    'strong digital foundation': ['Strong Fit', 'Good Fit'],
+    'very strong': ['Strong Fit', 'Good Fit'],
+    'good foundation with visibility and conversion opportunities': ['Good Fit'],
+    'basic visibility opportunity with trust improvements needed': ['Needs Nurture', 'Good Fit'],
+    medium: ['Good Fit', 'Needs Nurture'],
+    moderate: ['Good Fit', 'Needs Nurture'],
+    low: ['Needs Nurture', 'Poor Fit'],
+    nurture: ['Needs Nurture'],
+    'needs nurture': ['Needs Nurture'],
+    'poor fit': ['Poor Fit'],
+    'not audited': ['Not Audited']
+  };
+  return chooseAllowedValue_(
+    approvedProspectDropdownValues_(allowedValues, 'Audit Outcome'),
+    (candidatesByKey[key] || [text]).concat(['Good Fit', 'Needs Nurture', 'Not Audited']),
+    inferAllowedDropdownValue_(allowedValues, text) || text
+  );
+}
+
+function normalizePriorityTier_(value, allowedValues) {
+  const text = String(value || '').trim();
+  const key = normalizeDropdownValue_(text);
+  const candidatesByKey = {
+    high: ['A - Hot'],
+    'high opportunity': ['A - Hot'],
+    hot: ['A - Hot'],
+    a: ['A - Hot'],
+    'a - hot': ['A - Hot'],
+    medium: ['B - Good'],
+    moderate: ['B - Good'],
+    good: ['B - Good'],
+    b: ['B - Good'],
+    'b - good': ['B - Good'],
+    low: ['C - Later'],
+    later: ['C - Later'],
+    c: ['C - Later'],
+    'c - later': ['C - Later']
+  };
+  return chooseAllowedValue_(
+    approvedProspectDropdownValues_(allowedValues, 'Priority Tier'),
+    (candidatesByKey[key] || [text]).concat(['B - Good', 'A - Hot', 'C - Later']),
+    inferAllowedDropdownValue_(allowedValues, text) || text
+  );
+}
+
+function normalizeProspectStatus_(value, allowedValues) {
+  const text = String(value || '').trim();
+  const key = normalizeDropdownValue_(text);
+  const candidatesByKey = {
+    draft: ['Draft Created'],
+    'gmail draft created': ['Draft Created'],
+    audited: ['Audit Complete'],
+    'audit completed': ['Audit Complete'],
+    'package sent': ['Audit Package Sent'],
+    discovery: ['Discovery Scheduled'],
+    active: ['Won'],
+    archived: ['Lost']
+  };
+  return chooseAllowedValue_(
+    approvedProspectDropdownValues_(allowedValues, 'Status'),
+    (candidatesByKey[key] || [text]).concat(['Lead Found']),
+    inferAllowedDropdownValue_(allowedValues, text) || text
+  );
+}
+
+function normalizeNextAction_(value, allowedValues) {
+  const text = String(value || '').trim();
+  const key = normalizeDropdownValue_(text);
+  const candidatesByKey = {
+    'review email': ['Send Intro Email', 'Follow Up'],
+    'review gmail draft': ['Send Intro Email', 'Follow Up'],
+    'send email': ['Send Intro Email'],
+    'send intro': ['Send Intro Email'],
+    'send intro email': ['Send Intro Email'],
+    'send proposal': ['Send Proposal'],
+    proposal: ['Send Proposal'],
+    'schedule discovery': ['Conduct Discovery Call', 'Follow Up'],
+    'schedule discovery call': ['Conduct Discovery Call', 'Follow Up'],
+    'conduct discovery call': ['Conduct Discovery Call'],
+    discovery: ['Conduct Discovery Call'],
+    'follow-up': ['Follow Up'],
+    'follow up': ['Follow Up'],
+    archived: ['Nurture', 'Follow Up'],
+    nurture: ['Nurture']
+  };
+  return chooseAllowedValue_(
+    approvedProspectDropdownValues_(allowedValues, 'Next Action'),
+    (candidatesByKey[key] || [text]).concat(['Follow Up', 'Send Intro Email']),
+    inferAllowedDropdownValue_(allowedValues, text) || text
+  );
+}
+
+function normalizeOfferService_(value, allowedValues) {
+  const text = String(value || '').trim();
+  const key = normalizeDropdownValue_(text);
+  const candidatesByKey = {
+    'website and local visibility review': ['Website Audit', 'Local SEO'],
+    'website trust and visibility cleanup': ['Website Audit', 'Local SEO'],
+    'digital visibility & conversion improvement package': ['Client Website', 'Local SEO', 'Website Audit'],
+    'digital visibility and conversion improvement package': ['Client Website', 'Local SEO', 'Website Audit'],
+    'growth & optimization review': ['Consulting', 'Local SEO'],
+    'growth and optimization review': ['Consulting', 'Local SEO'],
+    'google business': ['Google Business Optimization'],
+    gbp: ['Google Business Optimization'],
+    seo: ['Local SEO'],
+    website: ['Client Website', 'Website Audit'],
+    automation: ['AI Automation'],
+    systems: ['Business Systems'],
+    support: ['Monthly Support'],
+    project: ['One-Time Project']
+  };
+  return chooseAllowedValue_(
+    approvedProspectDropdownValues_(allowedValues, 'Offer / Service'),
+    (candidatesByKey[key] || [text]).concat(['Website Audit', 'Consulting']),
+    inferAllowedDropdownValue_(allowedValues, text) || text
+  );
+}
+
+function normalizeMovedToCrm_(value, allowedValues) {
+  const text = String(value || '').trim();
+  const key = normalizeDropdownValue_(text);
+  const candidates = ['yes', 'y', 'true', '1', 'moved', 'converted'].indexOf(key) !== -1
+    ? ['Yes']
+    : ['No'];
+  return chooseAllowedValue_(
+    approvedProspectDropdownValues_(allowedValues, 'Moved to CRM'),
+    candidates.concat([text]),
+    inferAllowedDropdownValue_(allowedValues, text) || text
+  );
+}
+
+function approvedProspectDropdownValues_(allowedValues, header) {
+  return (allowedValues && allowedValues.length)
+    ? allowedValues
+    : ((PROSPECT_DROPDOWN_DEFAULTS && PROSPECT_DROPDOWN_DEFAULTS[header]) || []);
+}
+
+function inferAllowedDropdownValue_(allowedValues, value) {
+  const allowed = allowedValues || [];
+  const key = normalizeDropdownValue_(value);
+  for (let index = 0; index < allowed.length; index += 1) {
+    if (normalizeDropdownValue_(allowed[index]) === key) {
+      return allowed[index];
+    }
+  }
+  return '';
+}
+
+function getApprovedProspectDropdownValues_(sheet, headers, header) {
+  if (!sheet || !headers || !headers[header]) {
+    return approvedProspectDropdownValues_([], header);
+  }
+
+  const table = {
+    headerRow: findBestHeaderRow_(sheet),
+    headers: headers
+  };
+  const validationValues = getDropdownAllowedValuesForHeader_(sheet, table, header);
+  if (validationValues.length) {
+    return validationValues;
+  }
+
+  const settingsValues = getSettingsDropdownValuesForHeader_(SpreadsheetApp.getActiveSpreadsheet(), header);
+  return settingsValues.length
+    ? settingsValues
+    : approvedProspectDropdownValues_([], header);
+}
+
+function getSettingsDropdownValuesForHeader_(ss, header) {
+  const sheet = ss && ss.getSheetByName('Settings');
+  if (!sheet) {
+    return [];
+  }
+
+  const values = sheet.getDataRange().getDisplayValues();
+  const targetKey = normalizeDropdownValue_(header);
+  for (let row = 0; row < values.length; row += 1) {
+    for (let column = 0; column < values[row].length; column += 1) {
+      if (normalizeDropdownValue_(values[row][column]) !== targetKey) {
+        continue;
+      }
+
+      const collected = [];
+      for (let nextRow = row + 1; nextRow < values.length; nextRow += 1) {
+        const nextValue = String(values[nextRow][column] || '').trim();
+        if (!nextValue) {
+          break;
+        }
+        collected.push(nextValue);
+      }
+      for (let nextColumn = column + 1; nextColumn < values[row].length; nextColumn += 1) {
+        const nextValue = String(values[row][nextColumn] || '').trim();
+        if (!nextValue) {
+          break;
+        }
+        collected.push(nextValue);
+      }
+      return uniqueNonBlankValues_(collected);
+    }
+  }
+
+  return [];
+}
+
 function getDemoProspectHeaders_() {
   return [
     'Company',
@@ -1848,7 +2236,7 @@ function setIfHeaderCell_(sheet, headers, row, header, value) {
     return;
   }
 
-  sheet.getRange(row, headers[header]).setValue(value);
+  sheet.getRange(row, headers[header]).setValue(normalizeProspectDropdownWriteValue_(sheet, headers, header, value));
 }
 
 function openProspectWorkspace() {
@@ -2066,12 +2454,16 @@ function renderClientWorkspace_(sheet, model) {
   const border = ROGERS_OS_THEME.border;
 
   sheet.setColumnWidths(1, 10, 135);
-  sheet.setColumnWidth(1, 180);
-  sheet.setColumnWidth(2, 230);
-  sheet.setColumnWidth(4, 180);
-  sheet.setColumnWidth(5, 230);
-  sheet.setColumnWidth(7, 180);
-  sheet.setColumnWidth(8, 230);
+  sheet.setColumnWidth(1, 150);
+  sheet.setColumnWidth(2, 215);
+  sheet.setColumnWidth(3, 26);
+  sheet.setColumnWidth(4, 150);
+  sheet.setColumnWidth(5, 215);
+  sheet.setColumnWidth(6, 26);
+  sheet.setColumnWidth(7, 150);
+  sheet.setColumnWidth(8, 215);
+  sheet.setColumnWidth(9, 26);
+  sheet.setColumnWidth(10, 26);
   sheet.setRowHeights(1, 70, 30);
   sheet.setRowHeight(1, 42);
   sheet.setRowHeight(2, 34);
@@ -2081,12 +2473,15 @@ function renderClientWorkspace_(sheet, model) {
     .setFontColor(gold)
     .setFontWeight('bold')
     .setFontSize(16)
-    .setHorizontalAlignment('left');
+    .setHorizontalAlignment('center')
+    .setVerticalAlignment('middle');
   sheet.getRange(2, 1, 1, 10).merge().setValue(model.company || 'No Client Selected')
     .setBackground(black)
     .setFontColor(white)
     .setFontWeight('bold')
-    .setFontSize(20);
+    .setFontSize(20)
+    .setHorizontalAlignment('center')
+    .setVerticalAlignment('middle');
 
   writeClientWorkspaceSection_(sheet, 4, 1, 2, 'Client Overview', [
     ['Client ID', model.clientId],
@@ -2145,7 +2540,9 @@ function writeClientWorkspaceSection_(sheet, startRow, startColumn, valueColumnS
     .setBackground(ROGERS_OS_THEME.charcoal)
     .setFontColor(ROGERS_OS_THEME.gold)
     .setFontWeight('bold')
-    .setFontSize(11);
+    .setFontSize(11)
+    .setHorizontalAlignment('center')
+    .setVerticalAlignment('middle');
 
   const output = (rows || []).map(function(row) {
     return [row[0] || '', clientWorkspaceDisplayValue_(row[1])];
@@ -2157,9 +2554,13 @@ function writeClientWorkspaceSection_(sheet, startRow, startColumn, valueColumnS
   sheet.getRange(startRow + 1, startColumn, output.length, 2).setValues(output);
   sheet.getRange(startRow + 1, startColumn, output.length, 1)
     .setFontWeight('bold')
-    .setFontColor(ROGERS_OS_THEME.muted);
+    .setFontColor(ROGERS_OS_THEME.muted)
+    .setHorizontalAlignment('right')
+    .setVerticalAlignment('middle');
   sheet.getRange(startRow + 1, startColumn + 1, output.length, Math.max(valueColumnSpan, 1))
-    .setBackground(ROGERS_OS_THEME.softNeutral);
+    .setBackground(ROGERS_OS_THEME.softNeutral)
+    .setHorizontalAlignment('left')
+    .setVerticalAlignment('middle');
 }
 
 function clientWorkspaceDisplayValue_(value) {
@@ -3080,6 +3481,167 @@ function ensureSheetColumns_(sheet, columns) {
   };
 }
 
+function getOrCreateDailyFrictionLogSheet_(ss) {
+  let sheet = ss.getSheetByName(DAILY_FRICTION_LOG_SHEET);
+  if (!sheet) {
+    sheet = ss.insertSheet(DAILY_FRICTION_LOG_SHEET);
+  }
+
+  const table = ensureSheetColumns_(sheet, DAILY_FRICTION_LOG_COLUMNS);
+  formatDailyFrictionLogSheet_(sheet, table.headers);
+  return sheet;
+}
+
+function getOrCreateProductFeedbackSheet_(ss) {
+  let sheet = ss.getSheetByName(PRODUCT_FEEDBACK_SHEET);
+  if (!sheet) {
+    sheet = ss.insertSheet(PRODUCT_FEEDBACK_SHEET);
+  }
+
+  const table = ensureSheetColumns_(sheet, PRODUCT_FEEDBACK_COLUMNS);
+  formatProductFeedbackSheet_(sheet, table.headers);
+  return sheet;
+}
+
+function formatProductFeedbackSheet_(sheet, headers) {
+  if (!sheet) {
+    return;
+  }
+
+  const headerRow = findBestHeaderRow_(sheet);
+  const lastRow = Math.max(sheet.getLastRow(), headerRow);
+  const lastColumn = Math.max(sheet.getLastColumn(), PRODUCT_FEEDBACK_COLUMNS.length);
+
+  runSheetFormattingStep_(sheet, 'Product Feedback tab color', function() {
+    sheet.setTabColor(ROGERS_OS_THEME.charcoal);
+  });
+  safeSetFrozenRows_(sheet, headerRow);
+  runSheetFormattingStep_(sheet, 'Product Feedback gridlines', function() {
+    sheet.setHiddenGridlines(true);
+  });
+  applyOperatingSystemSheetChrome_(sheet, 'PRODUCT FEEDBACK', headerRow, lastColumn);
+  formatTableHeader_(sheet, headerRow, lastColumn);
+  applyAlternatingRows_(sheet, headerRow + 1, lastRow, lastColumn);
+  applyOperatingSystemTableSurface_(sheet, headerRow, lastRow, lastColumn);
+  applyVisualComfortBody_(sheet, headerRow + 1, lastRow, lastColumn, {
+    rowHeight: 40,
+    wrap: true,
+    verticalAlignment: 'top'
+  });
+  runSheetFormattingStep_(sheet, 'Product Feedback column widths', function() {
+    setColumnWidthIfHeader_(sheet, headers, 'Feedback ID', 145);
+    setColumnWidthIfHeader_(sheet, headers, 'Date Logged', 130);
+    setColumnWidthIfHeader_(sheet, headers, 'Source', 170);
+    setColumnWidthIfHeader_(sheet, headers, 'Priority', 130);
+    setColumnWidthIfHeader_(sheet, headers, 'Type', 150);
+    setColumnWidthIfHeader_(sheet, headers, 'Area', 170);
+    setColumnWidthIfHeader_(sheet, headers, 'Description', 360);
+    setColumnWidthIfHeader_(sheet, headers, 'Business Impact', 300);
+    setColumnWidthIfHeader_(sheet, headers, 'Status', 130);
+    setColumnWidthIfHeader_(sheet, headers, 'Target Version', 145);
+    setColumnWidthIfHeader_(sheet, headers, 'Notes', 300);
+  });
+  runSheetFormattingStep_(sheet, 'Product Feedback validation', function() {
+    const rowCount = Math.max(sheet.getMaxRows() - headerRow, 1);
+    if (headers.Priority) {
+      sheet.getRange(headerRow + 1, headers.Priority, rowCount, 1)
+        .setDataValidation(buildDropdownValidation_(PRODUCT_FEEDBACK_PRIORITIES));
+    }
+    if (headers.Type) {
+      sheet.getRange(headerRow + 1, headers.Type, rowCount, 1)
+        .setDataValidation(buildDropdownValidation_(PRODUCT_FEEDBACK_TYPES));
+    }
+    if (headers.Status) {
+      sheet.getRange(headerRow + 1, headers.Status, rowCount, 1)
+        .setDataValidation(buildDropdownValidation_(PRODUCT_FEEDBACK_STATUSES));
+    }
+  });
+  applyColumnFormattingByHeader_(sheet, headers, headerRow, lastRow, {
+    'Date Logged': { horizontalAlignment: 'center', numberFormat: 'yyyy-mm-dd' },
+    Priority: { horizontalAlignment: 'center' },
+    Type: { horizontalAlignment: 'center' },
+    Status: { horizontalAlignment: 'center' },
+    'Target Version': { horizontalAlignment: 'center' }
+  });
+  applyWrapByHeader_(sheet, headers, headerRow, lastRow, [
+    'Description',
+    'Business Impact',
+    'Notes'
+  ]);
+}
+
+function formatDailyFrictionLogSheet_(sheet, headers) {
+  if (!sheet) {
+    return;
+  }
+
+  const headerRow = findBestHeaderRow_(sheet);
+  const lastRow = Math.max(sheet.getLastRow(), headerRow);
+  const lastColumn = Math.max(sheet.getLastColumn(), DAILY_FRICTION_LOG_COLUMNS.length);
+
+  runSheetFormattingStep_(sheet, 'Daily Friction Log tab color', function() {
+    sheet.setTabColor(ROGERS_OS_THEME.gold);
+  });
+  safeSetFrozenRows_(sheet, headerRow);
+  runSheetFormattingStep_(sheet, 'Daily Friction Log gridlines', function() {
+    sheet.setHiddenGridlines(true);
+  });
+  applyOperatingSystemSheetChrome_(sheet, "BRIAN'S DAILY FRICTION LOG", headerRow, lastColumn);
+  formatTableHeader_(sheet, headerRow, lastColumn);
+  applyAlternatingRows_(sheet, headerRow + 1, lastRow, lastColumn);
+  applyOperatingSystemTableSurface_(sheet, headerRow, lastRow, lastColumn);
+  applyVisualComfortBody_(sheet, headerRow + 1, lastRow, lastColumn, {
+    rowHeight: 40,
+    wrap: true,
+    verticalAlignment: 'top'
+  });
+  runSheetFormattingStep_(sheet, 'Daily Friction Log column widths', function() {
+    setColumnWidthIfHeader_(sheet, headers, 'Date', 120);
+    setColumnWidthIfHeader_(sheet, headers, 'Area', 170);
+    setColumnWidthIfHeader_(sheet, headers, 'Issue / Observation', 360);
+    setColumnWidthIfHeader_(sheet, headers, 'Type', 160);
+    setColumnWidthIfHeader_(sheet, headers, 'Priority', 135);
+    setColumnWidthIfHeader_(sheet, headers, 'Impact', 260);
+    setColumnWidthIfHeader_(sheet, headers, 'Possible Fix', 300);
+    setColumnWidthIfHeader_(sheet, headers, 'Status', 130);
+    setColumnWidthIfHeader_(sheet, headers, 'Notes', 300);
+  });
+  runSheetFormattingStep_(sheet, 'Daily Friction Log validation', function() {
+    const rowCount = Math.max(sheet.getMaxRows() - headerRow, 1);
+    if (headers.Type) {
+      sheet.getRange(headerRow + 1, headers.Type, rowCount, 1)
+        .setDataValidation(buildDropdownValidation_(DAILY_FRICTION_LOG_TYPES));
+    }
+    if (headers.Priority) {
+      sheet.getRange(headerRow + 1, headers.Priority, rowCount, 1)
+        .setDataValidation(buildDropdownValidation_(DAILY_FRICTION_LOG_PRIORITIES));
+    }
+    if (headers.Status) {
+      sheet.getRange(headerRow + 1, headers.Status, rowCount, 1)
+        .setDataValidation(buildDropdownValidation_(DAILY_FRICTION_LOG_STATUSES));
+    }
+  });
+  applyColumnFormattingByHeader_(sheet, headers, headerRow, lastRow, {
+    Date: { horizontalAlignment: 'center', numberFormat: 'yyyy-mm-dd' },
+    Type: { horizontalAlignment: 'center' },
+    Priority: { horizontalAlignment: 'center' },
+    Status: { horizontalAlignment: 'center' }
+  });
+  applyWrapByHeader_(sheet, headers, headerRow, lastRow, [
+    'Issue / Observation',
+    'Impact',
+    'Possible Fix',
+    'Notes'
+  ]);
+}
+
+function buildDropdownValidation_(values) {
+  return SpreadsheetApp.newDataValidation()
+    .requireValueInList(values, true)
+    .setAllowInvalid(false)
+    .build();
+}
+
 function findBestHeaderRow_(sheet) {
   const maxRowsToScan = Math.min(10, sheet.getMaxRows());
   const maxColumns = Math.max(sheet.getLastColumn(), 1);
@@ -3275,8 +3837,9 @@ function setProspectStatus_(sheet, headers, selectedRow, status) {
     throw new Error('Status header not found on Master Prospect Tracker.');
   }
 
-  sheet.getRange(selectedRow, headers.Status).setValue(status);
-  syncFollowUpForProspectRow_(sheet, headers, selectedRow, status);
+  const normalizedStatus = normalizeProspectDropdownWriteValue_(sheet, headers, 'Status', status);
+  sheet.getRange(selectedRow, headers.Status).setValue(normalizedStatus);
+  syncFollowUpForProspectRow_(sheet, headers, selectedRow, normalizedStatus);
 }
 
 function setProspectStatusIfHeader_(sheet, headers, selectedRow, status) {
@@ -3284,8 +3847,9 @@ function setProspectStatusIfHeader_(sheet, headers, selectedRow, status) {
     return;
   }
 
-  sheet.getRange(selectedRow, headers.Status).setValue(status);
-  syncFollowUpForProspectRow_(sheet, headers, selectedRow, status);
+  const normalizedStatus = normalizeProspectDropdownWriteValue_(sheet, headers, 'Status', status);
+  sheet.getRange(selectedRow, headers.Status).setValue(normalizedStatus);
+  syncFollowUpForProspectRow_(sheet, headers, selectedRow, normalizedStatus);
 }
 
 function logPipelineActivity_(ss, company, activityType, activityNotes) {
@@ -3583,7 +4147,12 @@ function buildExecutiveDashboardData_(ss) {
 
 function prepareExecutiveDashboardSheet_(sheet) {
   ensureExecutiveDashboardSize_(sheet, 80, 12);
-  sheet.getRange(1, 1, 80, 12).clearContent().clearFormat();
+  sheet.getRange(1, 1, 80, 12)
+    .breakApart()
+    .clearContent()
+    .clearFormat()
+    .clearDataValidations()
+    .clearNote();
   sheet.setHiddenGridlines(true);
   safeSetFrozenRows_(sheet, 2);
   sheet.setTabColor(ROGERS_OS_THEME.black);
@@ -3636,7 +4205,7 @@ function updateDashboardKPIs_(data) {
   };
   const rows = [
     ['ROGERS HOLDINGS OS', '', '', '', '', '', '', '', '', '', '', ''],
-    ['EXECUTIVE DASHBOARD', 'Last Refresh', data.generatedAt, '', '', '', '', '', '', '', '', ''],
+    ['EXECUTIVE DASHBOARD', '', '', '', '', '', '', '', '', 'Last Refresh', data.generatedAt, ''],
     ['Total Prospects', '', '', 'Leads Found', '', '', 'Draft Created', '', '', 'Proposal Sent', '', ''],
     [data.totalProspects, '', '', data.statusCounts['Lead Found'] || 0, '', '', data.statusCounts['Draft Created'] || 0, '', '', data.statusCounts['Proposal Sent'] || 0, '', ''],
     ['Audit Package Sent', '', '', 'Discovery Scheduled', '', '', 'Won', '', '', 'Lost', '', ''],
@@ -3650,7 +4219,7 @@ function updateDashboardKPIs_(data) {
   ];
 
   sheet.getRange(1, 1, rows.length, rows[0].length).setValues(rows);
-  sheet.getRange(2, 3).setNumberFormat('yyyy-mm-dd hh:mm');
+  sheet.getRange(2, 11).setNumberFormat('yyyy-mm-dd hh:mm');
   sheet.getRange(4, 1, 1, 12).setNumberFormat('0');
   sheet.getRange(6, 1, 1, 12).setNumberFormat('0');
   sheet.getRange(8, 1, 1, 12).setNumberFormat('0');
@@ -3688,20 +4257,29 @@ function updatePipelineSummary_(data) {
 
 function updateRecentActivity_(data) {
   const sheet = data.dashboardSheet;
+  const activityRows = data.activities.length
+    ? data.activities.slice(0, 15).map(function(activity) {
+      return [
+        activity.timestamp || '',
+        activity.company || '',
+        activity.activity || '',
+        activity.user || ''
+      ];
+    })
+    : [['No recent activity yet.', '', '', '']];
   const rows = [
     ['RECENT ACTIVITY', '', '', ''],
     ['Timestamp', 'Company', 'Activity', 'User']
-  ].concat(data.activities.slice(0, 15).map(function(activity) {
-    return [
-      activity.timestamp || '',
-      activity.company || '',
-      activity.activity || '',
-      activity.user || ''
-    ];
-  }));
+  ].concat(activityRows);
 
   sheet.getRange(14, 5, rows.length, rows[0].length).setValues(rows);
   sheet.getRange(16, 5, Math.max(rows.length - 2, 1), 1).setNumberFormat('yyyy-mm-dd hh:mm');
+  if (!data.activities.length) {
+    sheet.getRange(16, 5, 1, 4)
+      .setFontColor(ROGERS_OS_THEME.muted)
+      .setFontStyle('italic')
+      .setHorizontalAlignment('center');
+  }
 }
 
 function updateFollowUpQueue_(data) {
@@ -3728,7 +4306,7 @@ function updateFollowUpQueue_(data) {
   const rows = [
     ['FOLLOW-UP QUEUE', '', '', '', '', '', ''],
     ['Company', 'Contact', 'Email', 'Status', 'Follow-Up Date', 'Next Action', 'Last Activity']
-  ].concat(queue.slice(0, 12).map(function(item) {
+  ].concat(queue.length ? queue.slice(0, 12).map(function(item) {
     return [
       item.company,
       item.contact,
@@ -3738,11 +4316,17 @@ function updateFollowUpQueue_(data) {
       item.nextAction || item.followUpType || '',
       item.lastActivity || ''
     ];
-  }));
+  }) : [['No open follow-ups. Create one from the Follow-Ups menu when needed.', '', '', '', '', '', '']]);
 
   sheet.getRange(34, 1, rows.length, rows[0].length).setValues(rows);
   sheet.getRange(36, 5, Math.max(rows.length - 2, 1), 1).setNumberFormat('yyyy-mm-dd');
   sheet.getRange(36, 7, Math.max(rows.length - 2, 1), 1).setNumberFormat('yyyy-mm-dd');
+  if (!queue.length) {
+    sheet.getRange(36, 1, 1, 7)
+      .setFontColor(ROGERS_OS_THEME.muted)
+      .setFontStyle('italic')
+      .setHorizontalAlignment('center');
+  }
   applyFollowUpQueueStatusColors_(sheet, queue.slice(0, 12), 36, 1, 7);
 }
 
@@ -3803,10 +4387,7 @@ function updateTopOpportunities_(data) {
     'C - Later': 3,
     C: 3
   };
-  const rows = [
-    ['TOP OPPORTUNITIES', '', '', '', ''],
-    ['Company', 'Priority', 'Audit Score', 'Status', 'Last Activity']
-  ].concat(data.prospects.slice().sort(function(a, b) {
+  const opportunities = data.prospects.slice().sort(function(a, b) {
     const rankA = priorityRank[String(a.priorityTier || '').trim()] || 9;
     const rankB = priorityRank[String(b.priorityTier || '').trim()] || 9;
     if (rankA !== rankB) {
@@ -3817,28 +4398,70 @@ function updateTopOpportunities_(data) {
       return scoreDiff;
     }
     return dateSortValue_(b.lastActivity) - dateSortValue_(a.lastActivity);
-  }).slice(0, 10).map(function(item) {
+  }).filter(function(item) {
+    return item.company && (item.priorityTier || item.auditScore || item.status || item.lastActivity);
+  }).slice(0, 10);
+  const rows = [
+    ['TOP OPPORTUNITIES', '', '', '', ''],
+    ['Company', 'Priority', 'Audit Score', 'Status', 'Last Activity']
+  ].concat(opportunities.length ? opportunities.map(function(item) {
     return [item.company, item.priorityTier, item.auditScore, item.status, item.lastActivity || ''];
-  }));
+  }) : [['No priority opportunities yet. Add prospects or run audits to populate this panel.', '', '', '', '']]);
 
   sheet.getRange(34, 8, rows.length, rows[0].length).setValues(rows);
   sheet.getRange(36, 10, Math.max(rows.length - 2, 1), 1).setNumberFormat('0.0');
   sheet.getRange(36, 12, Math.max(rows.length - 2, 1), 1).setNumberFormat('yyyy-mm-dd');
+  if (!opportunities.length) {
+    sheet.getRange(36, 8, 1, 5)
+      .setFontColor(ROGERS_OS_THEME.muted)
+      .setFontStyle('italic')
+      .setHorizontalAlignment('center');
+  }
 }
 
 function updateQuickActions_(data) {
   const sheet = data.dashboardSheet;
   const rows = [
     ['QUICK ACTIONS', '', ''],
-    ['Run Full Prospect Package', 'Create Gmail Draft', 'Generate Audit Package'],
-    ['Run Website Audit', 'System Health Check', 'Refresh Dashboard']
+    ['Open Prospects', 'Open Clients', 'Open Follow-Ups'],
+    ['Open Projects', 'System Health Check', 'Refresh Dashboard']
   ];
 
   sheet.getRange(56, 1, rows.length, rows[0].length).setValues(rows);
-  sheet.getRange(53, 1, 2, 3).setNotes([
-    ['Use Rogers Holdings OS > Run Full Prospect Package', 'Use Rogers Holdings OS > Create Outreach Gmail Draft', 'Use Rogers Holdings OS > Generate Audit Package'],
-    ['Use Rogers Holdings OS > Run Real Website Audit', 'Use Rogers Holdings OS > System Health Check', 'Use Rogers Holdings OS > Refresh Executive Dashboard']
+  sheet.getRange(57, 1, 2, 3).setNotes([
+    ['Click to open Master Prospect Tracker', 'Click to open Clients', 'Click to open Follow-Ups'],
+    ['Click to open Projects', 'Click to run System Health Check', 'Click to refresh Executive Dashboard']
   ]);
+}
+
+function handleExecutiveDashboardQuickActionSelection_(e) {
+  if (!e || !e.range) {
+    return;
+  }
+
+  const range = e.range;
+  const sheet = range.getSheet();
+  if (!sheet || sheet.getName() !== 'Executive Dashboard') {
+    return;
+  }
+
+  const row = range.getRow();
+  const column = range.getColumn();
+  const actionMap = {
+    '57:1': openMasterProspectTracker,
+    '57:2': openClientsSheet,
+    '57:3': openFollowUpsSheet,
+    '58:1': openProjectsSheet,
+    '58:2': runSystemHealthCheck,
+    '58:3': refreshExecutiveDashboard
+  };
+  const action = actionMap[row + ':' + column];
+  if (!action) {
+    return;
+  }
+
+  SpreadsheetApp.getActiveSpreadsheet().toast('Running dashboard action...', 'Rogers Holdings OS', 3);
+  action();
 }
 
 function updateSystemStatus_(data) {
@@ -3859,9 +4482,9 @@ function updateSystemStatus_(data) {
   ];
 
   sheet.getRange(56, 5, rows.length, rows[0].length).setValues(rows);
-  sheet.getRange(53, 6, 1, 1).setNumberFormat('yyyy-mm-dd hh:mm');
+  sheet.getRange(57, 6, 1, 1).setNumberFormat('yyyy-mm-dd hh:mm');
   sheet.getRange(58, 6, 1, 1).setNumberFormat('yyyy-mm-dd hh:mm');
-  applySystemStatusColors_(sheet, 53, 7, rows.slice(1).map(function(row) { return row[2]; }));
+  applySystemStatusColors_(sheet, 57, 7, rows.slice(1).map(function(row) { return row[2]; }));
 }
 
 function applyExecutiveDashboardBranding_(sheet) {
@@ -3884,20 +4507,38 @@ function applyExecutiveDashboardBranding_(sheet) {
     .setBorder(false, false, true, false, false, false, gold, SpreadsheetApp.BorderStyle.SOLID_THICK);
   sheet.getRange(1, 1).setFontSize(18);
   sheet.getRange(2, 1, 1, 12).setFontColor(white);
+  sheet.getRange(1, 1, 1, 12).breakApart().merge()
+    .setHorizontalAlignment('center')
+    .setVerticalAlignment('middle');
+  sheet.getRange(2, 1, 1, 9).breakApart().merge()
+    .setFontColor(white)
+    .setFontSize(15)
+    .setFontWeight('bold')
+    .setHorizontalAlignment('center')
+    .setVerticalAlignment('middle');
+  sheet.getRange(2, 10, 1, 2)
+    .setFontColor(white)
+    .setFontSize(10)
+    .setHorizontalAlignment('right')
+    .setVerticalAlignment('middle');
 
   [
-    [12, 1, 1, 3],
-    [12, 5, 1, 4],
-    [32, 1, 1, 7],
-    [32, 8, 1, 5],
-    [52, 1, 1, 3],
-    [52, 5, 1, 3]
+    [14, 1, 1, 3],
+    [14, 5, 1, 4],
+    [34, 1, 1, 7],
+    [34, 8, 1, 5],
+    [56, 1, 1, 3],
+    [56, 5, 1, 3]
   ].forEach(function(rangeSpec) {
     sheet.getRange(rangeSpec[0], rangeSpec[1], rangeSpec[2], rangeSpec[3])
+      .breakApart()
+      .merge()
       .setBackground(black)
       .setFontColor(gold)
       .setFontWeight('bold')
       .setFontSize(11)
+      .setHorizontalAlignment('center')
+      .setVerticalAlignment('middle')
       .setBorder(false, false, true, false, false, false, gold, SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
   });
 
@@ -3916,7 +4557,12 @@ function applyExecutiveDashboardBranding_(sheet) {
     [7, 10, 2, 3],
     [9, 1, 2, 3],
     [9, 4, 2, 3],
-    [9, 7, 2, 3]
+    [9, 7, 2, 3],
+    [9, 10, 2, 3],
+    [11, 1, 2, 3],
+    [11, 4, 2, 3],
+    [11, 7, 2, 3],
+    [11, 10, 2, 3]
   ].forEach(function(rangeSpec) {
     sheet.getRange(rangeSpec[0], rangeSpec[1], rangeSpec[2], rangeSpec[3])
       .setBackground(neutral)
@@ -3926,25 +4572,41 @@ function applyExecutiveDashboardBranding_(sheet) {
       .setBorder(true, true, true, true, false, false, border, SpreadsheetApp.BorderStyle.SOLID);
   });
 
-  [3, 5, 7, 9].forEach(function(row) {
+  [3, 5, 7, 9, 11].forEach(function(row) {
     sheet.getRange(row, 1, 1, 12)
       .setFontSize(9)
       .setFontColor('#5f5b52')
       .setHorizontalAlignment('center');
   });
-  [4, 6, 8, 10].forEach(function(row) {
+  [4, 6, 8, 10, 12].forEach(function(row) {
     sheet.getRange(row, 1, 1, 12)
       .setFontSize(18)
       .setFontColor(black)
       .setHorizontalAlignment('center')
       .setVerticalAlignment('middle');
   });
+  [
+    [3, 1], [3, 4], [3, 7], [3, 10],
+    [5, 1], [5, 4], [5, 7], [5, 10],
+    [7, 1], [7, 4], [7, 7], [7, 10],
+    [9, 1], [9, 4], [9, 7], [9, 10],
+    [11, 1], [11, 4], [11, 7], [11, 10]
+  ].forEach(function(cardSpec) {
+    sheet.getRange(cardSpec[0], cardSpec[1], 1, 3).breakApart().merge()
+      .setHorizontalAlignment('center')
+      .setVerticalAlignment('middle');
+    sheet.getRange(cardSpec[0] + 1, cardSpec[1], 1, 3).breakApart().merge()
+      .setHorizontalAlignment('center')
+      .setVerticalAlignment('middle');
+  });
 
   [
-    [13, 1, 1, 3],
-    [13, 5, 1, 4],
-    [33, 1, 1, 7],
-    [33, 8, 1, 5]
+    [15, 1, 1, 3],
+    [15, 5, 1, 4],
+    [35, 1, 1, 7],
+    [35, 8, 1, 5],
+    [57, 1, 1, 3],
+    [57, 5, 1, 3]
   ].forEach(function(rangeSpec) {
     sheet.getRange(rangeSpec[0], rangeSpec[1], rangeSpec[2], rangeSpec[3])
       .setFontWeight('bold')
@@ -3964,17 +4626,27 @@ function applyExecutiveDashboardBranding_(sheet) {
   sheet.getRange(36, 8, 10, 5)
     .setBackground(white)
     .setBorder(true, true, true, true, true, true, border, SpreadsheetApp.BorderStyle.SOLID);
+  sheet.getRange(36, 1, 12, 7)
+    .setVerticalAlignment('middle')
+    .setWrap(true);
+  sheet.getRange(36, 8, 10, 5)
+    .setVerticalAlignment('middle')
+    .setWrap(true);
 
-  sheet.getRange(53, 1, 2, 3)
+  sheet.getRange(57, 1, 2, 3)
     .setBackground(black)
     .setFontColor(white)
     .setFontWeight('bold')
     .setHorizontalAlignment('center')
+    .setVerticalAlignment('middle')
     .setBorder(true, true, true, true, true, true, gold, SpreadsheetApp.BorderStyle.SOLID);
-  sheet.getRange(53, 5, 5, 3)
+  sheet.getRange(56, 1, 3, 3)
+    .setHorizontalAlignment('center')
+    .setVerticalAlignment('middle');
+  sheet.getRange(57, 5, 5, 3)
     .setBackground(white)
     .setBorder(true, true, true, true, true, true, border, SpreadsheetApp.BorderStyle.SOLID);
-  sheet.getRange(53, 7, 5, 1).setFontWeight('bold').setHorizontalAlignment('center');
+  sheet.getRange(57, 7, 5, 1).setFontWeight('bold').setHorizontalAlignment('center');
 
   sheet.getRange(16, 2, 9, 2).setHorizontalAlignment('center');
   sheet.getRange(36, 5, 12, 1).setHorizontalAlignment('center');
@@ -4267,6 +4939,7 @@ function formatMasterProspectTrackerSheet_(sheet) {
   runSheetFormattingStep_(sheet, 'Master Prospect gridlines', function() {
     sheet.setHiddenGridlines(true);
   });
+  applyOperatingSystemSheetChrome_(sheet, 'MASTER PROSPECT TRACKER', table.headerRow, lastColumn);
   formatTableHeader_(sheet, table.headerRow, lastColumn);
   runSheetFormattingStep_(sheet, 'Master Prospect body styling', function() {
     sheet.getRange(table.headerRow + 1, 1, Math.max(lastRow - table.headerRow, 1), lastColumn)
@@ -4276,6 +4949,7 @@ function formatMasterProspectTrackerSheet_(sheet) {
       .setBorder(true, false, true, false, false, false, '#eee6d5', SpreadsheetApp.BorderStyle.SOLID);
   });
   applyAlternatingRows_(sheet, table.headerRow + 1, lastRow, lastColumn);
+  applyOperatingSystemTableSurface_(sheet, table.headerRow, lastRow, lastColumn);
   applyMasterProspectColumnWidths_(sheet, table.headers);
   applyColumnFormattingByHeader_(sheet, table.headers, table.headerRow, lastRow, {
     'Audit Score': { horizontalAlignment: 'center', numberFormat: '0' },
@@ -4317,6 +4991,7 @@ function formatClientsSheet_(sheet) {
   runSheetFormattingStep_(sheet, 'Clients gridlines', function() {
     sheet.setHiddenGridlines(true);
   });
+  applyOperatingSystemSheetChrome_(sheet, 'CLIENTS', table.headerRow, lastColumn);
   formatTableHeader_(sheet, table.headerRow, lastColumn);
   runSheetFormattingStep_(sheet, 'Clients body styling', function() {
     sheet.getRange(table.headerRow + 1, 1, Math.max(lastRow - table.headerRow, 1), lastColumn)
@@ -4325,6 +5000,7 @@ function formatClientsSheet_(sheet) {
       .setVerticalAlignment('middle');
   });
   applyAlternatingRows_(sheet, table.headerRow + 1, lastRow, lastColumn);
+  applyOperatingSystemTableSurface_(sheet, table.headerRow, lastRow, lastColumn);
   setColumnWidthIfHeader_(sheet, table.headers, 'Client ID', 155);
   setColumnWidthIfHeader_(sheet, table.headers, 'Company', 210);
   setColumnWidthIfHeader_(sheet, table.headers, 'Client Name', 210);
@@ -4373,6 +5049,7 @@ function formatActivityFeedSheet_(sheet) {
   runSheetFormattingStep_(sheet, 'Activity Feed gridlines', function() {
     sheet.setHiddenGridlines(true);
   });
+  applyOperatingSystemSheetChrome_(sheet, 'ACTIVITY FEED', table.headerRow, lastColumn);
   formatTableHeader_(sheet, table.headerRow, lastColumn);
   runSheetFormattingStep_(sheet, 'Activity Feed body styling', function() {
     sheet.getRange(table.headerRow + 1, 1, Math.max(lastRow - table.headerRow, 1), lastColumn)
@@ -4381,6 +5058,7 @@ function formatActivityFeedSheet_(sheet) {
       .setVerticalAlignment('top');
   });
   applyAlternatingRows_(sheet, table.headerRow + 1, lastRow, lastColumn);
+  applyOperatingSystemTableSurface_(sheet, table.headerRow, lastRow, lastColumn);
   setColumnWidthIfHeader_(sheet, table.headers, 'Date', 150);
   setColumnWidthIfHeader_(sheet, table.headers, 'Company', 210);
   setColumnWidthIfHeader_(sheet, table.headers, 'Activity Type', 190);
@@ -4417,6 +5095,7 @@ function formatSettingsSheet_(sheet) {
   runSheetFormattingStep_(sheet, 'Settings gridlines', function() {
     sheet.setHiddenGridlines(true);
   });
+  applyOperatingSystemSheetChrome_(sheet, 'SETTINGS', table.headerRow, lastColumn);
   formatTableHeader_(sheet, table.headerRow, lastColumn);
   runSheetFormattingStep_(sheet, 'Settings body styling', function() {
     sheet.getRange(table.headerRow + 1, 1, Math.max(lastRow - table.headerRow, 1), lastColumn)
@@ -4425,6 +5104,8 @@ function formatSettingsSheet_(sheet) {
       .setVerticalAlignment('middle');
   });
   applyAlternatingRows_(sheet, table.headerRow + 1, lastRow, lastColumn);
+  applyOperatingSystemTableSurface_(sheet, table.headerRow, lastRow, lastColumn);
+  applySectionHeaderStyle_(sheet, 1, lastColumn);
   runSheetFormattingStep_(sheet, 'Settings column widths', function() {
     sheet.setColumnWidths(1, Math.min(lastColumn, 4), 190);
   });
@@ -4448,6 +5129,51 @@ function formatTableHeader_(sheet, headerRow, lastColumn) {
   });
   runSheetFormattingStep_(sheet, 'Table header row height', function() {
     sheet.setRowHeight(headerRow, 38);
+  });
+}
+
+function applyOperatingSystemSheetChrome_(sheet, title, headerRow, lastColumn) {
+  runSheetFormattingStep_(sheet, 'Operating system sheet chrome', function() {
+    sheet.setHiddenGridlines(true);
+    sheet.getRange(1, 1, Math.max(sheet.getMaxRows(), 1), Math.max(sheet.getMaxColumns(), 1))
+      .setFontFamily('Arial')
+      .setFontColor(ROGERS_OS_THEME.text)
+      .setVerticalAlignment('middle');
+
+    if (headerRow > 1 && lastColumn > 1) {
+      sheet.getRange(1, 1, 1, lastColumn).breakApart().merge()
+        .setValue(title)
+        .setBackground(ROGERS_OS_THEME.black)
+        .setFontColor(ROGERS_OS_THEME.gold)
+        .setFontWeight('bold')
+        .setFontSize(16)
+        .setHorizontalAlignment('center')
+        .setVerticalAlignment('middle')
+        .setBorder(true, true, true, true, false, false, ROGERS_OS_THEME.gold, SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
+      sheet.setRowHeight(1, 42);
+      if (headerRow > 2) {
+        sheet.getRange(2, 1, headerRow - 2, lastColumn)
+          .setBackground(ROGERS_OS_THEME.white)
+          .setBorder(false, false, true, false, false, false, '#eee6d5', SpreadsheetApp.BorderStyle.SOLID);
+      }
+    }
+  });
+}
+
+function applyOperatingSystemTableSurface_(sheet, headerRow, lastRow, lastColumn) {
+  const bodyStartRow = headerRow + 1;
+  const bodyRows = Math.max(lastRow - headerRow, 1);
+  runSheetFormattingStep_(sheet, 'Operating system table surface', function() {
+    sheet.getRange(headerRow, 1, 1, lastColumn)
+      .setHorizontalAlignment('center')
+      .setVerticalAlignment('middle')
+      .setWrap(true);
+    sheet.getRange(bodyStartRow, 1, bodyRows, lastColumn)
+      .setVerticalAlignment('middle')
+      .setWrap(false)
+      .setBorder(true, false, true, false, false, false, '#eee6d5', SpreadsheetApp.BorderStyle.SOLID);
+    sheet.getRange(headerRow, 1, Math.max(lastRow - headerRow + 1, 1), lastColumn)
+      .setBorder(true, true, true, true, false, false, ROGERS_OS_THEME.border, SpreadsheetApp.BorderStyle.SOLID);
   });
 }
 

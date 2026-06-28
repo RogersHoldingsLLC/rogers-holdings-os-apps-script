@@ -564,7 +564,7 @@ function buildFullProspectPackageSummary_(prospect, folder, packageResult, gmail
     'Audit Report.pdf: ' + auditReportStatus,
     'Proposal.pdf: ' + proposalStatus,
     'Gmail draft created: ' + (gmailDraftCreated ? 'Yes' : 'No'),
-    'Next Action: Review Email'
+    'Next Action: Send Intro Email'
   ].join('\n');
 }
 
@@ -818,11 +818,9 @@ function generatePlaceholderAuditResults_(prospect) {
   const website = String(prospect.website || '').trim();
   const hasHttps = website.toLowerCase().indexOf('https://') === 0;
   const auditScore = hasHttps ? 72 : 58;
-  const auditOutcome = hasHttps
-    ? 'Good foundation with visibility and conversion opportunities'
-    : 'Basic visibility opportunity with trust improvements needed';
+  const auditOutcome = hasHttps ? 'Good Fit' : 'Needs Nurture';
   const priorityTier = auditScore >= 70 ? 'B - Good' : 'A - Hot';
-  const offerService = hasHttps ? 'Website and Local Visibility Review' : 'Website Trust and Visibility Cleanup';
+  const offerService = 'Website Audit';
   const findings = [
     'Customers may benefit from clearer reasons to contact the business.',
     'Local visibility may improve with stronger search and service messaging.',

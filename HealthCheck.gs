@@ -23,6 +23,8 @@ function buildSystemHealthReport_() {
     CLIENT_WORKSPACE_SHEET,
     FOLLOW_UPS_SHEET,
     PROJECTS_SHEET,
+    DAILY_FRICTION_LOG_SHEET,
+    PRODUCT_FEEDBACK_SHEET,
     'Executive Dashboard'
   ];
   const requiredHeaders = {};
@@ -71,6 +73,8 @@ function buildSystemHealthReport_() {
   ];
   requiredHeaders[FOLLOW_UPS_SHEET] = FOLLOW_UP_COLUMNS;
   requiredHeaders[PROJECTS_SHEET] = PROJECT_COLUMNS;
+  requiredHeaders[DAILY_FRICTION_LOG_SHEET] = DAILY_FRICTION_LOG_COLUMNS;
+  requiredHeaders[PRODUCT_FEEDBACK_SHEET] = PRODUCT_FEEDBACK_COLUMNS;
   const report = {
     generatedAt: new Date(),
     status: 'Pass',
@@ -321,6 +325,7 @@ function addProspectDataHealthChecks_(report, sheetInfo) {
 
   addDuplicateHealthItems_(report, 'Company', companyDuplicates);
   addDuplicateHealthItems_(report, 'Website', websiteDuplicates);
+  addProspectDropdownHealthCheck_(report, sheet, table);
 
   if (blankCompanyRows.length) {
     addHealthItem_(
@@ -345,6 +350,36 @@ function addProspectDataHealthChecks_(report, sheetInfo) {
   } else {
     addHealthItem_(report, 'Pass', 'No overdue follow-ups found', MASTER_PROSPECT_SHEET, 'No action needed.');
   }
+}
+
+function addProspectDropdownHealthCheck_(report, sheet, table) {
+  if (typeof findInvalidProspectDropdownValues_ !== 'function') {
+    addHealthItem_(
+      report,
+      'Warning',
+      'Prospect dropdown validation check unavailable',
+      'Dropdown scanner function is missing.',
+      'Restore findInvalidProspectDropdownValues_ before daily use.'
+    );
+    return;
+  }
+
+  const issues = findInvalidProspectDropdownValues_(sheet, table);
+  if (!issues.length) {
+    addHealthItem_(report, 'Pass', 'Prospect dropdown values are valid', MASTER_PROSPECT_SHEET, 'No action needed.');
+    return;
+  }
+
+  const detail = issues.slice(0, 12).map(function(issue) {
+    return `${issue.header} row ${issue.row}: "${issue.value}" → "${issue.suggestedValue}"`;
+  }).join('; ');
+  addHealthItem_(
+    report,
+    'Warning',
+    'Invalid prospect dropdown values found',
+    issues.length > 12 ? detail + `; +${issues.length - 12} more` : detail,
+    'Run Rogers Holdings OS > System > Repair Invalid Dropdown Values.'
+  );
 }
 
 function addClientDataHealthChecks_(report, sheetInfo) {

@@ -18,6 +18,7 @@ See:
 - `CHANGELOG.md`
 - `ROADMAP.md`
 - `PROJECT_MEMORY.md`
+- `docs/ROGERS_HOLDINGS_OS_V2_PRODUCT_SPEC.md`
 
 ## Production Baseline
 

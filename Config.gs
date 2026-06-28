@@ -14,6 +14,85 @@ var CLIENTS_SHEET = 'Clients';
 var CLIENT_WORKSPACE_SHEET = 'Client Workspace';
 var FOLLOW_UPS_SHEET = 'Follow-Ups';
 var PROJECTS_SHEET = 'Projects';
+var DAILY_FRICTION_LOG_SHEET = "Brian's Daily Friction Log";
+var PRODUCT_FEEDBACK_SHEET = 'Product Feedback';
+
+var PRODUCT_FEEDBACK_COLUMNS = [
+  'Feedback ID',
+  'Date Logged',
+  'Source',
+  'Priority',
+  'Type',
+  'Area',
+  'Description',
+  'Business Impact',
+  'Status',
+  'Target Version',
+  'Notes'
+];
+
+var PRODUCT_FEEDBACK_PRIORITIES = [
+  'P0 Must Fix',
+  'P1 Workflow',
+  'P2 Polish',
+  'P3 Future'
+];
+
+var PRODUCT_FEEDBACK_TYPES = [
+  'Bug',
+  'UX Issue',
+  'Automation',
+  'Data',
+  'Polish',
+  'Future Feature'
+];
+
+var PRODUCT_FEEDBACK_STATUSES = [
+  'Open',
+  'Reviewing',
+  'Planned',
+  'In Progress',
+  'Done',
+  'Deferred'
+];
+
+var DAILY_FRICTION_LOG_COLUMNS = [
+  'Date',
+  'Area',
+  'Issue / Observation',
+  'Type',
+  'Priority',
+  'Impact',
+  'Possible Fix',
+  'Status',
+  'Notes'
+];
+
+var DAILY_FRICTION_LOG_TYPES = [
+  'Bug',
+  'Too Many Clicks',
+  'Confusing',
+  'Missing Field',
+  'Visual Issue',
+  'Automation Idea',
+  'Feature Request',
+  'Future Idea'
+];
+
+var DAILY_FRICTION_LOG_PRIORITIES = [
+  'Must Fix',
+  'Important',
+  'Nice to Have',
+  'Future'
+];
+
+var DAILY_FRICTION_LOG_STATUSES = [
+  'New',
+  'Reviewing',
+  'Planned',
+  'Fixed',
+  'Deferred'
+];
 
 var PROJECT_COLUMNS = [
   'Project ID',
@@ -124,6 +203,44 @@ var PIPELINE_STAGE_COLORS = {
   'Nurture': '#e6e0d4',
   'Won': '#d9ead3',
   'Lost': '#f4cccc'
+};
+
+var PROSPECT_DROPDOWN_DEFAULTS = {
+  'Audit Outcome': [
+    'Strong Fit',
+    'Good Fit',
+    'Needs Nurture',
+    'Poor Fit',
+    'Not Audited'
+  ],
+  'Priority Tier': [
+    'A - Hot',
+    'B - Good',
+    'C - Later'
+  ],
+  Status: PIPELINE_STAGES,
+  'Next Action': [
+    'Send Intro Email',
+    'Send Proposal',
+    'Follow Up',
+    'Conduct Discovery Call',
+    'Nurture'
+  ],
+  'Offer / Service': [
+    'Website Audit',
+    'Google Business Optimization',
+    'Local SEO',
+    'AI Automation',
+    'Business Systems',
+    'Client Website',
+    'Monthly Support',
+    'One-Time Project',
+    'Consulting'
+  ],
+  'Moved to CRM': [
+    'Yes',
+    'No'
+  ]
 };
 
 var DEMO_COMPANY_NAMES = [

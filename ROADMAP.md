@@ -59,6 +59,7 @@ Only after V1.0 release:
 
 Potential larger future direction:
 
+- Full v2 planning is captured in `docs/ROGERS_HOLDINGS_OS_V2_PRODUCT_SPEC.md`.
 - Multi-client/template deployment model.
 - Admin setup wizard.
 - Advanced permission model.

@@ -51,9 +51,14 @@ function onOpen(e) {
     .addItem('Complete Project', 'completeProject')
     .addItem('Refresh Projects', 'refreshProjects');
 
+  const productMenu = ui.createMenu('Product')
+    .addItem('Open Product Feedback', 'openProductFeedback');
+
   const systemMenu = ui.createMenu('System')
     .addItem('Refresh Executive Dashboard', 'refreshExecutiveDashboard')
+    .addItem('Open Daily Friction Log', 'openDailyFrictionLog')
     .addItem('System Health Check', 'runSystemHealthCheck')
+    .addItem('Repair Invalid Dropdown Values', 'repairInvalidDropdownValues')
     .addItem('Reset Test Data', 'resetTestData')
     .addItem('Reset Demo Data', 'resetDemoData');
 
@@ -64,6 +69,7 @@ function onOpen(e) {
     .addSubMenu(workspaceMenu)
     .addSubMenu(followUpMenu)
     .addSubMenu(clientProjectMenu)
+    .addSubMenu(productMenu)
     .addSubMenu(systemMenu)
     .addToUi();
 
@@ -98,6 +104,14 @@ function onEdit(e) {
     updateSelectedProspectLastActivity_(sheet, table.headers, e.range.getRow());
     updatePipelineDashboardMetrics_();
     updateExecutiveDashboardFollowUpQueue_();
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+function onSelectionChange(e) {
+  try {
+    handleExecutiveDashboardQuickActionSelection_(e);
   } catch (error) {
     console.error(error);
   }
