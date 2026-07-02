@@ -179,29 +179,25 @@ var CLIENT_COLUMNS = [
 
 var PIPELINE_STAGES = [
   'Lead Found',
-  'Audit Complete',
-  'Draft Created',
-  'Discovery Scheduled',
-  'Email Sent',
-  'Follow Up Due',
-  'Proposal Sent',
-  'Audit Package Sent',
+  'Executive Snapshot Sent',
+  'Discovery Meeting Scheduled',
+  'Digital Business Assessment Presented',
+  'Improvement Plan Sent',
+  'Project Started',
+  'Client',
   'Nurture',
-  'Won',
   'Lost'
 ];
 
 var PIPELINE_STAGE_COLORS = {
   'Lead Found': '#d9d9d9',
-  'Audit Complete': '#cfe2f3',
-  'Draft Created': '#d9d2e9',
-  'Discovery Scheduled': '#d9ead3',
-  'Email Sent': '#fce5cd',
-  'Follow Up Due': '#fff2cc',
-  'Proposal Sent': '#d0e0e3',
-  'Audit Package Sent': '#eadcf8',
+  'Executive Snapshot Sent': '#d9d2e9',
+  'Discovery Meeting Scheduled': '#fff2cc',
+  'Digital Business Assessment Presented': '#cfe2f3',
+  'Improvement Plan Sent': '#d0e0e3',
+  'Project Started': '#eadcf8',
+  'Client': '#d9ead3',
   'Nurture': '#e6e0d4',
-  'Won': '#d9ead3',
   'Lost': '#f4cccc'
 };
 
@@ -220,10 +216,14 @@ var PROSPECT_DROPDOWN_DEFAULTS = {
   ],
   Status: PIPELINE_STAGES,
   'Next Action': [
-    'Send Intro Email',
-    'Send Proposal',
+    'Generate Executive Snapshot',
+    'Create Outreach Draft',
+    'Schedule Discovery Meeting',
+    'Present Digital Business Assessment',
+    'Generate Improvement Plan',
+    'Convert to Client',
+    'Start Project',
     'Follow Up',
-    'Conduct Discovery Call',
     'Nurture'
   ],
   'Offer / Service': [

@@ -7,7 +7,7 @@ function buildAuditReportPdfBlob_(prospect, reportFile) {
   // PDF V3 CHANGE: add executive impression, divider sequencing, and score display guardrails.
   const reportText = getAuditReportTextFromReportFile_(reportFile);
   const findings = getSmartFindings_(prospect);
-  const opportunities = buildAuditOpportunities_(prospect, findings, reportText);
+  const opportunities = buildAuditOpportunities_(prospect, findings, reportText, reportFile);
   let consultingFindings = buildConsultingFindingCards_(prospect, opportunities, reportFile);
   consultingFindings = enforcePdfFindingEvidenceQuality_(prospect, reportFile, consultingFindings);
   const screenshotHtml = buildWebsiteScreenshotHtml_(prospect, reportFile);
@@ -15,36 +15,35 @@ function buildAuditReportPdfBlob_(prospect, reportFile) {
   const estimatedImpact = estimateAuditImpact_(prospect, consultingFindings);
   const estimatedOpportunity = estimateAuditOpportunity_(prospect, consultingFindings);
   const scoreDisplay = displayAuditScoreForPdf_(prospect, consultingFindings);
-  const letterGrade = auditLetterGradeForPdf_(prospect, consultingFindings);
   const recommendedPackage = buildRecommendedPackage_(prospect);
+  const visualEvidenceSource = getAuditEvidenceObject_(prospect, reportFile);
   const html = buildBrandedPdfHtml_({
-    title: 'Website & Digital Presence Review',
+    title: 'Digital Business Assessment',
     subtitle: prospect.company,
-    badge: 'Business Review',
+    badge: 'Digital Business Assessment',
     bodyHtml: [
-      brandedPdfCoverHtml_('Website & Digital Presence Review', prospect.company, prospect.website, 'Business Review'),
+      brandedPdfCoverHtml_('Digital Business Assessment', prospect.company, prospect.website, 'Business Review'),
       brandedPdfSectionHtml_('Executive Briefing', buildAuditExecutiveBriefingHtml_(
         prospect,
         consultingFindings,
         reportText,
         scoreDisplay,
-        letterGrade,
         nextStep,
         estimatedImpact,
         estimatedOpportunity
       )),
       screenshotHtml,
-      brandedPdfDividerPageHtml_('WEBSITE REVIEW FINDINGS'),
-      brandedPdfSectionHtml_('Key Findings', consultingFindingCardsHtml_(consultingFindings)),
-      brandedPdfSectionHtml_('PROOF OF FINDINGS', proofOfFindingsHtml_(prospect, reportFile, consultingFindings)),
-      brandedPdfDividerPageHtml_('IMPROVEMENT ROADMAP'),
+      renderPdfCompactDivider_('WEBSITE REVIEW FINDINGS'),
+      brandedPdfSectionHtml_('Key Findings', consultingFindingCardsHtml_(consultingFindings, visualEvidenceSource)),
+      proofOfFindingsSectionHtml_(prospect, reportFile, consultingFindings),
+      renderPdfCompactDivider_('IMPROVEMENT ROADMAP'),
       brandedPdfSectionHtml_('Business Impact', businessImpactSectionHtml_(prospect, consultingFindings)),
       brandedPdfSectionHtml_('Quick Wins', quickWinsSectionHtml_(prospect, consultingFindings)),
       brandedPdfSectionHtml_('Improvement Roadmap', priorityRoadmapHtml_(prospect)),
       brandedPdfSectionHtml_('Digital Trust Checklist', trustChecklistHtml_(prospect)),
       brandedPdfSectionHtml_('Recommended Service Package', recommendedServicePackageHtml_(recommendedPackage)),
       buildCompetitivePositionSection_(prospect),
-      brandedPdfDividerPageHtml_('RECOMMENDED NEXT STEPS'),
+      renderPdfCompactDivider_('RECOMMENDED NEXT STEPS'),
       brandedPdfSectionHtml_('Recommended Next Step', finalRecommendationHtml_(prospect, nextStep, estimatedImpact))
     ].filter(Boolean).join('')
   });
@@ -54,11 +53,11 @@ function buildAuditReportPdfBlob_(prospect, reportFile) {
 function buildProposalPdfBlob_(prospect, proposal) {
   const recommendedPackage = buildRecommendedPackage_(prospect);
   const html = buildBrandedPdfHtml_({
-    title: 'Digital Improvement Proposal',
+    title: 'Improvement Plan',
     subtitle: prospect.company,
-    badge: 'Proposal',
+    badge: 'Improvement Plan',
     bodyHtml: [
-      brandedPdfCoverHtml_('Digital Improvement Proposal', prospect.company, prospect.website, 'Recommended Solution'),
+      brandedPdfCoverHtml_('Improvement Plan', prospect.company, prospect.website, 'Recommended Solution'),
       brandedPdfSectionHtml_('Thank You', proposalIntroHtml_(prospect)),
       brandedPdfSectionHtml_('What We Found', proposalFindingsSummaryHtml_(prospect)),
       brandedPdfSectionHtml_('Recommended Solution', proposalSolutionHtml_(prospect, recommendedPackage)),
@@ -71,6 +70,11 @@ function buildProposalPdfBlob_(prospect, proposal) {
     ].join('')
   });
   return htmlToPdfBlob_(html, 'Proposal.pdf');
+}
+
+function buildExecutiveSnapshotPdfBlob_(prospect, reportFile) {
+  const html = buildExecutiveSnapshotPdfHtml_(prospect || {}, reportFile || {});
+  return htmlToPdfBlob_(html, 'Executive Snapshot.pdf');
 }
 
 function buildDiscoveryCallBriefPdfBlob_(prospect, startDate, durationMinutes) {
@@ -130,7 +134,7 @@ function buildAuditRecommendations_(prospect, findings) {
 }
 
 function auditLetterGradeForPdf_(prospect, findings) {
-  const score = Number(displayAuditScoreForPdf_(prospect, findings));
+  const score = parseDigitalPresenceScore_(displayAuditScoreForPdf_(prospect, findings));
   if (Number.isNaN(score)) {
     return 'Not Scored';
   }
@@ -189,15 +193,10 @@ function trimPdfSummary_(text) {
 function customerFacingAssessment_(prospect, findings) {
   // PDF V3 CHANGE: avoid credibility issues when a perfect score still has visible findings.
   if (hasPerfectScoreWithFindings_(prospect, findings)) {
-    return 'Very Strong';
+    return getDigitalPresenceAssessment_(94).title;
   }
 
-  if (isNearPerfectAuditScore_(prospect)) {
-    return 'Strong Digital Foundation';
-  }
-
-  const cleaned = sanitizeCustomerPdfText_(prospect && prospect.auditOutcome);
-  return cleaned || 'Assessment complete';
+  return getDigitalPresenceAssessment_(prospect && prospect.auditScore).title;
 }
 
 function isNearPerfectAuditScore_(prospect) {
@@ -212,15 +211,12 @@ function hasPerfectScoreWithFindings_(prospect, findings) {
 }
 
 function displayAuditScoreForPdf_(prospect, findings) {
-  // PDF V3 CHANGE: display 94/100 when score is 100 but findings still exist.
-  if (hasPerfectScoreWithFindings_(prospect, findings)) {
-    return '94/100';
-  }
-  return formatAuditScoreForPdf_(prospect && prospect.auditScore);
+  return getDigitalPresenceAssessment_(prospect && prospect.auditScore).scoreText;
 }
 
-function buildAuditExecutiveBriefingHtml_(prospect, findings, reportText, scoreDisplay, letterGrade, nextStep, estimatedImpact, estimatedOpportunity) {
-  const assessment = customerFacingAssessment_(prospect, findings);
+function buildAuditExecutiveBriefingHtml_(prospect, findings, reportText, scoreDisplay, nextStep, estimatedImpact, estimatedOpportunity) {
+  const digitalPresence = getDigitalPresenceAssessment_(scoreDisplay);
+  const assessment = digitalPresence.title;
   const strengths = buildBusinessStrengths_(prospect, findings);
   const opportunities = buildTopBusinessOpportunities_(prospect, findings);
   const narrative = buildConsultantNarrative_(prospect, findings, reportText, nextStep, estimatedImpact);
@@ -235,9 +231,9 @@ function buildAuditExecutiveBriefingHtml_(prospect, findings, reportText, scoreD
     '<div class="brief-primary">',
     '<h3>Overall Assessment</h3>',
     `<p>${escapeHtml_(assessment)}</p>`,
+    `<p class="muted-copy">${escapeHtml_(digitalPresence.subtitle)}</p>`,
     '<div class="score-strip">',
-    `<span><strong>${escapeHtml_(scoreDisplay)}</strong><small>Current Score</small></span>`,
-    `<span><strong>${escapeHtml_(letterGrade)}</strong><small>Letter Grade</small></span>`,
+    `<span><strong>${escapeHtml_(digitalPresence.scoreText || scoreDisplay)}</strong><small>Digital Presence Score</small></span>`,
     `<span><strong>${escapeHtml_(estimatedOpportunity)}</strong><small>Estimated Opportunity</small></span>`,
     '</div>',
     '</div>',
@@ -401,7 +397,14 @@ function opportunityStatusClass_(opportunity) {
   return 'status-green';
 }
 
-function buildAuditOpportunities_(prospect, findings, reportText) {
+function buildAuditOpportunities_(prospect, findings, reportText, reportFile) {
+  const intelligenceFindings = typeof getInspectionIntelligenceFindingsForReport_ === 'function'
+    ? getInspectionIntelligenceFindingsForReport_(prospect, reportFile || {})
+    : [];
+  if (intelligenceFindings.length) {
+    return intelligenceFindings.slice(0, 5);
+  }
+
   // PDF V4 CHANGE: high-scoring audits get optimization opportunities, not weak problem language.
   if (isHighScoringAudit_(prospect)) {
     return buildGrowthOpportunityFindings_(prospect);
@@ -758,6 +761,27 @@ function annotateEvidence(evidenceObject, finding) {
 }
 
 function generateBusinessInterpretation(prospect, reportFile) {
+  if (typeof generateBusinessInterpretationCore_ === 'function') {
+    const result = generateBusinessInterpretationCore_({
+      prospect: prospect,
+      summary: firstNonBlank_([
+        reportFile && reportFile.businessInterpretation,
+        prospect && prospect.businessInterpretation,
+        prospect && prospect.summary,
+        prospect && prospect.notes
+      ]),
+      findings: getSmartFindings_(prospect)
+    });
+    return {
+      type: 'business-interpretation',
+      summary: result.executiveSummary,
+      executiveNarrative: result.executiveNarrative,
+      meetingTalkingPoints: result.meetingTalkingPoints,
+      interpretations: result.interpretations,
+      metadata: result.metadata
+    };
+  }
+
   return {
     type: 'business-interpretation',
     summary: firstNonBlank_([
@@ -856,14 +880,6 @@ function getEvidenceDetailForCategory_(evidenceObject, category) {
     };
   }
 
-  if (interpretation.summary) {
-    return {
-      sourceType: 'business-interpretation',
-      sourceLabel: 'Business interpretation',
-      detail: interpretation.summary
-    };
-  }
-
   return null;
 }
 
@@ -877,8 +893,21 @@ function buildConsultingFindingCards_(prospect, opportunities, reportFile) {
       return;
     }
 
-    const category = categorizeFinding_(opportunity, usedCategories);
-    const recommendedAction = buildFindingRecommendedAction_(category, opportunity, index, usedActions);
+    const intelligenceFinding = typeof opportunity === 'object' && opportunity ? opportunity : null;
+    const opportunityText = intelligenceFinding
+      ? firstNonBlank_([
+        intelligenceFinding.businessLanguage,
+        intelligenceFinding.consultantObservation,
+        intelligenceFinding.executiveSummary,
+        intelligenceFinding.supportingEvidence
+      ])
+      : opportunity;
+    const category = intelligenceFinding && intelligenceFinding.category
+      ? intelligenceFinding.category
+      : categorizeFinding_(opportunityText, usedCategories);
+    const recommendedAction = intelligenceFinding && intelligenceFinding.recommendedAction
+      ? sanitizeCustomerPdfText_(intelligenceFinding.recommendedAction)
+      : buildFindingRecommendedAction_(category, opportunityText, index, usedActions);
     const actionKey = recommendedAction.toLowerCase();
     if (usedActions[actionKey]) {
       return;
@@ -888,15 +917,50 @@ function buildConsultingFindingCards_(prospect, opportunities, reportFile) {
     usedActions[actionKey] = true;
     cards.push({
       category: category,
-      impactLevel: getFindingImpactLevel_(prospect, index),
-      observation: sanitizeCustomerPdfText_(opportunity) || fallbackObservationForCategory_(category),
-      evidence: buildFindingEvidence_(prospect, reportFile, category, opportunity),
-      businessImpact: buildFindingBusinessImpact_(category, opportunity),
+      impactLevel: intelligenceFinding
+        ? inspectionIntelligenceImpactLevelForPdf_(intelligenceFinding)
+        : getFindingImpactLevel_(prospect, index),
+      observation: sanitizeCustomerPdfText_(opportunityText) || fallbackObservationForCategory_(category),
+      evidence: intelligenceFinding
+        ? buildPdfEvidenceFromInspectionIntelligence_(intelligenceFinding, prospect, reportFile, category, opportunityText)
+        : buildFindingEvidence_(prospect, reportFile, category, opportunityText),
+      businessImpact: intelligenceFinding && intelligenceFinding.businessImpact
+        ? sanitizeCustomerPdfText_(intelligenceFinding.businessImpact)
+        : buildFindingBusinessImpact_(category, opportunityText),
       recommendedAction: recommendedAction
     });
   });
 
   return cards.length ? cards : defaultConsultingFindingCards_(prospect, reportFile);
+}
+
+function inspectionIntelligenceImpactLevelForPdf_(finding) {
+  const value = String(finding && finding.severity || '').toLowerCase();
+  if (value === 'critical' || value === 'high') {
+    return 'High';
+  }
+  if (value === 'medium') {
+    return 'Medium';
+  }
+  return 'Low';
+}
+
+function buildPdfEvidenceFromInspectionIntelligence_(finding, prospect, reportFile, category, observation) {
+  const evidence = finding && (finding.evidence || {});
+  const detail = firstNonBlank_([
+    finding && finding.supportingEvidence,
+    evidence.description,
+    evidence.value,
+    evidence.label
+  ]);
+  if (detail) {
+    return {
+      sourceType: evidence.type || finding.source || 'inspection-intelligence',
+      sourceLabel: evidence.label || 'Website evidence',
+      detail: sanitizeCustomerPdfText_(detail)
+    };
+  }
+  return buildFindingEvidence_(prospect, reportFile, category, observation);
 }
 
 function buildFindingEvidence_(prospect, reportFile, category, observation) {
@@ -1230,24 +1294,66 @@ function proofOfFindingsHtml_(prospect, reportFile, findings) {
   // PDF V4 CHANGE: proof cards require real evidence and avoid score-first proof.
   const evidenceObject = getAuditEvidenceObject_(prospect, reportFile);
   const screenshot = getEvidenceScreenshotUri_(evidenceObject);
-  const items = (findings || []).slice(0, 5);
+  const items = (findings || []).filter(function(finding) {
+    return hasRealProofEvidence_(finding, evidenceObject);
+  }).slice(0, 5);
   if (!items.length) {
-    return '<div class="summary-card"><p>No finding evidence available.</p></div>';
+    return '';
   }
 
-  return items.map(function(finding, index) {
+  const proofCards = items.map(function(finding, index) {
     return [
       '<div class="proof-card">',
       `<div class="proof-heading"><span>${escapeHtml_(finding.category)}</span><span>${escapeHtml_(finding.evidence && finding.evidence.sourceLabel || 'Audit evidence')}</span></div>`,
       screenshot ? annotatedFindingScreenshotHtml_(screenshot, finding, index, evidenceObject) : '',
       '<div class="proof-grid">',
-      `<div><h3>Screenshot or Data Source</h3><p>${escapeHtml_(finding.evidence && finding.evidence.sourceLabel || 'Audit evidence')}</p></div>`,
+      `<div><h3>${escapeHtml_(screenshot ? 'Screenshot Source' : 'Evidence Source')}</h3><p>${escapeHtml_(finding.evidence && finding.evidence.sourceLabel || 'Website evidence')}</p></div>`,
       `<div><h3>Explanation</h3><p>${escapeHtml_(finding.evidence && finding.evidence.detail || finding.observation)}</p></div>`,
       `<div><h3>Why It Matters</h3><p>${escapeHtml_(finding.businessImpact)}</p></div>`,
       '</div>',
       '</div>'
     ].join('');
   }).join('');
+
+  return renderPdfCardGroup_(proofCards, { compact: true });
+}
+
+function proofOfFindingsSectionHtml_(prospect, reportFile, findings) {
+  const html = proofOfFindingsHtml_(prospect, reportFile, findings);
+  return html ? brandedPdfSectionHtml_('PROOF OF FINDINGS', html) : '';
+}
+
+function hasRealProofEvidence_(finding, evidenceObject) {
+  if (!finding) {
+    return false;
+  }
+  if (evidenceObject && getEvidenceScreenshotUri_(evidenceObject)) {
+    return true;
+  }
+  const evidence = finding.evidence || {};
+  const sourceType = String(evidence.sourceType || evidence.type || '').toLowerCase();
+  const sourceLabel = String(evidence.sourceLabel || evidence.label || '').toLowerCase();
+  const detail = String(evidence.detail || evidence.description || evidence.value || '').trim();
+  if (!detail) {
+    return false;
+  }
+  if (sourceType.indexOf('business-interpretation') !== -1 || sourceLabel.indexOf('business interpretation') !== -1) {
+    return false;
+  }
+  return textIncludesAny_(sourceType + ' ' + sourceLabel, [
+    'screenshot',
+    'visual',
+    'source url',
+    'page-content',
+    'homepage',
+    'website',
+    'parser',
+    'inspection',
+    'websitedocument',
+    'google-business',
+    'search-results',
+    'page-speed'
+  ]);
 }
 
 function enforcePdfFindingEvidenceQuality_(prospect, reportFile, findings) {
@@ -1386,11 +1492,17 @@ function annotationLabelForCategory_(category) {
   return labels[category] || 'Evidence point';
 }
 
-function consultingFindingCardsHtml_(findings) {
-  return (findings || []).map(function(finding) {
+function consultingFindingCardsHtml_(findings, visualEvidenceSource) {
+  const cardsHtml = (findings || []).map(function(finding) {
     const impactClass = impactStatusClass_(finding.impactLevel);
     const evidenceDetail = finding.evidence && finding.evidence.detail ? String(finding.evidence.detail) : '';
     const evidenceLabel = finding.evidence && finding.evidence.sourceLabel ? String(finding.evidence.sourceLabel) : 'Supporting evidence';
+    const visualEvidence = typeof getBestVisualEvidenceForFinding_ === 'function'
+      ? getBestVisualEvidenceForFinding_(finding, visualEvidenceSource)
+      : null;
+    const visualEvidenceHtml = visualEvidence && typeof renderVisualEvidenceHtml_ === 'function'
+      ? renderVisualEvidenceHtml_(visualEvidence)
+      : '';
     return [
       '<div class="finding-card">',
       '<div class="finding-card-top">',
@@ -1401,10 +1513,13 @@ function consultingFindingCardsHtml_(findings) {
       `<h3>Why This Matters</h3><p>${escapeHtml_(buildFindingWhyThisMatters_(finding))}</p>`,
       `<h3>Business Impact</h3><p>${escapeHtml_(finding.businessImpact)}</p>`,
       `<h3>Recommended Action</h3><p>${escapeHtml_(finding.recommendedAction)}</p>`,
+      visualEvidenceHtml,
       evidenceDetail ? `<div class="finding-evidence"><strong>${escapeHtml_(evidenceLabel)}:</strong> ${escapeHtml_(evidenceDetail)}</div>` : '',
       '</div>'
     ].join('');
   }).join('');
+
+  return renderPdfCardGroup_(cardsHtml, { compact: true });
 }
 
 function buildFindingWhyThisMatters_(finding) {
@@ -1468,7 +1583,7 @@ function priorityRoadmapHtml_(prospect) {
     }
   ];
 
-  return '<div class="roadmap-grid">' + phases.map(function(item) {
+  return renderPdfCardGroup_('<div class="roadmap-grid">' + phases.map(function(item) {
     return [
       '<div class="roadmap-card">',
       `<div class="roadmap-phase">${escapeHtml_(item.phase)}</div>`,
@@ -1477,7 +1592,7 @@ function priorityRoadmapHtml_(prospect) {
       `<p class="outcome-line">${escapeHtml_(item.outcomes)}</p>`,
       '</div>'
     ].join('');
-  }).join('') + '</div>';
+  }).join('') + '</div>', { compact: true });
 }
 
 function trustChecklistHtml_(prospect) {
@@ -1496,7 +1611,7 @@ function trustChecklistHtml_(prospect) {
     ['Service Area Coverage', !textIncludesAny_(text, ['missing service area', 'service area unclear'])]
   ];
 
-  return '<div class="checklist-grid">' + checks.map(function(check) {
+  return renderPdfCardGroup_('<div class="checklist-grid">' + checks.map(function(check) {
     const passed = check[1];
     return [
       `<div class="checklist-item ${passed ? 'check-pass' : 'check-improve'}">`,
@@ -1504,7 +1619,7 @@ function trustChecklistHtml_(prospect) {
       `<span class="check-label">${escapeHtml_(check[0])}</span>`,
       '</div>'
     ].join('');
-  }).join('') + '</div>';
+  }).join('') + '</div>', { compact: true });
 }
 
 function buildCompetitivePositionSection_(prospect) {
@@ -1562,7 +1677,7 @@ function finalRecommendationHtml_(prospect, nextStep, estimatedImpact) {
 }
 
 function buildRecommendedPackage_(prospect) {
-  const service = String(prospect.offerService || 'Website Audit').trim();
+  const service = getClientFacingServiceName_(prospect.offerService || 'Website Audit', prospect.auditScore);
   const investmentRange = recommendedInvestmentRangeForService_(service);
   const highScore = isNearPerfectAuditScore_(prospect);
   return {
@@ -1580,6 +1695,245 @@ function buildRecommendedPackage_(prospect) {
       ['Systems', 'Simple inquiry and follow-up workflow recommendations.']
     ]
   };
+}
+
+function buildExecutiveSnapshotPdfHtml_(prospect, reportFile) {
+  const design = getPdfDesignSystem_();
+  const colors = design.colors;
+  const assets = getRogersBrandPdfAssets_();
+  const contact = getRogersContactInfo_();
+  const findings = getSmartFindings_(prospect);
+  const digitalPresence = getDigitalPresenceAssessment_(prospect.auditScore);
+  const assessment = digitalPresence.title;
+  const opportunities = buildExecutiveSnapshotOpportunities_(prospect, findings);
+  const biggestOpportunity = buildExecutiveSnapshotBiggestOpportunity_(prospect, opportunities);
+  const impact = buildExecutiveSnapshotBusinessImpact_(prospect);
+  const firstStep = buildExecutiveSnapshotFirstStep_(prospect);
+  const evidenceHtml = buildExecutiveSnapshotEvidenceHtml_(prospect, reportFile);
+  const logoHtml = assets.primaryLogo
+    ? `<img src="${assets.primaryLogo}" style="height:48px;width:auto;display:block;" alt="Rogers Holdings LLC">`
+    : '<div style="font-weight:700;text-transform:uppercase;letter-spacing:1.6px;">Rogers Holdings LLC</div>';
+  const dateText = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'MMMM d, yyyy');
+
+  return `
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <style>
+          @page { margin: 0; size: letter; }
+          body { margin: 0; font-family: Arial, sans-serif; color: ${colors.text}; background: ${colors.paper}; }
+          @media print {
+            h1, h2, h3, .section-title { break-after: avoid; page-break-after: avoid; }
+            p, li { widows: 3; orphans: 3; }
+            .prepared-card, .score-card, .panel, .opportunity-card, .evidence, .visual-evidence-card, .cta { break-inside: avoid; page-break-inside: avoid; }
+          }
+          .snapshot { box-sizing: border-box; width: 816px; min-height: 1056px; padding: 34px 42px 28px; background: ${colors.paper}; position: relative; overflow: hidden; }
+          .topbar { display: grid; grid-template-columns: 1fr 220px; gap: 22px; align-items: start; border-bottom: 3px solid ${colors.gold}; padding-bottom: 18px; }
+          .brand-block { display: flex; gap: 18px; align-items: center; }
+          .brand-panel { background: ${colors.charcoal}; color: #fff; padding: 16px 18px; border-left: 5px solid ${colors.gold}; min-height: 70px; display: flex; align-items: center; }
+          .snapshot-label { color: ${colors.goldDark}; font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; margin-bottom: 7px; }
+          h1 { margin: 0; font-size: 30px; line-height: 1.02; color: ${colors.black}; letter-spacing: 0; }
+          .meta { text-align: right; font-size: 10px; line-height: 1.5; color: ${colors.muted}; text-transform: uppercase; letter-spacing: .8px; }
+          .prepared { margin-top: 22px; display: grid; grid-template-columns: 1.25fr .75fr; gap: 18px; align-items: stretch; }
+          .prepared-card, .score-card, .panel, .opportunity-card { border: 1px solid ${colors.goldBorder}; background: ${colors.neutral}; border-radius: 6px; padding: 15px 16px; box-sizing: border-box; }
+          .prepared-card h2 { margin: 0 0 6px; font-size: 24px; line-height: 1.08; color: ${colors.black}; }
+          .prepared-card p { margin: 4px 0 0; color: ${colors.muted}; font-size: 11px; line-height: 1.45; }
+          .score-card { background: ${colors.charcoal}; color: #fff; border-color: ${colors.charcoal}; position: relative; overflow: hidden; }
+          .score-value { font-size: 42px; font-weight: 700; color: ${colors.gold}; line-height: .95; }
+          .score-label { color: #f4ead7; font-size: 10px; text-transform: uppercase; letter-spacing: 1.3px; margin-top: 6px; }
+          .assessment { margin-top: 9px; font-size: 13px; line-height: 1.35; color: #fff; font-weight: 700; }
+          .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px; }
+          .section-title { margin: 0 0 10px; color: ${colors.black}; font-size: 12px; text-transform: uppercase; letter-spacing: 1.2px; font-weight: 700; }
+          .gold-rule { width: 42px; height: 3px; background: ${colors.gold}; margin-bottom: 10px; }
+          ul { margin: 0; padding-left: 18px; }
+          li { margin: 0 0 7px; font-size: 11.5px; line-height: 1.38; }
+          p { font-size: 11.5px; line-height: 1.48; margin: 0 0 8px; }
+          .opportunity-card { background: #fff; border-left: 5px solid ${colors.goldDark}; }
+          .opportunity-card strong { display: block; color: ${colors.black}; font-size: 13px; margin-bottom: 6px; }
+          .evidence { margin-top: 15px; border: 1px solid ${colors.goldBorder}; border-radius: 6px; overflow: hidden; background: #fff; }
+          .evidence-head { background: ${colors.black}; color: ${colors.gold}; padding: 9px 13px; font-size: 10px; text-transform: uppercase; letter-spacing: 1.2px; font-weight: 700; }
+          .evidence-body { padding: 12px 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: center; }
+          .evidence-body.single { display: block; }
+          .evidence img { width: 100%; max-height: 145px; object-fit: contain; border: 1px solid ${colors.goldBorder}; background: ${colors.neutral}; }
+          .visual-evidence-card { border: 1px solid ${colors.goldBorder}; background: #fff; border-radius: 6px; overflow: hidden; }
+          .visual-evidence-head { display: flex; justify-content: space-between; gap: 10px; background: ${colors.black}; color: ${colors.gold}; padding: 8px 10px; font-size: 9px; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; }
+          .visual-evidence-severity { color: #fff; }
+          .visual-evidence-frame { position: relative; padding: 8px; background: ${colors.neutral}; }
+          .visual-evidence-image { width: 100%; max-height: 150px; object-fit: contain; display: block; border: 1px solid ${colors.goldBorder}; background: #fff; }
+          .visual-evidence-caption { border-top: 1px solid ${colors.goldBorder}; padding: 8px 10px; color: ${colors.muted}; font-size: 10px; line-height: 1.35; }
+          .visual-evidence-highlight { position: absolute; border: 2px solid ${colors.gold}; background: rgba(200,161,90,.14); }
+          .visual-evidence-arrow { position: absolute; height: 2px; background: ${colors.gold}; transform-origin: left center; }
+          .visual-evidence-arrow:after { content: ""; position: absolute; right: -1px; top: -4px; border-left: 8px solid ${colors.gold}; border-top: 5px solid transparent; border-bottom: 5px solid transparent; }
+          .visual-evidence-callout { position: absolute; right: 14px; bottom: 14px; max-width: 46%; background: rgba(5,7,10,.9); color: #fff; border-left: 3px solid ${colors.gold}; padding: 7px 9px; font-size: 9px; line-height: 1.3; text-transform: uppercase; letter-spacing: .7px; font-weight: 700; }
+          .cta { margin-top: 16px; background: ${colors.charcoal}; color: #fff; border-radius: 6px; padding: 18px 20px; border-top: 4px solid ${colors.gold}; }
+          .cta h3 { margin: 0 0 8px; color: ${colors.gold}; font-size: 15px; }
+          .cta p { color: #f8f4ec; font-size: 12px; line-height: 1.48; margin-bottom: 8px; }
+          .footer { position: absolute; left: 42px; right: 42px; bottom: 22px; border-top: 1px solid ${colors.goldBorder}; padding-top: 8px; color: ${colors.muted}; font-size: 8.5px; text-transform: uppercase; letter-spacing: .8px; display: flex; justify-content: space-between; gap: 16px; }
+        </style>
+      </head>
+      <body>
+        <div class="snapshot">
+          <div class="topbar">
+            <div class="brand-block">
+              <div class="brand-panel">${logoHtml}</div>
+              <div>
+                <div class="snapshot-label">Executive Snapshot</div>
+                <h1>Digital Opportunity Snapshot</h1>
+              </div>
+            </div>
+            <div class="meta">
+              Prepared ${escapeHtml_(dateText)}<br>
+              Rogers Holdings LLC<br>
+              Customer-facing summary
+            </div>
+          </div>
+
+          <div class="prepared">
+            <div class="prepared-card">
+              <div class="snapshot-label">Prepared For</div>
+              <h2>${escapeHtml_(prospect.company || 'Business')}</h2>
+              <p>${escapeHtml_(prospect.website || '')}</p>
+              <p>We identified practical opportunities that may help customers find, trust, and contact the business more easily.</p>
+            </div>
+            <div class="score-card">
+              <div class="score-value">${escapeHtml_(digitalPresence.scoreText || 'Not scored')}</div>
+              <div class="score-label">Digital Presence Score</div>
+              <div class="assessment">${escapeHtml_(assessment)}</div>
+              <p style="color:#f4ead7;font-size:10.5px;line-height:1.35;margin:8px 0 0;">${escapeHtml_(digitalPresence.subtitle)}</p>
+            </div>
+          </div>
+
+          <div class="grid">
+            <div class="panel">
+              <div class="gold-rule"></div>
+              <div class="section-title">Top 3 Opportunities</div>
+              ${brandedPdfListHtml_(opportunities)}
+            </div>
+            <div class="panel">
+              <div class="gold-rule"></div>
+              <div class="section-title">Estimated Business Impact</div>
+              <p>${escapeHtml_(impact)}</p>
+              <div class="section-title" style="margin-top:12px;">Recommended First Step</div>
+              <p>${escapeHtml_(firstStep)}</p>
+            </div>
+          </div>
+
+          <div class="opportunity-card" style="margin-top:15px;">
+            <strong>Biggest Missed Opportunity</strong>
+            <p>${escapeHtml_(biggestOpportunity)}</p>
+          </div>
+
+          ${evidenceHtml}
+
+          <div class="cta">
+            <h3>Recommended next step</h3>
+            <p>A complete Digital Business Assessment has been prepared for this business.</p>
+            <p>Schedule a short review conversation to walk through the findings, confirm priorities, and decide whether an improvement plan makes sense.</p>
+          </div>
+
+          <div class="footer">
+            <span>${escapeHtml_(contact.name)} | ${escapeHtml_(contact.company)}</span>
+            <span>${escapeHtml_(contact.email)} | ${escapeHtml_(contact.phone)}</span>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+}
+
+function buildExecutiveSnapshotOpportunities_(prospect, findings) {
+  const template = getIndustryRecommendationTemplate_(prospect);
+  const source = (findings && findings.length ? findings : template.opportunities || []).filter(Boolean);
+  const fallback = [
+    'Make the first customer action easier to find.',
+    'Strengthen trust signals before the customer decides to call.',
+    'Clarify service area and local visibility signals.'
+  ];
+  return (source.length ? source : fallback).slice(0, 3);
+}
+
+function buildExecutiveSnapshotBiggestOpportunity_(prospect, opportunities) {
+  const service = String(prospect.offerService || '').trim();
+  if (service) {
+    return `The clearest improvement path appears to be ${service}, focused on helping more visitors understand the offer, trust the business, and take the next step.`;
+  }
+  if (opportunities && opportunities.length) {
+    return opportunities[0];
+  }
+  return 'The clearest improvement path appears to be making the website easier to understand, trust, and act on from the first visit.';
+}
+
+function buildExecutiveSnapshotBusinessImpact_(prospect) {
+  const score = Number(prospect.auditScore);
+  if (!Number.isNaN(score) && score >= 90) {
+    return 'The business appears to have a strong foundation. The opportunity is likely growth-focused: clearer proof, stronger conversion paths, and better local visibility consistency.';
+  }
+  if (!Number.isNaN(score) && score < 70) {
+    return 'The highest-impact improvements may help reduce customer hesitation, clarify the service offer, and make contact or quote requests easier.';
+  }
+  return 'These improvements may help customers find, trust, and contact the business more easily, with the strongest impact around clarity, confidence, and inquiry flow.';
+}
+
+function buildExecutiveSnapshotFirstStep_(prospect) {
+  const service = String(prospect.offerService || '').trim();
+  if (service) {
+    return `Review the ${service} opportunities first, then confirm the highest-impact improvement to prioritize.`;
+  }
+  return 'Review the top opportunities first, then confirm which improvement would most directly support calls, quote requests, or customer trust.';
+}
+
+function buildExecutiveSnapshotEvidenceHtml_(prospect, reportFile) {
+  if (typeof getFeaturedVisualEvidence_ === 'function' && typeof renderVisualEvidenceHtml_ === 'function') {
+    const featuredEvidence = getFeaturedVisualEvidence_([
+      getAuditEvidenceObject_(prospect, reportFile),
+      reportFile,
+      prospect
+    ]);
+    const featuredHtml = featuredEvidence ? renderVisualEvidenceHtml_(featuredEvidence) : '';
+    if (featuredHtml) {
+      return [
+        '<div class="evidence">',
+        '<div class="evidence-head">Featured Evidence</div>',
+        '<div class="evidence-body single">',
+        featuredHtml,
+        '</div>',
+        '</div>'
+      ].join('');
+    }
+  }
+
+  const screenshot = getWebsiteScreenshotDataUri_(prospect, reportFile) || getWebsiteMobileScreenshotDataUri_(prospect, reportFile);
+  if (screenshot) {
+    return [
+      '<div class="evidence">',
+      '<div class="evidence-head">Featured Evidence</div>',
+      '<div class="evidence-body">',
+      `<img src="${screenshot}" alt="Website evidence">`,
+      '<div>',
+      '<div class="section-title">Current Digital Presence</div>',
+      '<p>A visual review point is available and should be used during the Digital Business Assessment conversation.</p>',
+      '<p>This snapshot highlights the opportunity; the full assessment should be reviewed live to confirm priority and context.</p>',
+      '</div>',
+      '</div>',
+      '</div>'
+    ].join('');
+  }
+
+  const observation = firstNonBlank_([
+    prospect.summary,
+    prospect.notes,
+    getDigitalPresenceAssessment_(prospect.auditScore).subtitle,
+    'The first opportunity is to confirm the customer path: what visitors see first, what they understand, and how easily they can take action.'
+  ]);
+  return [
+    '<div class="evidence">',
+    '<div class="evidence-head">Key Observation</div>',
+    '<div class="evidence-body single">',
+    `<p>${escapeHtml_(trimPdfSummary_(observation))}</p>`,
+    '</div>',
+    '</div>'
+  ].join('');
 }
 
 function businessImpactSectionHtml_(prospect, findings) {
@@ -1701,7 +2055,7 @@ function proposalSolutionHtml_(prospect, recommendedPackage) {
 }
 
 function deliverableCardsHtml_(deliverables) {
-  return '<div class="deliverable-grid">' + (deliverables || []).map(function(item, index) {
+  return renderPdfCardGroup_('<div class="deliverable-grid">' + (deliverables || []).map(function(item, index) {
     return [
       '<div class="deliverable-card">',
       `<div class="deliverable-icon">${String(index + 1).padStart(2, '0')}</div>`,
@@ -1709,7 +2063,7 @@ function deliverableCardsHtml_(deliverables) {
       `<p>${escapeHtml_(item[1])}</p>`,
       '</div>'
     ].join('');
-  }).join('') + '</div>';
+  }).join('') + '</div>', { compact: true });
 }
 
 function projectRoadmapHtml_() {
@@ -1958,7 +2312,7 @@ function buildBrandedPdfHtml_(document) {
           .brief-grid { display: grid; grid-template-columns: 1fr 1fr; gap: ${spacing.cardGap}; margin-bottom: ${spacing.cardGap}; }
           .brief-primary { border: ${borders.card}; background: ${colors.paper}; padding: 18px; border-radius: ${radius.card}; page-break-inside: avoid; }
           .brief-primary p { margin-top: 0; }
-          .score-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 14px; }
+          .score-strip { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 14px; }
           .score-strip span { border-top: ${borders.light}; padding-top: 9px; }
           .score-strip strong { display: block; color: ${colors.black}; font-size: 18px; margin-bottom: 3px; }
           .score-strip small { display: block; color: ${colors.muted}; font-size: ${typography.labelSize}; text-transform: uppercase; letter-spacing: 1px; }
@@ -1973,6 +2327,17 @@ function buildBrandedPdfHtml_(document) {
           .impact-medium { background: ${colors.goldDark}; }
           .impact-low { background: ${colors.success}; }
           .finding-evidence { border-top: ${borders.light}; color: ${colors.muted}; font-size: ${typography.sectionLabelSize}; line-height: 1.45; margin-top: 12px; padding-top: 10px; }
+          .visual-evidence-card { border: ${borders.card}; background: ${colors.paper}; border-radius: ${radius.small}; margin: 14px 0; overflow: hidden; page-break-inside: avoid; }
+          .visual-evidence-head { display: flex; justify-content: space-between; gap: 12px; background: ${colors.black}; color: ${colors.gold}; padding: 9px 12px; font-size: 10px; text-transform: uppercase; letter-spacing: 1.1px; font-weight: 700; }
+          .visual-evidence-severity { color: #fff; }
+          .visual-evidence-frame { position: relative; padding: 10px; background: ${colors.neutral}; min-height: 120px; }
+          .visual-evidence-image { width: 100%; max-height: 260px; object-fit: contain; display: block; border: ${borders.light}; background: #fff; }
+          .visual-evidence-caption { border-top: ${borders.light}; padding: 10px 12px; color: ${colors.muted}; font-size: ${typography.sectionLabelSize}; line-height: 1.45; }
+          .visual-evidence-placeholder { border: ${borders.card}; background: ${colors.neutral}; padding: 12px; color: ${colors.muted}; font-size: ${typography.sectionLabelSize}; }
+          .visual-evidence-highlight { position: absolute; border: 2px solid ${colors.gold}; background: rgba(200,161,90,.14); box-shadow: 0 0 0 9999px rgba(5,7,10,.03); }
+          .visual-evidence-arrow { position: absolute; height: 2px; background: ${colors.gold}; transform-origin: left center; }
+          .visual-evidence-arrow:after { content: ""; position: absolute; right: -1px; top: -4px; border-left: 8px solid ${colors.gold}; border-top: 5px solid transparent; border-bottom: 5px solid transparent; }
+          .visual-evidence-callout { position: absolute; right: 18px; bottom: 18px; max-width: 42%; background: rgba(5,7,10,.9); color: #fff; border-left: 4px solid ${colors.gold}; padding: 8px 10px; font-size: 10px; line-height: 1.35; text-transform: uppercase; letter-spacing: .8px; font-weight: 700; }
           .proof-card { border: ${borders.card}; background: ${colors.paper}; padding: ${spacing.cardPadding}; margin-bottom: 18px; border-radius: ${radius.small}; page-break-inside: avoid; }
           .proof-heading { display: flex; justify-content: space-between; gap: 12px; border-bottom: ${borders.light}; padding-bottom: 8px; margin-bottom: 12px; color: ${colors.black}; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; }
           .proof-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 12px; }
@@ -2037,6 +2402,19 @@ function buildBrandedPdfHtml_(document) {
           pre { white-space: pre-wrap; font-family: ${typography.family}; background: ${colors.neutral}; border: ${borders.card}; padding: ${spacing.cardPadding}; font-size: ${typography.sectionLabelSize}; line-height: 1.45; }
           .signature-row { display: flex; justify-content: space-between; gap: 36px; margin-top: 34px; }
           .signature-row span { display: inline-block; width: 45%; border-top: ${borders.dark}; padding-top: 8px; font-size: ${typography.bodySize}; }
+          h1, h2, h3, h4, .section-heading, .compact-divider-title { break-after: avoid; page-break-after: avoid; }
+          p, li { widows: 3; orphans: 3; }
+          table, tr, td, th, img, .keep-together, .pdf-card-group, .metric-card, .recommendation-card, .summary-card, .price-card, .solution-panel, .insight-panel, .narrative-callout, .brief-primary, .impact-summary, .finding-card, .proof-card, .roadmap-card, .checklist-item, .conclusion-panel, .acceptance-panel, .next-step-flow div, .deliverable-card, .visual-evidence-card, .signature-row, .contact-card { break-inside: avoid; page-break-inside: avoid; }
+          .section-heading { break-after: avoid; page-break-after: avoid; }
+          .section-content { break-before: avoid; page-break-before: avoid; }
+          .soft-page-break { height: 0; line-height: 0; break-before: page; page-break-before: always; }
+          .compact-divider { margin: 10px ${spacing.pageX} 18px; padding: 16px 20px; background: ${colors.charcoal}; color: ${colors.paper}; border-left: 5px solid ${colors.gold}; border-radius: ${radius.small}; break-inside: avoid; page-break-inside: avoid; }
+          .compact-divider-rule { width: 72px; height: 2px; background: ${colors.gold}; margin: 0 0 8px; }
+          .compact-divider-title { margin: 0; color: ${colors.paper}; font-size: 18px; line-height: 1.2; text-transform: uppercase; letter-spacing: 1.4px; border: 0; padding: 0; }
+          .finding-card, .proof-card, .roadmap-card, .deliverable-card { margin-bottom: 14px; }
+          .proof-card { padding: 14px 16px; }
+          .proof-card .annotated-shot img, .proof-card img { max-height: 240px; object-fit: contain; }
+          .timeline-item { break-inside: avoid; page-break-inside: avoid; margin-bottom: 14px; }
           /* PDF V3 CHANGE: force divider pages to render as black/charcoal pages. */
           .divider-page { min-height: 710px; background-color: ${colors.charcoal} !important; background: ${colors.charcoal} !important; color: #fff; page-break-before: always; page-break-after: always; position: relative; text-align: center; z-index: 5; }
           .divider-inner { position: absolute; top: 190px; left: 70px; right: 70px; }
@@ -2137,7 +2515,7 @@ function recommendationCardsHtml_(items, label) {
     return '<div class="summary-card"><p>No specific notes available.</p></div>';
   }
 
-  return values.map(function(item, index) {
+  const cardsHtml = values.map(function(item, index) {
     return [
       '<div class="recommendation-card">',
       `<div class="recommendation-kicker">${escapeHtml_(label || 'Item')} ${index + 1}</div>`,
@@ -2145,12 +2523,14 @@ function recommendationCardsHtml_(items, label) {
       '</div>'
     ].join('');
   }).join('');
+
+  return renderPdfCardGroup_(cardsHtml, { compact: true });
 }
 
 function timelineHtml_(items) {
-  return '<div class="timeline">' + (items || []).map(function(item) {
+  return renderPdfKeepTogether_('<div class="timeline">' + (items || []).map(function(item) {
     return `<div class="timeline-item"><p>${escapeHtml_(item)}</p></div>`;
-  }).join('') + '</div>';
+  }).join('') + '</div>');
 }
 
 function pricingCardsHtml_(items) {
@@ -2295,7 +2675,39 @@ function statusLabelFromClass_(statusClass) {
 }
 
 function brandedPdfSectionHtml_(title, contentHtml) {
-  return `<div class="section"><h2>${escapeHtml_(title)}</h2>${contentHtml}</div>`;
+  return renderPdfSection_(title, contentHtml);
+}
+
+function renderPdfSection_(title, contentHtml) {
+  return [
+    '<div class="section">',
+    `<h2 class="section-heading">${escapeHtml_(title)}</h2>`,
+    `<div class="section-content">${contentHtml || ''}</div>`,
+    '</div>'
+  ].join('');
+}
+
+function renderPdfCardGroup_(contentHtml, options) {
+  const opts = options || {};
+  const extraClass = opts.compact ? ' compact' : '';
+  return `<div class="pdf-card-group${extraClass}">${contentHtml || ''}</div>`;
+}
+
+function renderPdfKeepTogether_(contentHtml) {
+  return `<div class="keep-together">${contentHtml || ''}</div>`;
+}
+
+function renderPdfSoftPageBreak_() {
+  return '<div class="soft-page-break"></div>';
+}
+
+function renderPdfCompactDivider_(title) {
+  return [
+    '<div class="compact-divider">',
+    '<div class="compact-divider-rule"></div>',
+    `<h2 class="compact-divider-title">${escapeHtml_(title)}</h2>`,
+    '</div>'
+  ].join('');
 }
 
 function brandedPdfListHtml_(items) {
@@ -2520,7 +2932,8 @@ function generateProposal() {
   applySmartFindingsToProspect_(sheet, table.headers, selectedRow, prospect);
   const proposal = buildProposal_(prospect);
   showProposalModal_(prospect, proposal);
-  setProspectStatusIfHeader_(sheet, table.headers, selectedRow, 'Proposal Sent');
+  setProspectStatusIfHeader_(sheet, table.headers, selectedRow, 'Improvement Plan Sent');
+  setIfHeaderCell_(sheet, table.headers, selectedRow, 'Next Action', 'Convert to Client');
   logProposalGenerated_(ss, prospect, proposal);
   updateSelectedProspectLastActivity_(sheet, table.headers, selectedRow);
   refreshSalesOperatingSystem_();
@@ -2529,27 +2942,24 @@ function generateProposal() {
 function buildProposal_(prospect) {
   const company = String(prospect.company || '').trim();
   const website = String(prospect.website || 'Not provided').trim();
-  const auditScore = prospect.auditScore === '' || prospect.auditScore === null || prospect.auditScore === undefined
-    ? 'Not scored'
-    : String(prospect.auditScore) + '/100';
-  const auditOutcome = String(prospect.auditOutcome || 'Website review completed').trim();
-  const priorityTier = String(prospect.priorityTier || 'Not assigned').trim();
-  const recommendedService = String(prospect.offerService || 'Website and local visibility improvement').trim();
+  const auditScore = getDigitalPresenceAssessment_(prospect.auditScore).scoreText;
+  const digitalPresence = getDigitalPresenceAssessment_(prospect.auditScore);
+  const recommendedService = getClientFacingServiceName_(prospect.offerService || 'Website and local visibility improvement', prospect.auditScore);
   const findings = getSmartFindings_(prospect);
   const findingsText = findings.length
     ? findings.map(function(finding) {
       return '- ' + finding;
     }).join('\n')
-    : proposalFindingsFromOutcome_(auditOutcome, priorityTier);
+    : proposalFindingsFromOutcome_(digitalPresence);
   const impact = proposalImpactFromService_(recommendedService);
 
   const proposalText = [
     'ROGERS HOLDINGS LLC',
-    'DIGITAL IMPROVEMENT PROPOSAL',
+    'IMPROVEMENT PLAN',
     '',
     `Prepared for: ${company}`,
     `Website: ${website}`,
-    `Current Audit Score: ${auditScore}`,
+    `Digital Presence Score: ${auditScore}`,
     '',
     'SUMMARY OF FINDINGS',
     findingsText,
@@ -2603,10 +3013,11 @@ function buildProposal_(prospect) {
   };
 }
 
-function proposalFindingsFromOutcome_(auditOutcome, priorityTier) {
+function proposalFindingsFromOutcome_(digitalPresence) {
+  const assessment = digitalPresence || getDigitalPresenceAssessment_(null);
   return [
-    `The audit outcome is ${auditOutcome}.`,
-    `The current priority tier is ${priorityTier}.`,
+    `The Digital Presence Score indicates: ${assessment.title}.`,
+    assessment.subtitle,
     'The main opportunity is to make the website easier for local customers to understand, trust, and act on.'
   ].join(' ');
 }
@@ -2619,12 +3030,17 @@ function proposalImpactFromService_(recommendedService) {
 }
 
 function showProposalModal_(prospect, proposal) {
+  if (typeof showImprovementPlanPreview_ === 'function') {
+    showImprovementPlanPreview_(prospect, proposal);
+    return;
+  }
+
   const html = HtmlService
     .createHtmlOutput(buildProposalHtml_(prospect, proposal))
     .setWidth(780)
     .setHeight(720);
 
-  SpreadsheetApp.getUi().showModalDialog(html, 'Proposal Draft');
+  SpreadsheetApp.getUi().showModalDialog(html, 'Improvement Plan');
 }
 
 function buildProposalHtml_(prospect, proposal) {
@@ -2725,7 +3141,7 @@ function buildProposalHtml_(prospect, proposal) {
       </head>
       <body>
         <div class="header">
-          <h1>${escapeHtml_(proposal.company)} Proposal</h1>
+          <h1>${escapeHtml_(proposal.company)} Improvement Plan</h1>
           <div class="meta">Rogers Holdings LLC | Copy and paste ready</div>
         </div>
 
@@ -2739,7 +3155,7 @@ function buildProposalHtml_(prospect, proposal) {
             <div class="value">${escapeHtml_(proposal.website)}</div>
           </div>
           <div class="field">
-            <div class="label">Current Audit Score</div>
+            <div class="label">Digital Presence Score</div>
             <div class="value">${escapeHtml_(proposal.auditScore)}</div>
           </div>
           <div class="field">
@@ -2748,11 +3164,11 @@ function buildProposalHtml_(prospect, proposal) {
           </div>
         </div>
 
-        <label for="proposal">Proposal Text</label>
+        <label for="proposal">Improvement Plan Text</label>
         <textarea id="proposal">${escapeHtml_(proposal.proposalText)}</textarea>
 
         <div class="button-row">
-          <button id="copyProposalButton" onclick="copyProposal()">Copy Proposal</button>
+          <button id="copyProposalButton" onclick="copyProposal()">Copy Improvement Plan</button>
           <button class="secondary" onclick="google.script.host.close()">Close</button>
         </div>
         <div id="copyMessage" class="meta"></div>
@@ -2814,9 +3230,9 @@ function logProposalGenerated_(ss, prospect, proposal) {
   const rowValues = new Array(table.lastColumn).fill('');
   setIfHeader_(rowValues, table.headers, 'Date', new Date());
   setIfHeader_(rowValues, table.headers, 'Company', prospect.company);
-  setIfHeader_(rowValues, table.headers, 'Activity Type', 'Proposal Generated');
-  setIfHeader_(rowValues, table.headers, 'Activity Notes', `Generated proposal for ${proposal.recommendedService}.`);
-  setIfHeader_(rowValues, table.headers, 'Next Action', 'Send Proposal');
+  setIfHeader_(rowValues, table.headers, 'Activity Type', 'Improvement Plan Generated');
+  setIfHeader_(rowValues, table.headers, 'Activity Notes', `Generated Improvement Plan for ${proposal.recommendedService}.`);
+  setIfHeader_(rowValues, table.headers, 'Next Action', 'Convert to Client');
 
   const targetRow = Math.max(sheet.getLastRow() + 1, table.headerRow + 1);
   sheet.getRange(targetRow, 1, 1, table.lastColumn).setValues([rowValues]);

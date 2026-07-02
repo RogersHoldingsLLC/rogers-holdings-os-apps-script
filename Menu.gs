@@ -14,23 +14,24 @@ function onOpen(e) {
     .addItem('Open Activity Feed', 'openActivityFeedSheet');
 
   const salesMenu = ui.createMenu('Sales Workflow')
-    .addItem('Run Next Action', 'runNextAction')
     .addItem('Run Full Prospect Package', 'runFullProspectPackage')
-    .addItem('Run Real Website Audit', 'runRealWebsiteAudit')
-    .addItem('Generate Audit Package', 'generateAuditPackage')
+    .addSeparator()
+    .addItem('Generate Executive Snapshot', 'generateExecutiveSnapshot')
     .addItem('Create Outreach Gmail Draft', 'createOutreachGmailDraft')
-    .addItem('Send Audit Package', 'sendAuditPackage')
-    .addItem('Generate Proposal', 'generateProposal')
-    .addItem('Create Discovery Call', 'createDiscoveryCall')
-    .addItem('Bulk Prospect Import', 'openBulkProspectImport')
-    .addItem('Run Bulk Audit Pipeline', 'runBulkAuditPipeline')
-    .addItem('Quick Internal Audit', 'runWebsiteAudit');
+    .addItem('Generate Digital Business Assessment', 'generateAuditPackage')
+    .addItem('Generate Improvement Plan', 'generateProposal')
+    .addItem('Create Discovery Call', 'createDiscoveryCall');
 
   const pipelineMenu = ui.createMenu('Pipeline')
+    .addItem('Run Next Action', 'runNextAction')
+    .addItem('Bulk Prospect Import', 'openBulkProspectImport')
+    .addItem('Run Bulk Audit Pipeline', 'runBulkAuditPipeline')
+    .addItem('Send Digital Business Assessment', 'sendAuditPackage')
+    .addSeparator()
     .addItem('Advance Prospect Stage', 'advanceProspectStage')
     .addItem('Mark Email Sent', 'markEmailSent')
     .addItem('Mark Follow-Up Complete', 'markFollowUpComplete')
-    .addItem('Mark Won', 'markProspectWon')
+    .addItem('Convert to Client', 'markProspectWon')
     .addItem('Mark Lost', 'markProspectLost');
 
   const workspaceMenu = ui.createMenu('Workspaces')
@@ -45,7 +46,7 @@ function onOpen(e) {
 
   const clientProjectMenu = ui.createMenu('Clients & Projects')
     .addItem('Convert Prospect To Client', 'convertToClient')
-    .addItem('Convert Won Prospect to Client', 'convertWonProspectToClient')
+    .addItem('Convert Prospect to Client', 'convertWonProspectToClient')
     .addItem('Create Project', 'createProject')
     .addItem('Update Project Status', 'updateProjectStatus')
     .addItem('Complete Project', 'completeProject')
@@ -62,7 +63,7 @@ function onOpen(e) {
     .addItem('Reset Test Data', 'resetTestData')
     .addItem('Reset Demo Data', 'resetDemoData');
 
-  ui.createMenu('Rogers Holdings OS')
+  const rogersMenu = ui.createMenu('Rogers Holdings OS')
     .addSubMenu(navigateMenu)
     .addSubMenu(salesMenu)
     .addSubMenu(pipelineMenu)
@@ -70,8 +71,25 @@ function onOpen(e) {
     .addSubMenu(followUpMenu)
     .addSubMenu(clientProjectMenu)
     .addSubMenu(productMenu)
-    .addSubMenu(systemMenu)
-    .addToUi();
+    .addSubMenu(systemMenu);
+
+  if (typeof isDeveloperModeEnabled_ === 'function' && isDeveloperModeEnabled_()) {
+    const developmentMenu = ui.createMenu('Development')
+      .addItem('Inspection Playground', 'openInspectionPlayground')
+      .addSeparator()
+      .addItem('Run Real Website Audit', 'runRealWebsiteAudit')
+      .addItem('Quick Internal Audit', 'runWebsiteAudit')
+      .addItem('Fetch Website Document', 'fetchPlaygroundWebsiteDocument')
+      .addItem('Run Selected Inspector', 'runSelectedInspector')
+      .addItem('Run Full Inspection', 'runFullInspection')
+      .addItem('Copy Inspection JSON', 'copyInspectionJson')
+      .addItem('View Priority Matrix', 'viewPriorityMatrix')
+      .addItem('View Category Scores', 'viewCategoryScores')
+      .addItem('Export Inspection Result', 'exportInspectionResult');
+    rogersMenu.addSubMenu(developmentMenu);
+  }
+
+  rogersMenu.addToUi();
 
   refreshSalesOperatingSystem_();
 }

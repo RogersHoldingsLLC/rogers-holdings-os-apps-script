@@ -63,11 +63,11 @@ function convertToClient() {
     status: 'Planning',
     notes: 'Project created from client conversion.'
   });
-  setProspectStatus_(context.sheet, prospectHeaders, context.selectedRow, 'Won');
+  setProspectStatus_(context.sheet, prospectHeaders, context.selectedRow, 'Client');
   updateSelectedProspectLastActivity_(context.sheet, prospectHeaders, context.selectedRow);
   setSelectedProspectClosedDate_(context.sheet, prospectHeaders, context.selectedRow, new Date());
   logPipelineActivity_(context.ss, prospect.company, 'Client Converted', 'Converted prospect to active client');
-  logPipelineActivity_(context.ss, prospect.company, projectResult.created ? 'Project Created' : 'Project Updated', projectResult.created ? 'Project created from client conversion.' : 'Existing project updated from client conversion.');
+  logPipelineActivity_(context.ss, prospect.company, projectResult.created ? 'Project Started' : 'Project Updated', projectResult.created ? 'Project started from client conversion.' : 'Existing project updated from client conversion.');
   context.sheet.deleteRow(context.selectedRow);
   refreshSalesOperatingSystem_();
 
@@ -82,10 +82,10 @@ function convertWonProspectToClient() {
 
   const ui = SpreadsheetApp.getUi();
   const status = normalizePipelineStage_(getValueByHeader_(context.values, context.table.headers, 'Status'));
-  if (status !== 'Won') {
+  if (normalizePipelineStage_(status) !== 'Client' && status !== 'Won') {
     const response = ui.alert(
       'Rogers Holdings OS',
-      'This prospect is not marked Won. Mark as Won and convert to Client?',
+      'This prospect is not marked Client. Convert this prospect to Client?',
       ui.ButtonSet.YES_NO
     );
     if (response !== ui.Button.YES) {
@@ -400,10 +400,10 @@ function convertWonProspectToClient_(context) {
     startDate: startOfDay_(new Date())
   });
 
-  setProspectStatusIfHeader_(context.sheet, prospectHeaders, context.selectedRow, 'Won');
+  setProspectStatusIfHeader_(context.sheet, prospectHeaders, context.selectedRow, 'Client');
   updateSelectedProspectLastActivity_(context.sheet, prospectHeaders, context.selectedRow);
   setSelectedProspectClosedDate_(context.sheet, prospectHeaders, context.selectedRow, new Date());
-  logPipelineActivity_(context.ss, prospect.company, 'Prospect Converted to Client', result.created ? 'Won prospect converted to new client record.' : 'Won prospect updated existing client record.');
+  logPipelineActivity_(context.ss, prospect.company, 'Client Converted', result.created ? 'Prospect converted to new client record.' : 'Prospect updated existing client record.');
   logPipelineActivity_(context.ss, prospect.company, result.created ? 'Client Created' : 'Client Updated', result.created ? 'Client record created from won prospect.' : 'Client record updated from won prospect.');
   const clientValues = clientSheet.getRange(result.rowNumber, 1, 1, clientTable.lastColumn).getValues()[0];
   syncFollowUpForClient_(context.ss, clientValues, clientTable.headers);
@@ -411,7 +411,7 @@ function convertWonProspectToClient_(context) {
     status: 'Planning',
     notes: 'Project created from won prospect conversion.'
   });
-  logPipelineActivity_(context.ss, prospect.company, projectResult.created ? 'Project Created' : 'Project Updated', projectResult.created ? 'Project created from won prospect conversion.' : 'Existing project updated from won prospect conversion.');
+  logPipelineActivity_(context.ss, prospect.company, projectResult.created ? 'Project Started' : 'Project Updated', projectResult.created ? 'Project started from client conversion.' : 'Existing project updated from client conversion.');
   refreshClientWorkspaceForClientRow_(context.ss, clientSheet, clientTable.headers, result.rowNumber, {
     logOpen: false
   });

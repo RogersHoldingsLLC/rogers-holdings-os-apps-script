@@ -11,10 +11,10 @@ Required before final release:
 - Run System Health Check with no unexpected failures.
 - Run one complete smoke test:
   - Add or select a prospect.
-  - Run Next Action through audit/package/draft steps where practical.
-  - Generate Audit Report PDF and Proposal PDF.
+  - Run Next Action through Executive Snapshot, Discovery Meeting, Digital Business Assessment, and Improvement Plan steps where practical.
+  - Generate Digital Business Assessment PDF and Improvement Plan PDF.
   - Create a Gmail draft.
-  - Convert a Won prospect to Client.
+  - Convert an accepted Improvement Plan prospect to Client.
   - Confirm Client Workspace updates.
   - Confirm Project is created.
   - Confirm Follow-Up is created/completed as status changes.

@@ -9,20 +9,24 @@ function buildOutreachDrafts_(prospect) {
   const auditScore = prospect.auditScore === '' || prospect.auditScore === null || prospect.auditScore === undefined
     ? 'not scored'
     : String(prospect.auditScore);
-  const auditOutcome = String(prospect.auditOutcome || 'website review').trim();
-  const offerService = String(prospect.offerService || 'website and local visibility review').trim();
+  const digitalPresence = getDigitalPresenceAssessment_(prospect.auditScore);
+  const offerService = getClientFacingServiceName_(prospect.offerService || 'website and local visibility review', prospect.auditScore);
   const findings = getSmartFindings_(prospect);
   const websiteLine = website
-    ? `I reviewed ${website} from the perspective of a local customer trying to understand, trust, and contact the business.`
-    : 'I reviewed your online presence from the perspective of a local customer trying to find, trust, and contact the business.';
+    ? `I reviewed ${website} from the perspective of a local customer deciding whether to trust and contact the business.`
+    : 'I reviewed your online presence from the perspective of a local customer deciding whether to trust and contact the business.';
   const findingsLine = findings.length
-    ? 'A few practical opportunities stood out:\n' + findings.slice(0, 4).map(function(finding) {
+    ? 'A couple of opportunities stood out:\n' + findings.slice(0, 2).map(function(finding) {
       return '- ' + finding;
     }).join('\n')
     : '';
   const subject = website ? `Website review for ${company}` : `Local visibility review for ${company}`;
+  const scoreValue = digitalPresence.score;
+  const opportunityFrame = scoreValue !== null && scoreValue >= 90
+    ? 'The main opportunity looks more like refinement and growth than a major rebuild.'
+    : 'The main opportunity is practical improvement: clearer trust signals, visibility, and customer action.';
   const auditLine = website
-    ? `The review score came back at ${auditScore}/100 with this overall assessment: ${auditOutcome}. The clearest starting point appears to be ${offerService}.`
+    ? `The Digital Presence Score came back at ${digitalPresence.scoreText || auditScore}. ${digitalPresence.title}. ${opportunityFrame}`
     : `The clearest starting point appears to be ${offerService}. The goal would be to improve visibility, credibility, and the path for customers to take action.`;
 
   const initialParts = [
@@ -30,8 +34,8 @@ function buildOutreachDrafts_(prospect) {
     `My name is Brian Keith Rogers with Rogers Holdings LLC. ${websiteLine}`,
     auditLine,
     findingsLine,
-    'I put the notes in plain English so they are easy to evaluate from a business standpoint, not just a technical standpoint.',
-    'If helpful, I can send over a short audit package with the highest-impact improvements, quick wins, and a recommended next step.',
+    `I prepared a short Executive Snapshot with the clearest next step: ${offerService}.`,
+    'If it would be useful, I can send it over or walk through it in a quick conversation.',
     'Best,',
     'Brian Keith Rogers',
     'Rogers Holdings LLC',
@@ -42,8 +46,8 @@ function buildOutreachDrafts_(prospect) {
   const followUpParts = [
     `Hi ${company} team,`,
     website ? 'I wanted to follow up on the website review note I sent over.' : 'I wanted to follow up on the local visibility review note I sent over.',
-    `The practical next step still looks like ${offerService}. The business goal is straightforward: help more customers understand the offer, trust the business, and know how to take action.`,
-    'If useful, I can share the audit package and walk through the highest-impact improvements in a short conversation.',
+    `The practical next step still looks like ${offerService}.`,
+    'If useful, I can share the Executive Snapshot and walk through the highest-impact opportunities in a short conversation.',
     'Best,',
     'Brian Keith Rogers',
     'Rogers Holdings LLC',
@@ -80,7 +84,7 @@ function sendAuditPackage() {
   if (missing.length) {
     ui.alert(
       'Rogers Holdings OS',
-      'Add the missing fields before sending the audit package: ' + missing.join(', '),
+      'Add the missing fields before sending the Digital Business Assessment: ' + missing.join(', '),
       ui.ButtonSet.OK
     );
     return;
@@ -89,7 +93,7 @@ function sendAuditPackage() {
   if (!isAuditPackageGenerated_(context.values, context.table.headers)) {
     ui.alert(
       'Rogers Holdings OS',
-      'Generate the audit package first, then run Send Audit Package again.',
+      'Generate the Digital Business Assessment first, then run Send Audit Package again.',
       ui.ButtonSet.OK
     );
     return;
@@ -103,7 +107,7 @@ function sendAuditPackage() {
     });
     const folder = getAuditPackageFolder_(prospect.company);
     if (!folder) {
-      throw new Error('Audit package folder was not found. Generate the audit package first.');
+      throw new Error('Digital Business Assessment folder was not found. Generate the Digital Business Assessment first.');
     }
     console.log('Send Audit Package: folder found', {
       folderName: folder.getName(),
@@ -160,21 +164,21 @@ function sendAuditPackage() {
       console.log('Send Audit Package: Gmail draft created without attachments');
     }
 
-    setProspectStatusIfHeader_(context.sheet, context.table.headers, context.selectedRow, 'Audit Package Sent');
+    setProspectStatusIfHeader_(context.sheet, context.table.headers, context.selectedRow, 'Digital Business Assessment Presented');
     setIfHeaderCell_(context.sheet, context.table.headers, context.selectedRow, 'Next Action', 'Follow Up');
     updateSelectedProspectFollowUpDate_(context.sheet, context.table.headers, context.selectedRow, 7);
     updateSelectedProspectLastActivity_(context.sheet, context.table.headers, context.selectedRow);
     logPipelineActivity_(
       context.ss,
       prospect.company,
-      'Audit Package Sent',
+      'Digital Business Assessment Sent',
       draftCreatedWithAttachments
-        ? 'Audit package Gmail draft created with audit report PDF and proposal PDF attached.'
-        : 'Audit package Gmail draft created without attachments; Drive folder link included due to attachment failure.'
+        ? 'Digital Business Assessment Gmail draft created with assessment PDF and Improvement Plan PDF attached.'
+        : 'Digital Business Assessment Gmail draft created without attachments; Drive folder link included due to attachment failure.'
     );
     refreshSalesOperatingSystem_();
 
-    ui.alert('Rogers Holdings OS', 'Audit Package Gmail Draft Created', ui.ButtonSet.OK);
+    ui.alert('Rogers Holdings OS', 'Digital Business Assessment Gmail Draft Created', ui.ButtonSet.OK);
   } catch (error) {
     ui.alert(
       'Rogers Holdings OS',
@@ -208,7 +212,7 @@ function getRequiredAuditPackageFiles_(folder, prospect) {
   }
 
   if (missing.length) {
-    throw new Error('Audit package is missing required file(s): ' + missing.join(', ') + '. Regenerate the package and try again.');
+    throw new Error('Digital Business Assessment is missing required file(s): ' + missing.join(', ') + '. Regenerate the package and try again.');
   }
 
   return {
@@ -256,6 +260,7 @@ function findNewestAuditPackageFile_(folder, matcher) {
 
 function buildAuditPackageSendEmailBody_(prospect, folder, includeFolderLinkOnly) {
   const findings = getSmartFindings_(prospect).slice(0, 3);
+  const digitalPresence = getDigitalPresenceAssessment_(prospect.auditScore);
   const findingsText = findings.length
     ? findings.map(function(finding) {
       return '- ' + finding;
@@ -270,8 +275,8 @@ function buildAuditPackageSendEmailBody_(prospect, folder, includeFolderLinkOnly
     'A few practical opportunities stood out:',
     findingsText,
     '',
-    `The overall score came back at ${prospect.auditScore}/100 with this assessment: ${prospect.auditOutcome}. I attached the Audit Report and Proposal so you can review the business impact, quick wins, recommended service package, and next steps.`,
-    includeFolderLinkOnly && folder ? `\nYou can review the audit package here: ${folder.getUrl()}` : '',
+    `The Digital Presence Score came back at ${digitalPresence.scoreText}. ${digitalPresence.title}. ${digitalPresence.subtitle} I attached the Digital Business Assessment and Improvement Plan so you can review the business impact, quick wins, recommended service package, and next steps.`,
+    includeFolderLinkOnly && folder ? `\nYou can review the Digital Business Assessment package here: ${folder.getUrl()}` : '',
     '',
     'If helpful, I would be glad to walk through the highest-impact improvements in a short conversation and answer any questions.',
     '',
@@ -359,15 +364,16 @@ function createOutreachGmailDraft() {
   }
 
   logOutreachGmailDraftCreated_(ss, prospect, drafts, recipient);
-  setProspectStatusIfHeader_(sheet, table.headers, selectedRow, 'Draft Created');
+  setProspectStatusIfHeader_(sheet, table.headers, selectedRow, 'Executive Snapshot Sent');
+  setIfHeaderCell_(sheet, table.headers, selectedRow, 'Next Action', 'Schedule Discovery Meeting');
   updateSelectedProspectLastActivity_(sheet, table.headers, selectedRow);
   refreshSalesOperatingSystem_();
 
-  const message = recipient
-    ? 'Gmail draft created.'
-    : 'Gmail draft created.';
-
-  ui.alert('Rogers Holdings OS', message, ui.ButtonSet.OK);
+  if (typeof showOutreachEmailPreview_ === 'function') {
+    showOutreachEmailPreview_(prospect, drafts, recipient);
+  } else {
+    ui.alert('Rogers Holdings OS', 'Gmail draft created.', ui.ButtonSet.OK);
+  }
 }
 
 function requiredProspectFieldsMissing_(prospect, fieldPairs) {
@@ -394,9 +400,9 @@ function logOutreachGmailDraftCreated_(ss, prospect, drafts, recipient) {
   const rowValues = new Array(table.lastColumn).fill('');
   setIfHeader_(rowValues, table.headers, 'Date', new Date());
   setIfHeader_(rowValues, table.headers, 'Company', prospect.company);
-  setIfHeader_(rowValues, table.headers, 'Activity Type', 'Gmail Draft Created');
+  setIfHeader_(rowValues, table.headers, 'Activity Type', 'Outreach Draft Created');
   setIfHeader_(rowValues, table.headers, 'Activity Notes', 'Created outreach Gmail draft. Subject: ' + drafts.subject + '.' + recipientNote);
-  setIfHeader_(rowValues, table.headers, 'Next Action', 'Send Intro Email');
+  setIfHeader_(rowValues, table.headers, 'Next Action', 'Schedule Discovery Meeting');
 
   const targetRow = Math.max(sheet.getLastRow() + 1, table.headerRow + 1);
   sheet.getRange(targetRow, 1, 1, table.lastColumn).setValues([rowValues]);

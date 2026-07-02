@@ -26,11 +26,11 @@ function createDiscoveryCall() {
     return;
   }
 
-  const status = String(prospect.status || '').trim();
-  if (status === 'Won' || status === 'Lost') {
+  const status = normalizePipelineStage_(prospect.status) || String(prospect.status || '').trim();
+  if (status === 'Client' || status === 'Lost' || status === 'Won') {
     ui.alert(
       'Rogers Holdings OS',
-      'Discovery calls cannot be scheduled for prospects marked Won or Lost.',
+      'Discovery meetings cannot be scheduled for prospects marked Client or Lost.',
       ui.ButtonSet.OK
     );
     return;
@@ -84,15 +84,15 @@ function createDiscoveryCall() {
     );
     const headers = ensureSheetColumns_(context.sheet, ['Discovery Date']).headers;
 
-    setProspectStatusIfHeader_(context.sheet, headers, context.selectedRow, 'Discovery Scheduled');
-    setIfHeaderCell_(context.sheet, headers, context.selectedRow, 'Next Action', 'Conduct Discovery Call');
+    setProspectStatusIfHeader_(context.sheet, headers, context.selectedRow, 'Discovery Meeting Scheduled');
+    setIfHeaderCell_(context.sheet, headers, context.selectedRow, 'Next Action', 'Present Digital Business Assessment');
     setIfHeaderCell_(context.sheet, headers, context.selectedRow, 'Discovery Date', startDate);
-    syncFollowUpForProspectRow_(context.sheet, headers, context.selectedRow, 'Discovery Scheduled');
+    syncFollowUpForProspectRow_(context.sheet, headers, context.selectedRow, 'Discovery Meeting Scheduled');
     updateSelectedProspectLastActivity_(context.sheet, headers, context.selectedRow);
     logPipelineActivity_(
       context.ss,
       prospect.company,
-      'Discovery Call Scheduled',
+      'Discovery Meeting Scheduled',
       `Discovery call scheduled for ${formatDiscoveryDateTime_(startDate)}. Calendar event: ${event.title}. Discovery brief PDF created.`
     );
     refreshSalesOperatingSystem_();

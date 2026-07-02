@@ -150,29 +150,32 @@ function generateAuditPackageForContext_(context, prospect) {
 
   setIfHeaderCell_(context.sheet, headers, context.selectedRow, 'Audit Package Generated', 'Yes');
   setIfHeaderCell_(context.sheet, headers, context.selectedRow, 'Audit Package Date', now);
+  setProspectStatusIfHeader_(context.sheet, headers, context.selectedRow, 'Digital Business Assessment Presented');
+  setIfHeaderCell_(context.sheet, headers, context.selectedRow, 'Next Action', 'Generate Improvement Plan');
   updateSelectedProspectLastActivity_(context.sheet, headers, context.selectedRow);
   logPipelineActivity_(
     context.ss,
     prospect.company,
-    'Audit Package Generated',
-    `Generated audit package folder "${folder.getName()}" with ${createdFiles.length} files.`
+    'Digital Business Assessment Generated',
+    `Generated Digital Business Assessment package folder "${folder.getName()}" with ${createdFiles.length} files.`
   );
   logPipelineActivity_(
     context.ss,
     prospect.company,
-    'Proposal Generated',
-    'Generated proposal draft for audit package.'
+    'Improvement Plan Generated',
+    'Generated Improvement Plan draft for Digital Business Assessment package.'
   );
   logPipelineActivity_(
     context.ss,
     prospect.company,
-    'Outreach Draft Generated',
-    'Generated outreach draft for audit package.'
+    'Outreach Draft Created',
+    'Generated outreach draft for Digital Business Assessment package.'
   );
 
   return {
     folder: folder,
-    createdFiles: createdFiles
+    createdFiles: createdFiles,
+    reportFile: reportFile
   };
 }
 
@@ -399,7 +402,7 @@ function applyWebsiteAuditToolResults_(context, auditPayload) {
   setIfHeaderCell_(sheet, headers, selectedRow, 'Competitive Position', auditPayload.competitivePosition);
   setIfHeaderCell_(sheet, headers, selectedRow, 'Competitor Summary', auditPayload.competitorSummary);
   setIfHeaderCell_(sheet, headers, selectedRow, 'Audit Source', 'Website Audit Tool');
-  setProspectStatusIfHeader_(sheet, headers, selectedRow, 'Audit Complete');
+  setProspectStatusIfHeader_(sheet, headers, selectedRow, 'Digital Business Assessment Presented');
   updateSelectedProspectLastActivity_(sheet, headers, selectedRow);
   logPipelineActivity_(context.ss, auditPayload.company, 'Website Audit Tool', summary);
 }
@@ -424,7 +427,7 @@ function generateAuditPackage() {
   if (missing.length) {
     ui.alert(
       'Rogers Holdings OS',
-      'Add the missing required fields before generating the audit package: ' + missing.join(', '),
+      'Add the missing required fields before generating the Digital Business Assessment: ' + missing.join(', '),
       ui.ButtonSet.OK
     );
     return;
@@ -444,13 +447,99 @@ function generateAuditPackage() {
     const packageResult = generateAuditPackageForContext_(activeContext, prospect);
     refreshSalesOperatingSystem_();
 
+    if (typeof showDigitalBusinessAssessmentPreview_ === 'function') {
+      showDigitalBusinessAssessmentPreview_(prospect, packageResult.reportFile);
+    } else {
+      ui.alert(
+        'Rogers Holdings OS',
+        auditWasRunFirst
+          ? `Audit data was missing, so Rogers Holdings OS ran the website audit first and then generated the Digital Business Assessment.\n\nFolder: ${packageResult.folder.getName()}`
+          : `Digital Business Assessment generated for ${prospect.company}.\n\nFolder: ${packageResult.folder.getName()}`,
+        ui.ButtonSet.OK
+      );
+    }
+  } catch (error) {
     ui.alert(
       'Rogers Holdings OS',
-      auditWasRunFirst
-        ? `Audit data was missing, so Rogers Holdings OS ran the website audit first and then generated the package.\n\nFolder: ${packageResult.folder.getName()}`
-        : `Audit package generated for ${prospect.company}.\n\nFolder: ${packageResult.folder.getName()}`,
+      error && error.message ? error.message : String(error),
       ui.ButtonSet.OK
     );
+  }
+}
+
+function generateExecutiveSnapshot() {
+  const context = getSelectedProspectContext_([
+    'Company',
+    'Website'
+  ]);
+  if (!context) {
+    return;
+  }
+
+  const ui = SpreadsheetApp.getUi();
+  const prospect = buildSelectedProspectForAuditPackage_(context);
+  const missing = requiredProspectFieldsMissing_(prospect, [
+    ['Company', 'company'],
+    ['Website', 'website']
+  ]);
+
+  if (missing.length) {
+    ui.alert(
+      'Rogers Holdings OS',
+      'Add the missing required fields before generating the Executive Snapshot: ' + missing.join(', '),
+      ui.ButtonSet.OK
+    );
+    return;
+  }
+
+  try {
+    const folder = getOrCreateAuditPackageFolder_(prospect.company);
+    const reportFile = {
+      sourceUrl: prospect.website,
+      screenshotUrl: prospect.websiteScreenshotUrl,
+      screenshotBase64: prospect.websiteScreenshotBase64,
+      screenshotMimeType: prospect.websiteScreenshotMimeType,
+      websiteScreenshotUrl: prospect.websiteScreenshotUrl,
+      websiteScreenshotBase64: prospect.websiteScreenshotBase64,
+      websiteScreenshotMimeType: prospect.websiteScreenshotMimeType,
+      mobileScreenshotUrl: prospect.mobileScreenshotUrl,
+      mobileScreenshotBase64: prospect.mobileScreenshotBase64,
+      mobileScreenshotMimeType: prospect.mobileScreenshotMimeType,
+      evidence: {
+        websiteScreenshotUrl: prospect.websiteScreenshotUrl,
+        websiteScreenshotBase64: prospect.websiteScreenshotBase64,
+        websiteScreenshotMimeType: prospect.websiteScreenshotMimeType,
+        mobileScreenshotUrl: prospect.mobileScreenshotUrl,
+        mobileScreenshotBase64: prospect.mobileScreenshotBase64,
+        mobileScreenshotMimeType: prospect.mobileScreenshotMimeType
+      }
+    };
+    const file = upsertAuditPackageBlobFile_(
+      folder,
+      'Executive Snapshot.pdf',
+      buildExecutiveSnapshotPdfBlob_(prospect, reportFile)
+    );
+
+    logPipelineActivity_(
+      context.ss,
+      prospect.company,
+      'Executive Snapshot Generated',
+      'Generated Executive Snapshot.pdf for meeting-focused outreach.'
+    );
+    setProspectStatusIfHeader_(context.sheet, context.table.headers, context.selectedRow, 'Executive Snapshot Sent');
+    setIfHeaderCell_(context.sheet, context.table.headers, context.selectedRow, 'Next Action', 'Create Outreach Draft');
+    updateSelectedProspectLastActivity_(context.sheet, context.table.headers, context.selectedRow);
+    refreshSalesOperatingSystem_();
+
+    if (typeof showExecutiveSnapshotPreview_ === 'function') {
+      showExecutiveSnapshotPreview_(prospect, reportFile);
+    } else {
+      ui.alert(
+        'Rogers Holdings OS',
+        `Executive Snapshot generated for ${prospect.company}.\n\nFile: ${file.getName()}\nFolder: ${folder.getName()}`,
+        ui.ButtonSet.OK
+      );
+    }
   } catch (error) {
     ui.alert(
       'Rogers Holdings OS',
@@ -516,7 +605,7 @@ function runFullProspectPackage() {
     const drafts = buildOutreachDrafts_(prospect);
     GmailApp.createDraft(String(prospect.email || '').trim(), drafts.subject, drafts.initialEmail);
     gmailDraftCreated = true;
-    logFullPackageActivity_(activeContext.ss, prospect.company, 'Gmail Draft Created', 'Created outreach Gmail draft as part of full prospect package.');
+    logFullPackageActivity_(activeContext.ss, prospect.company, 'Outreach Draft Created', 'Created outreach Gmail draft as part of full prospect package.');
 
     currentStep = 'Update prospect row';
     updateFullPackageProspectFields_(activeContext.sheet, activeContext.table.headers, activeContext.selectedRow);
@@ -564,13 +653,13 @@ function buildFullProspectPackageSummary_(prospect, folder, packageResult, gmail
     'Audit Report.pdf: ' + auditReportStatus,
     'Proposal.pdf: ' + proposalStatus,
     'Gmail draft created: ' + (gmailDraftCreated ? 'Yes' : 'No'),
-    'Next Action: Send Intro Email'
+    'Next Action: Schedule Discovery Meeting'
   ].join('\n');
 }
 
 function updateFullPackageProspectFields_(sheet, headers, selectedRow) {
-  setIfHeaderCell_(sheet, headers, selectedRow, 'Status', 'Draft Created');
-  setIfHeaderCell_(sheet, headers, selectedRow, 'Next Action', 'Review Email');
+  setIfHeaderCell_(sheet, headers, selectedRow, 'Status', 'Executive Snapshot Sent');
+  setIfHeaderCell_(sheet, headers, selectedRow, 'Next Action', 'Schedule Discovery Meeting');
   setIfHeaderCell_(sheet, headers, selectedRow, 'Last Activity', new Date());
   setIfHeaderCell_(sheet, headers, selectedRow, 'Audit Package Generated', 'Yes');
   setIfHeaderCell_(sheet, headers, selectedRow, 'Proposal Generated', 'Yes');
@@ -627,7 +716,7 @@ function buildSelectedProspectForAuditPackage_(context) {
 function requestWebsiteAuditPackageReport_(prospect) {
   const endpoint = getWebsiteAuditToolEndpoint_();
   if (!endpoint) {
-    throw new Error('Set Script Property WEBSITE_AUDIT_TOOL_URL to the Website Audit Tool runner endpoint, then run Generate Audit Package again.');
+    throw new Error('Set Script Property WEBSITE_AUDIT_TOOL_URL to the Website Audit Tool runner endpoint, then run Generate Digital Business Assessment again.');
   }
 
   const payload = buildWebsiteAuditToolLaunchPayload_(prospect);
@@ -798,7 +887,7 @@ function runWebsiteAudit() {
   setIfHeaderCell_(context.sheet, context.table.headers, context.selectedRow, 'Notes', audit.notes);
   setIfHeaderCell_(context.sheet, context.table.headers, context.selectedRow, 'Summary', audit.summary);
   setIfHeaderCell_(context.sheet, context.table.headers, context.selectedRow, 'Audit Source', 'Quick Internal Audit');
-  setProspectStatusIfHeader_(context.sheet, context.table.headers, context.selectedRow, 'Audit Complete');
+  setProspectStatusIfHeader_(context.sheet, context.table.headers, context.selectedRow, 'Digital Business Assessment Presented');
   updateSelectedProspectLastActivity_(context.sheet, context.table.headers, context.selectedRow);
   logPipelineActivity_(context.ss, prospect.company, 'Quick Internal Audit', audit.summary);
   refreshSalesOperatingSystem_();

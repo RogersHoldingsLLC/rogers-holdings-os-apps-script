@@ -641,13 +641,15 @@ function syncFollowUpForClient_(ss, clientValues, clientHeaders) {
 
 function getFollowUpRuleForStatus_(status) {
   const rules = {
-    'Lead Found': { type: 'Website Audit', days: 0, priority: 'A - Hot', notes: 'Run website audit today.' },
-    'Audit Complete': { type: 'Proposal', days: 1, priority: 'A - Hot', notes: 'Prepare proposal tomorrow.' },
-    'Proposal Sent': { type: 'Follow-Up', days: 3, priority: 'A - Hot', notes: 'Follow up after proposal sent.' },
+    'Lead Found': { type: 'Executive Snapshot', days: 0, priority: 'A - Hot', notes: 'Generate Executive Snapshot today.' },
+    'Executive Snapshot Sent': { type: 'Discovery Meeting', days: 3, priority: 'A - Hot', notes: 'Schedule discovery meeting.' },
+    'Discovery Meeting Scheduled': { type: 'Discovery Reminder', days: 1, priority: 'A - Hot', notes: 'Reminder one day before discovery meeting.', useDiscoveryDate: true },
+    'Digital Business Assessment Presented': { type: 'Improvement Plan', days: 1, priority: 'A - Hot', notes: 'Generate Improvement Plan after assessment review.' },
+    'Improvement Plan Sent': { type: 'Follow-Up', days: 3, priority: 'A - Hot', notes: 'Follow up after Improvement Plan sent.' },
+    'Project Started': { type: 'Project Kickoff', days: 0, priority: 'A - Hot', notes: 'Confirm kickoff details and first project milestone.' },
+    'Client': { type: 'Client Welcome Task', days: 0, priority: 'A - Hot', notes: 'Welcome client and confirm onboarding next steps.' },
     'No Response': { type: 'Follow-Up', days: 7, priority: 'B - Good', notes: 'Follow up after no response.' },
     'Second No Response': { type: 'Final Follow-Up', days: 14, priority: 'B - Good', notes: 'Send final follow-up.' },
-    'Discovery Scheduled': { type: 'Discovery Reminder', days: 1, priority: 'A - Hot', notes: 'Reminder one day before discovery call.', useDiscoveryDate: true },
-    'Won': { type: 'Client Welcome Task', days: 0, priority: 'A - Hot', notes: 'Welcome client and confirm onboarding next steps.' },
     'Lost': { archive: true }
   };
   return rules[status] || null;
@@ -1585,24 +1587,20 @@ function runNextAction() {
 
     if (status === 'Lead Found') {
       completedAction = runLeadFoundNextAction_(context);
-    } else if (status === 'Audit Complete') {
-      completedAction = runAuditCompleteNextAction_(context);
-    } else if (status === 'Audit Package Sent') {
-      completedAction = runAuditPackageSentNextAction_(context);
-    } else if (status === 'Draft Created') {
-      completedAction = promptReviewGmailDraft_(context);
-    } else if (status === 'Email Sent') {
-      completedAction = scheduleNextActionFollowUp_(context);
-    } else if (status === 'Follow Up Due') {
-      completedAction = promptFollowUpOutcome_(context);
-    } else if (status === 'Proposal Sent') {
-      completedAction = promptScheduleDiscoveryFromNextAction_(context);
-    } else if (status === 'Discovery Scheduled') {
-      completedAction = promptDiscoveryOutcome_(context);
-    } else if (status === 'Won') {
+    } else if (status === 'Executive Snapshot Sent') {
+      completedAction = runExecutiveSnapshotSentNextAction_(context);
+    } else if (status === 'Discovery Meeting Scheduled') {
+      completedAction = runDiscoveryMeetingNextAction_(context);
+    } else if (status === 'Digital Business Assessment Presented') {
+      completedAction = runDigitalBusinessAssessmentNextAction_(context);
+    } else if (status === 'Improvement Plan Sent') {
+      completedAction = promptImprovementPlanOutcome_(context);
+    } else if (status === 'Project Started' || status === 'Client') {
       completedAction = openOrCreateClientFromNextAction_(context);
     } else if (status === 'Lost') {
       completedAction = archiveLostProspectFromNextAction_(context);
+    } else if (status === 'Nurture') {
+      completedAction = scheduleNextActionFollowUp_(context);
     } else {
       completedAction = runDefaultNextAction_(context, status);
     }
@@ -1672,47 +1670,56 @@ function getSelectedProspectContextOrAlert_(requiredHeaders) {
 }
 
 function runLeadFoundNextAction_(context) {
-  if (hasAuditDataForNextAction_(context)) {
-    generateAuditPackage();
-    return 'Audit data already existed, so Rogers Holdings OS skipped the audit and generated the audit package.';
-  }
-
-  runRealWebsiteAudit();
-  return 'Ran the real Website Audit workflow.';
+  generateExecutiveSnapshot();
+  return 'Generated the Executive Snapshot.';
 }
 
-function runAuditCompleteNextAction_(context) {
+function runExecutiveSnapshotSentNextAction_(context) {
+  if (isHeaderMarkedYesForNextAction_(context, 'Gmail Draft Created')) {
+    return promptScheduleDiscoveryFromNextAction_(context);
+  }
+
+  createOutreachGmailDraft();
+  return 'Created the outreach draft.';
+}
+
+function runDigitalBusinessAssessmentNextAction_(context) {
+  generateProposal();
+  return 'Generated the Improvement Plan.';
+}
+
+function runDiscoveryMeetingNextAction_(context) {
   if (isAuditPackageAlreadyGeneratedForNextAction_(context)) {
-    createOutreachGmailDraft();
-    return 'Audit package already existed, so Rogers Holdings OS created the Gmail draft.';
+    return 'Digital Business Assessment already existed. Present it during the discovery meeting.';
   }
 
   generateAuditPackage();
-  return 'Generated the audit package.';
-}
-
-function runAuditPackageSentNextAction_(context) {
-  if (isHeaderMarkedYesForNextAction_(context, 'Gmail Draft Created')) {
-    return promptReviewGmailDraft_(context);
-  }
-
-  createOutreachGmailDraft();
-  return 'Created the Gmail draft.';
+  return 'Generated the Digital Business Assessment.';
 }
 
 function runDefaultNextAction_(context, status) {
-  if (!hasAuditDataForNextAction_(context)) {
-    runRealWebsiteAudit();
-    return `Status "${status}" was not mapped, so Rogers Holdings OS ran the real Website Audit workflow.`;
+  if (status === 'Follow Up Due') {
+    return promptFollowUpOutcome_(context);
   }
 
-  if (!isAuditPackageAlreadyGeneratedForNextAction_(context)) {
-    generateAuditPackage();
-    return `Status "${status}" was not mapped, so Rogers Holdings OS generated the audit package.`;
+  if (status === 'Draft Created' || status === 'Email Sent') {
+    return promptScheduleDiscoveryFromNextAction_(context);
   }
 
-  createOutreachGmailDraft();
-  return `Status "${status}" was not mapped, so Rogers Holdings OS created the Gmail draft.`;
+  if (status === 'Audit Complete' || status === 'Audit Package Sent') {
+    return runDiscoveryMeetingNextAction_(context);
+  }
+
+  if (status === 'Proposal Sent') {
+    return promptImprovementPlanOutcome_(context);
+  }
+
+  if (status === 'Won') {
+    return openOrCreateClientFromNextAction_(context);
+  }
+
+  generateExecutiveSnapshot();
+  return `Status "${status}" was not mapped, so Rogers Holdings OS generated the Executive Snapshot.`;
 }
 
 function promptReviewGmailDraft_(context) {
@@ -1735,7 +1742,7 @@ function scheduleNextActionFollowUp_(context) {
   const headers = context.table.headers;
   const company = String(getValueByHeader_(context.values, headers, 'Company') || '').trim();
 
-  setProspectStatusIfHeader_(context.sheet, headers, context.selectedRow, 'Follow Up Due');
+  setProspectStatusIfHeader_(context.sheet, headers, context.selectedRow, 'Nurture');
   setIfHeaderCell_(context.sheet, headers, context.selectedRow, 'Next Action', 'Follow Up');
   updateSelectedProspectFollowUpDate_(context.sheet, headers, context.selectedRow, 7);
   updateSelectedProspectLastActivity_(context.sheet, headers, context.selectedRow);
@@ -1750,7 +1757,7 @@ function promptFollowUpOutcome_(context) {
   const history = buildNextActionFollowUpHistory_(context.ss, company);
   const response = ui.prompt(
     'Follow-Up Outcome',
-    history + '\n\nEnter next outcome: Draft, Proposal, Discovery, Won, Lost, Nurture, or Follow Up',
+    history + '\n\nEnter next outcome: Snapshot, Discovery, Assessment, Improvement Plan, Client, Lost, Nurture, or Follow Up',
     ui.ButtonSet.OK_CANCEL
   );
 
@@ -1759,24 +1766,31 @@ function promptFollowUpOutcome_(context) {
   }
 
   const outcome = String(response.getResponseText() || '').trim().toLowerCase();
-  if (outcome === 'draft') {
+  if (outcome === 'snapshot') {
     createOutreachGmailDraft();
-    return 'Created a new Gmail draft from follow-up outcome.';
+    return 'Created a new outreach draft from follow-up outcome.';
   }
-  if (outcome === 'proposal') {
-    setProspectStatusIfHeader_(context.sheet, headers, context.selectedRow, 'Proposal Sent');
-    setIfHeaderCell_(context.sheet, headers, context.selectedRow, 'Next Action', 'Schedule Discovery');
+  if (outcome === 'assessment') {
+    setProspectStatusIfHeader_(context.sheet, headers, context.selectedRow, 'Digital Business Assessment Presented');
+    setIfHeaderCell_(context.sheet, headers, context.selectedRow, 'Next Action', 'Generate Improvement Plan');
     updateSelectedProspectLastActivity_(context.sheet, headers, context.selectedRow);
-    logPipelineActivity_(context.ss, company, 'Proposal Sent', 'Follow-up outcome marked as Proposal Sent.');
-    return 'Marked prospect as Proposal Sent.';
+    logPipelineActivity_(context.ss, company, 'Digital Business Assessment Presented', 'Follow-up outcome marked as Digital Business Assessment Presented.');
+    return 'Marked Digital Business Assessment as presented.';
   }
-  if (outcome === 'discovery') {
+  if (outcome === 'improvement plan' || outcome === 'plan') {
+    setProspectStatusIfHeader_(context.sheet, headers, context.selectedRow, 'Improvement Plan Sent');
+    setIfHeaderCell_(context.sheet, headers, context.selectedRow, 'Next Action', 'Convert to Client');
+    updateSelectedProspectLastActivity_(context.sheet, headers, context.selectedRow);
+    logPipelineActivity_(context.ss, company, 'Improvement Plan Sent', 'Follow-up outcome marked as Improvement Plan Sent.');
+    return 'Marked Improvement Plan as sent.';
+  }
+  if (outcome === 'discovery' || outcome === 'meeting') {
     createDiscoveryCall();
-    return 'Started Discovery Call scheduling.';
+    return 'Started Discovery Meeting scheduling.';
   }
-  if (outcome === 'won') {
+  if (outcome === 'client' || outcome === 'won') {
     markProspectWon();
-    return 'Marked prospect as Won.';
+    return 'Converted prospect to Client.';
   }
   if (outcome === 'lost') {
     markProspectLost();
@@ -1798,38 +1812,38 @@ function promptScheduleDiscoveryFromNextAction_(context) {
   const ui = SpreadsheetApp.getUi();
   const company = String(getValueByHeader_(context.values, context.table.headers, 'Company') || '').trim();
   const response = ui.alert(
-    'Schedule Discovery',
-    `Schedule a discovery call for ${company}?`,
+    'Schedule Discovery Meeting',
+    `Schedule a discovery meeting for ${company}?`,
     ui.ButtonSet.YES_NO
   );
 
   if (response !== ui.Button.YES) {
-    return 'Discovery scheduling prompt displayed. No call was scheduled.';
+    return 'Discovery Meeting scheduling prompt displayed. No meeting was scheduled.';
   }
 
   createDiscoveryCall();
-  return 'Started Discovery Call scheduling.';
+  return 'Started Discovery Meeting scheduling.';
 }
 
-function promptDiscoveryOutcome_(context) {
+function promptImprovementPlanOutcome_(context) {
   const ui = SpreadsheetApp.getUi();
   const company = String(getValueByHeader_(context.values, context.table.headers, 'Company') || '').trim();
   const response = ui.alert(
-    'Discovery Outcome',
-    `Mark ${company} as Won?\n\nChoose No to mark Lost, or Cancel to leave unchanged.`,
+    'Improvement Plan Outcome',
+    `Convert ${company} to Client?\n\nChoose No to mark Lost, or Cancel to leave unchanged.`,
     ui.ButtonSet.YES_NO_CANCEL
   );
 
   if (response === ui.Button.YES) {
     markProspectWon();
-    return 'Marked prospect as Won after discovery.';
+    return 'Converted prospect to Client after Improvement Plan review.';
   }
   if (response === ui.Button.NO) {
     markProspectLost();
-    return 'Marked prospect as Lost after discovery.';
+    return 'Marked prospect as Lost after Improvement Plan review.';
   }
 
-  return 'Discovery outcome prompt displayed. No status change was made.';
+  return 'Improvement Plan outcome prompt displayed. No status change was made.';
 }
 
 function openOrCreateClientFromNextAction_(context) {
@@ -1905,7 +1919,7 @@ function advanceProspectStage() {
 }
 
 function markProspectWon() {
-  setSelectedProspectTerminalStage_('Won', 'Deal Won', 'Marked prospect as Won.');
+  setSelectedProspectTerminalStage_('Client', 'Client Converted', 'Converted prospect to Client.');
 }
 
 function markProspectLost() {
@@ -2039,13 +2053,28 @@ function normalizeProspectStatus_(value, allowedValues) {
   const text = String(value || '').trim();
   const key = normalizeDropdownValue_(text);
   const candidatesByKey = {
-    draft: ['Draft Created'],
-    'gmail draft created': ['Draft Created'],
-    audited: ['Audit Complete'],
-    'audit completed': ['Audit Complete'],
-    'package sent': ['Audit Package Sent'],
-    discovery: ['Discovery Scheduled'],
-    active: ['Won'],
+    draft: ['Executive Snapshot Sent'],
+    'draft created': ['Executive Snapshot Sent'],
+    'gmail draft created': ['Executive Snapshot Sent'],
+    'executive snapshot generated': ['Executive Snapshot Sent'],
+    'executive snapshot sent': ['Executive Snapshot Sent'],
+    audited: ['Digital Business Assessment Presented'],
+    'audit complete': ['Digital Business Assessment Presented'],
+    'audit completed': ['Digital Business Assessment Presented'],
+    'audit package sent': ['Digital Business Assessment Presented'],
+    'package sent': ['Digital Business Assessment Presented'],
+    'digital business assessment presented': ['Digital Business Assessment Presented'],
+    discovery: ['Discovery Meeting Scheduled'],
+    'discovery scheduled': ['Discovery Meeting Scheduled'],
+    'discovery meeting scheduled': ['Discovery Meeting Scheduled'],
+    'proposal sent': ['Improvement Plan Sent'],
+    proposal: ['Improvement Plan Sent'],
+    'improvement plan sent': ['Improvement Plan Sent'],
+    'follow up due': ['Nurture'],
+    won: ['Client'],
+    active: ['Client'],
+    client: ['Client'],
+    'project started': ['Project Started'],
     archived: ['Lost']
   };
   return chooseAllowedValue_(
@@ -2059,17 +2088,25 @@ function normalizeNextAction_(value, allowedValues) {
   const text = String(value || '').trim();
   const key = normalizeDropdownValue_(text);
   const candidatesByKey = {
-    'review email': ['Send Intro Email', 'Follow Up'],
-    'review gmail draft': ['Send Intro Email', 'Follow Up'],
-    'send email': ['Send Intro Email'],
-    'send intro': ['Send Intro Email'],
-    'send intro email': ['Send Intro Email'],
-    'send proposal': ['Send Proposal'],
-    proposal: ['Send Proposal'],
-    'schedule discovery': ['Conduct Discovery Call', 'Follow Up'],
-    'schedule discovery call': ['Conduct Discovery Call', 'Follow Up'],
-    'conduct discovery call': ['Conduct Discovery Call'],
-    discovery: ['Conduct Discovery Call'],
+    'generate executive snapshot': ['Generate Executive Snapshot'],
+    snapshot: ['Generate Executive Snapshot'],
+    'review email': ['Create Outreach Draft', 'Follow Up'],
+    'review gmail draft': ['Create Outreach Draft', 'Follow Up'],
+    'send email': ['Create Outreach Draft'],
+    'send intro': ['Create Outreach Draft'],
+    'send intro email': ['Create Outreach Draft'],
+    'create outreach draft': ['Create Outreach Draft'],
+    'send proposal': ['Generate Improvement Plan'],
+    proposal: ['Generate Improvement Plan'],
+    'generate improvement plan': ['Generate Improvement Plan'],
+    'schedule discovery': ['Schedule Discovery Meeting', 'Follow Up'],
+    'schedule discovery call': ['Schedule Discovery Meeting', 'Follow Up'],
+    'schedule discovery meeting': ['Schedule Discovery Meeting', 'Follow Up'],
+    'conduct discovery call': ['Present Digital Business Assessment'],
+    'present digital business assessment': ['Present Digital Business Assessment'],
+    discovery: ['Schedule Discovery Meeting'],
+    'convert to client': ['Convert to Client'],
+    'start project': ['Start Project'],
     'follow-up': ['Follow Up'],
     'follow up': ['Follow Up'],
     archived: ['Nurture', 'Follow Up'],
@@ -3203,9 +3240,9 @@ function buildProspectWorkspaceHtml_(workspace) {
           <div class="actions">
             <button onclick="runAction('workspaceRunRealWebsiteAudit')">Run Real Website Audit</button>
             <button onclick="runAction('workspaceRunWebsiteAudit')">Quick Internal Audit</button>
-            <button onclick="runAction('workspaceGenerateAuditPackage')">Generate Audit Package</button>
+            <button onclick="runAction('workspaceGenerateAuditPackage')">Generate Digital Business Assessment</button>
             <button onclick="runAction('workspaceCreateGmailDraft')">Create Gmail Draft</button>
-            <button onclick="runAction('workspaceGenerateProposal')" class="secondary">Generate Proposal</button>
+            <button onclick="runAction('workspaceGenerateProposal')" class="secondary">Generate Improvement Plan</button>
             <button onclick="runAction('workspaceMarkEmailSent')" class="secondary">Mark Email Sent</button>
             <button onclick="runAction('workspaceMarkFollowUpComplete')" class="secondary">Mark Follow-Up Complete</button>
             <button onclick="runAction('workspaceConvertToClient')" class="secondary">Convert To Client</button>
@@ -3686,7 +3723,7 @@ function setSelectedProspectTerminalStage_(stage, activityType, activityNotes) {
   updateSelectedProspectLastActivity_(context.sheet, context.table.headers, context.selectedRow);
   logPipelineActivity_(context.ss, context.prospect.company, activityType, activityNotes);
   let clientMessage = '';
-  if (stage === 'Won') {
+  if (normalizePipelineStage_(stage) === 'Client' || stage === 'Won') {
     const clientResult = convertWonProspectToClient_(context);
     clientMessage = clientResult.created
       ? `\n\nClient record created: ${clientResult.clientId}`
@@ -3809,8 +3846,23 @@ function getSelectedFollowUpSourceContext_(showAlert) {
 
 function normalizePipelineStage_(stage) {
   const value = String(stage || '').trim().toLowerCase();
+  const aliases = {
+    'audit complete': 'Digital Business Assessment Presented',
+    'audit completed': 'Digital Business Assessment Presented',
+    'audit package sent': 'Digital Business Assessment Presented',
+    'draft created': 'Executive Snapshot Sent',
+    'gmail draft created': 'Executive Snapshot Sent',
+    'email sent': 'Executive Snapshot Sent',
+    'follow up due': 'Nurture',
+    'proposal sent': 'Improvement Plan Sent',
+    'discovery scheduled': 'Discovery Meeting Scheduled',
+    'discovery call scheduled': 'Discovery Meeting Scheduled',
+    won: 'Client',
+    active: 'Client'
+  };
+  const normalizedValue = String(aliases[value] || value).toLowerCase();
   const match = PIPELINE_STAGES.filter(function(candidate) {
-    return candidate.toLowerCase() === value;
+    return candidate.toLowerCase() === normalizedValue;
   })[0];
   return match || '';
 }
@@ -3820,7 +3872,7 @@ function getNextPipelineStage_(currentStage) {
     return PIPELINE_STAGES[0];
   }
 
-  if (currentStage === 'Won' || currentStage === 'Lost') {
+  if (currentStage === 'Client' || currentStage === 'Won' || currentStage === 'Lost') {
     return currentStage;
   }
 
@@ -3963,27 +4015,27 @@ function updatePipelineDashboardMetrics_() {
   }
 
   const followUpsCompleted = countActivityTypes_(['Follow-Up Completed', 'Follow Up Completed']);
-  const discoveryCallsScheduled = countActivityType_('Discovery Call Scheduled');
-  const auditPackagesGenerated = countActivityType_('Audit Package Generated');
-  const auditPackagesSent = countActivityType_('Audit Package Sent');
+  const discoveryCallsScheduled = countActivityTypes_(['Discovery Meeting Scheduled', 'Discovery Call Scheduled']);
+  const auditPackagesGenerated = countActivityTypes_(['Digital Business Assessment Generated', 'Audit Package Generated']);
+  const auditPackagesSent = countActivityTypes_(['Digital Business Assessment Sent', 'Audit Package Sent']);
   const auditsCompletedToday = countActivityTypesToday_(['Website Audit Tool', 'Website Audit']);
-  const packagesGeneratedToday = countActivityTypeToday_('Audit Package Generated');
+  const packagesGeneratedToday = countActivityTypesToday_(['Digital Business Assessment Generated', 'Audit Package Generated']);
   const clientMetrics = getClientRevenueMetrics_();
   const followUpMetrics = getFollowUpMetrics_();
   const projectMetrics = getProjectMetrics_();
-  const wonDeals = statusCounts.Won || 0;
+  const wonDeals = statusCounts.Client || statusCounts.Won || 0;
   const lostDeals = statusCounts.Lost || 0;
   const decidedDeals = wonDeals + lostDeals;
   const winRate = decidedDeals ? wonDeals / decidedDeals : 0;
   const rows = [
     ['Metric', 'Value', 'Updated At'],
     ['Total Leads', totalLeads, new Date()],
-    ['Audits Completed', statusCounts['Audit Complete'], new Date()],
+    ['Digital Business Assessments Presented', statusCounts['Digital Business Assessment Presented'] || statusCounts['Audit Complete'] || 0, new Date()],
     ['Audits Completed Today', auditsCompletedToday, new Date()],
-    ['Drafts Created', statusCounts['Draft Created'], new Date()],
-    ['Emails Sent', statusCounts['Email Sent'], new Date()],
-    ['Proposals Sent', statusCounts['Proposal Sent'], new Date()],
-    ['Won Deals', wonDeals, new Date()],
+    ['Outreach Drafts Created', statusCounts['Executive Snapshot Sent'] || statusCounts['Draft Created'] || 0, new Date()],
+    ['Emails Sent', statusCounts['Email Sent'] || 0, new Date()],
+    ['Improvement Plans Sent', statusCounts['Improvement Plan Sent'] || statusCounts['Proposal Sent'] || 0, new Date()],
+    ['Clients', wonDeals, new Date()],
     ['Lost Deals', lostDeals, new Date()],
     ['Win Rate %', winRate, new Date()],
     ["Today's Follow-Ups", followUpMetrics.today || followUpsDueToday, new Date()],
@@ -3991,10 +4043,10 @@ function updatePipelineDashboardMetrics_() {
     ['Follow-Ups Due This Week', followUpMetrics.dueThisWeek, new Date()],
     ['Completed Today', followUpMetrics.completedToday, new Date()],
     ['Follow-Ups Completed', followUpsCompleted, new Date()],
-    ['Discovery Calls Scheduled', discoveryCallsScheduled, new Date()],
-    ['Audit Packages Generated', auditPackagesGenerated, new Date()],
+    ['Discovery Meetings Scheduled', discoveryCallsScheduled, new Date()],
+    ['Digital Business Assessments Generated', auditPackagesGenerated, new Date()],
     ['Packages Generated Today', packagesGeneratedToday, new Date()],
-    ['Audit Packages Sent', auditPackagesSent, new Date()],
+    ['Digital Business Assessments Sent', auditPackagesSent, new Date()],
     ['Total Clients', clientMetrics.totalClients, new Date()],
     ['Active Clients', clientMetrics.activeClients, new Date()],
     ['Total Revenue', clientMetrics.totalRevenue, new Date()],
@@ -4206,10 +4258,10 @@ function updateDashboardKPIs_(data) {
   const rows = [
     ['ROGERS HOLDINGS OS', '', '', '', '', '', '', '', '', '', '', ''],
     ['EXECUTIVE DASHBOARD', '', '', '', '', '', '', '', '', 'Last Refresh', data.generatedAt, ''],
-    ['Total Prospects', '', '', 'Leads Found', '', '', 'Draft Created', '', '', 'Proposal Sent', '', ''],
-    [data.totalProspects, '', '', data.statusCounts['Lead Found'] || 0, '', '', data.statusCounts['Draft Created'] || 0, '', '', data.statusCounts['Proposal Sent'] || 0, '', ''],
-    ['Audit Package Sent', '', '', 'Discovery Scheduled', '', '', 'Won', '', '', 'Lost', '', ''],
-    [data.statusCounts['Audit Package Sent'] || 0, '', '', data.statusCounts['Discovery Scheduled'] || 0, '', '', data.statusCounts.Won || 0, '', '', data.statusCounts.Lost || 0, '', ''],
+    ['Total Prospects', '', '', 'Leads Found', '', '', 'Executive Snapshot Sent', '', '', 'Improvement Plan Sent', '', ''],
+    [data.totalProspects, '', '', data.statusCounts['Lead Found'] || 0, '', '', data.statusCounts['Executive Snapshot Sent'] || 0, '', '', data.statusCounts['Improvement Plan Sent'] || 0, '', ''],
+    ['Digital Business Assessment Presented', '', '', 'Discovery Meeting Scheduled', '', '', 'Client', '', '', 'Lost', '', ''],
+    [data.statusCounts['Digital Business Assessment Presented'] || 0, '', '', data.statusCounts['Discovery Meeting Scheduled'] || 0, '', '', data.statusCounts.Client || 0, '', '', data.statusCounts.Lost || 0, '', ''],
     ["Today's Follow-Ups", '', '', 'Overdue Follow-Ups', '', '', 'Follow-Ups Due This Week', '', '', 'Completed Today', '', ''],
     [followUpMetrics.today || 0, '', '', followUpMetrics.overdue || 0, '', '', followUpMetrics.dueThisWeek || 0, '', '', followUpMetrics.completedToday || 0, '', ''],
     ['Average Audit Score', '', '', 'Total Clients', '', '', 'Active Clients', '', '', 'Active Projects', '', ''],
@@ -4233,14 +4285,12 @@ function updatePipelineSummary_(data) {
   const sheet = data.dashboardSheet;
   const stages = [
     'Lead Found',
-    'Audit Complete',
-    'Draft Created',
-    'Email Sent',
-    'Follow Up Due',
-    'Proposal Sent',
-    'Discovery Scheduled',
-    'Won',
-    'Lost'
+    'Executive Snapshot Sent',
+    'Discovery Meeting Scheduled',
+    'Digital Business Assessment Presented',
+    'Improvement Plan Sent',
+    'Project Started',
+    'Client'
   ];
   const rows = [
     ['SALES PIPELINE', '', ''],
@@ -5084,6 +5134,10 @@ function formatSettingsSheet_(sheet) {
     return;
   }
 
+  if (typeof ensureSystemSettingsSection_ === 'function') {
+    ensureSystemSettingsSection_(SpreadsheetApp.getActiveSpreadsheet());
+  }
+
   const table = getHealthHeaderTable_(sheet);
   const lastRow = Math.max(sheet.getLastRow(), table.headerRow);
   const lastColumn = Math.max(sheet.getLastColumn(), table.lastColumn);
@@ -5095,7 +5149,6 @@ function formatSettingsSheet_(sheet) {
   runSheetFormattingStep_(sheet, 'Settings gridlines', function() {
     sheet.setHiddenGridlines(true);
   });
-  applyOperatingSystemSheetChrome_(sheet, 'SETTINGS', table.headerRow, lastColumn);
   formatTableHeader_(sheet, table.headerRow, lastColumn);
   runSheetFormattingStep_(sheet, 'Settings body styling', function() {
     sheet.getRange(table.headerRow + 1, 1, Math.max(lastRow - table.headerRow, 1), lastColumn)
@@ -5105,13 +5158,18 @@ function formatSettingsSheet_(sheet) {
   });
   applyAlternatingRows_(sheet, table.headerRow + 1, lastRow, lastColumn);
   applyOperatingSystemTableSurface_(sheet, table.headerRow, lastRow, lastColumn);
-  applySectionHeaderStyle_(sheet, 1, lastColumn);
   runSheetFormattingStep_(sheet, 'Settings column widths', function() {
     sheet.setColumnWidths(1, Math.min(lastColumn, 4), 190);
   });
   applyVisualComfortBody_(sheet, table.headerRow + 1, lastRow, lastColumn, {
     rowHeight: 30
   });
+  if (typeof formatSystemSettingsSection_ === 'function') {
+    formatSystemSettingsSection_(sheet);
+  }
+  if (typeof formatDropdownListsSection_ === 'function') {
+    formatDropdownListsSection_(sheet);
+  }
 }
 
 function formatTableHeader_(sheet, headerRow, lastColumn) {
@@ -5335,18 +5393,18 @@ function updateExecutiveDashboardClientSummary_() {
 
   const metrics = getClientRevenueMetrics_();
   const recentConversions = getRecentClientConversions_();
-  const discoveryCallsScheduled = countActivityType_('Discovery Call Scheduled');
-  const auditPackagesGenerated = countActivityType_('Audit Package Generated');
-  const auditPackagesSent = countActivityType_('Audit Package Sent');
+  const discoveryCallsScheduled = countActivityTypes_(['Discovery Meeting Scheduled', 'Discovery Call Scheduled']);
+  const auditPackagesGenerated = countActivityTypes_(['Digital Business Assessment Generated', 'Audit Package Generated']);
+  const auditPackagesSent = countActivityTypes_(['Digital Business Assessment Sent', 'Audit Package Sent']);
   const output = [
     ['CLIENT SUMMARY', '', ''],
     ['Total Clients', metrics.totalClients, ''],
     ['Active Clients', metrics.activeClients, ''],
     ['New Clients This Month', metrics.clientsThisMonth, ''],
     ['Revenue', metrics.totalRevenue, ''],
-    ['Discovery Calls Scheduled', discoveryCallsScheduled, ''],
-    ['Audit Packages Generated', auditPackagesGenerated, ''],
-    ['Audit Packages Sent', auditPackagesSent, ''],
+    ['Discovery Meetings Scheduled', discoveryCallsScheduled, ''],
+    ['Digital Business Assessments Generated', auditPackagesGenerated, ''],
+    ['Digital Business Assessments Sent', auditPackagesSent, ''],
     ['Recent Conversions', '', '']
   ].concat(recentConversions.map(function(conversion) {
     return [conversion.clientName, conversion.clientSince, conversion.contractValue];

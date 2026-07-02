@@ -95,8 +95,8 @@ function buildDemoProspectRecords_() {
       'Audit Score': 84,
       'Audit Outcome': 'Strong Fit',
       'Priority Tier': 'A - Hot',
-      Status: 'Audit Complete',
-      'Next Action': 'Send Proposal',
+      Status: 'Digital Business Assessment Presented',
+      'Next Action': 'Generate Improvement Plan',
       'Follow-Up Date': addDays_(today, 3),
       'Offer / Service': 'Local SEO',
       Notes: 'Customers can find the business, but calls-to-action and service pages can be clearer.',
@@ -119,7 +119,7 @@ function buildDemoProspectRecords_() {
       'Audit Outcome': 'Not Audited',
       'Priority Tier': 'A - Hot',
       Status: 'Lead Found',
-      'Next Action': 'Send Intro Email',
+      'Next Action': 'Generate Executive Snapshot',
       'Follow-Up Date': addDays_(today, 2),
       'Offer / Service': 'Website Audit',
       Notes: 'Search visibility may be limited. Visitors may not know the next step to take.',
@@ -141,7 +141,7 @@ function buildDemoProspectRecords_() {
       'Audit Score': 63,
       'Audit Outcome': 'Good Fit',
       'Priority Tier': 'B - Good',
-      Status: 'Audit Package Sent',
+      Status: 'Digital Business Assessment Presented',
       'Next Action': 'Follow Up',
       'Follow-Up Date': addDays_(today, 1),
       'Offer / Service': 'Client Website',
@@ -164,8 +164,8 @@ function buildDemoProspectRecords_() {
       'Audit Score': 79,
       'Audit Outcome': 'Good Fit',
       'Priority Tier': 'B - Good',
-      Status: 'Won',
-      'Next Action': 'Conduct Discovery Call',
+      Status: 'Client',
+      'Next Action': 'Start Project',
       'Follow-Up Date': addDays_(today, 4),
       'Offer / Service': 'Google Business Optimization',
       Notes: 'A few visibility improvements could make the cafe easier to find in local search.',
@@ -187,8 +187,8 @@ function buildDemoProspectRecords_() {
       'Audit Score': 51,
       'Audit Outcome': 'Needs Nurture',
       'Priority Tier': 'A - Hot',
-      Status: 'Discovery Scheduled',
-      'Next Action': 'Conduct Discovery Call',
+      Status: 'Discovery Meeting Scheduled',
+      'Next Action': 'Present Digital Business Assessment',
       'Follow-Up Date': addDays_(today, 0),
       'Offer / Service': 'Client Website',
       Notes: 'Visitors may not know the next step to take. Clearer messaging could improve inquiries.',
@@ -210,7 +210,7 @@ function buildDemoProspectRecords_() {
       'Audit Score': 72,
       'Audit Outcome': 'Strong Fit',
       'Priority Tier': 'B - Good',
-      Status: 'Proposal Sent',
+      Status: 'Improvement Plan Sent',
       'Next Action': 'Follow Up',
       'Follow-Up Date': addDays_(today, 2),
       'Offer / Service': 'Local SEO',
@@ -233,7 +233,7 @@ function buildDemoProspectRecords_() {
       'Audit Score': 46,
       'Audit Outcome': 'Needs Nurture',
       'Priority Tier': 'A - Hot',
-      Status: 'Follow Up Due',
+      Status: 'Nurture',
       'Next Action': 'Follow Up',
       'Follow-Up Date': addDays_(today, -1),
       'Offer / Service': 'Business Systems',
@@ -257,7 +257,7 @@ function buildDemoProspectRecords_() {
       'Audit Outcome': 'Poor Fit',
       'Priority Tier': 'C - Later',
       Status: 'Nurture',
-      'Next Action': 'Send Intro Email',
+      'Next Action': 'Generate Executive Snapshot',
       'Follow-Up Date': addDays_(today, 7),
       'Offer / Service': 'Consulting',
       Notes: 'Customers may have difficulty finding the business online.',
@@ -341,16 +341,16 @@ function normalizeDemoProspectRecordsForDropdowns_(sheet, table, demoProspects) 
 
 function normalizeDemoNextAction_(nextAction, allowedValues) {
   const mappings = {
-    'Generate audit package': ['Generate Audit Package', 'Send Proposal', 'Follow Up', 'Send Intro Email'],
-    'Run website audit': ['Run Website Audit', 'Send Intro Email', 'Follow Up'],
-    'Follow Up': ['Follow Up', 'Send Follow-Up Email', 'Send Intro Email'],
-    'Schedule kickoff': ['Conduct Discovery Call', 'Follow Up'],
-    'Conduct Discovery Call': ['Conduct Discovery Call', 'Follow Up'],
-    'Follow up on proposal': ['Follow Up', 'Send Proposal'],
-    'Send follow-up email': ['Follow Up', 'Send Intro Email'],
-    'Send helpful local visibility note': ['Send Intro Email', 'Follow Up']
+    'Generate audit package': ['Present Digital Business Assessment', 'Generate Improvement Plan', 'Follow Up'],
+    'Run website audit': ['Generate Executive Snapshot', 'Create Outreach Draft', 'Follow Up'],
+    'Follow Up': ['Follow Up', 'Create Outreach Draft'],
+    'Schedule kickoff': ['Start Project', 'Follow Up'],
+    'Conduct Discovery Call': ['Present Digital Business Assessment', 'Follow Up'],
+    'Follow up on proposal': ['Follow Up', 'Generate Improvement Plan'],
+    'Send follow-up email': ['Follow Up', 'Create Outreach Draft'],
+    'Send helpful local visibility note': ['Create Outreach Draft', 'Follow Up']
   };
-  const candidates = mappings[nextAction] || [nextAction, 'Follow Up', 'Send Intro Email', 'Send Proposal', 'Conduct Discovery Call'];
+  const candidates = mappings[nextAction] || [nextAction, 'Follow Up', 'Create Outreach Draft', 'Generate Executive Snapshot', 'Generate Improvement Plan'];
   return chooseAllowedValue_(allowedValues, candidates, candidates[0]);
 }
 
@@ -457,7 +457,7 @@ function buildDemoActivityEntries_() {
     entries.push({
       Date: addDays_(today, -6 + index),
       Company: prospect.Company,
-      'Activity Type': prospect.Status === 'Lead Found' || prospect.Status === 'Nurture' ? 'Lead Reviewed' : 'Website Audit Tool',
+      'Activity Type': prospect.Status === 'Lead Found' || prospect.Status === 'Nurture' ? 'Lead Reviewed' : 'Digital Business Assessment Generated',
       'Activity Notes': prospect.Summary
     });
   });
@@ -477,14 +477,14 @@ function buildDemoActivityEntries_() {
   entries.push({
     Date: addDays_(today, -2),
     Company: 'Summit HVAC Services',
-    'Activity Type': 'Audit Package Sent',
-    'Activity Notes': 'Audit package sent for review.'
+    'Activity Type': 'Digital Business Assessment Sent',
+    'Activity Notes': 'Digital Business Assessment sent for review.'
   });
   entries.push({
     Date: addDays_(today, -1),
     Company: 'Sterling Family Dental',
-    'Activity Type': 'Proposal Generated',
-    'Activity Notes': 'Proposal generated for appointment conversion package.'
+    'Activity Type': 'Improvement Plan Generated',
+    'Activity Notes': 'Improvement Plan generated for appointment conversion package.'
   });
 
   return entries;

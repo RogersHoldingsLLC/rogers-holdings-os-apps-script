@@ -55,20 +55,19 @@ Root `.js` files are non-authoritative duplicates and must not be edited as sour
 
 ```text
 Lead Found
-Audit Complete
-Draft Created
-Email Sent
-Follow Up Due
-Proposal Sent
-Discovery Scheduled
-Won
+Executive Snapshot Sent
+Discovery Meeting Scheduled
+Digital Business Assessment Presented
+Improvement Plan Sent
+Project Started
+Client
 Lost
 ```
 
 Business lifecycle:
 
 ```text
-Prospect -> Audit -> Proposal -> Follow-Up -> Client -> Project -> Completed -> Maintenance
+Lead Found -> Executive Snapshot Sent -> Discovery Meeting Scheduled -> Digital Business Assessment Presented -> Improvement Plan Sent -> Project Started -> Client
 ```
 
 ## Important Public Entry Points

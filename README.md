@@ -5,7 +5,7 @@ Rogers Holdings OS is a Google Workspace-based business operating system for Rog
 The system is designed to manage the complete small-business lifecycle:
 
 ```text
-Prospect -> Audit -> Proposal -> Follow-Up -> Client -> Project -> Completed -> Maintenance
+Lead Found -> Executive Snapshot Sent -> Discovery Meeting Scheduled -> Digital Business Assessment Presented -> Improvement Plan Sent -> Project Started -> Client
 ```
 
 ## Version
@@ -25,10 +25,10 @@ See:
 Version 1.0 includes:
 
 - CRM: Master Prospect Tracker, Clients, Client Workspace, Projects, Follow-Ups, Activity Feed
-- Sales workflow: Website Audit Engine, Audit Package, Proposal Generator, Gmail Draft Automation, Next Action Engine
+- Sales workflow: Executive Snapshot, Digital Business Assessment, Improvement Plan, Gmail Draft Automation, Next Action Engine
 - Client delivery: Client conversion, project creation, project status/progress tracking, deliverable tracking
 - System: Executive Dashboard, Dashboard Metrics, Health Check, Reset Demo Data, Rogers Holdings navigation menu
-- Deliverables: branded Audit Report PDF, Proposal PDF, Discovery Call Brief PDF, outreach draft content
+- Deliverables: Executive Snapshot PDF, branded Digital Business Assessment PDF, Improvement Plan PDF, Discovery Call Brief PDF, outreach draft content
 - Development: local `clasp` workflow, validation, backup, status checks, deployment script, duplicate function verification
 
 ## Core Google Sheets

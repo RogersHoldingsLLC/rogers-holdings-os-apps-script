@@ -405,7 +405,8 @@ function addClientDataHealthChecks_(report, sheetInfo) {
     const values = prospectInfo.sheet.getRange(dataStartRow, 1, rowCount, prospectInfo.table.lastColumn).getValues();
     values.forEach(function(row, index) {
       const status = String(getValueByHeader_(row, prospectHeaders, 'Status') || '').trim();
-      if (status !== 'Won') {
+      const normalizedStatus = typeof normalizePipelineStage_ === 'function' ? normalizePipelineStage_(status) : status;
+      if (normalizedStatus !== 'Client' && status !== 'Won') {
         return;
       }
 
@@ -417,7 +418,7 @@ function addClientDataHealthChecks_(report, sheetInfo) {
         (websiteKey && clientKeys.websites[websiteKey]);
 
       if (!clientExists) {
-        missingClients.push(`${String(company || 'Unnamed won prospect').trim()} (row ${dataStartRow + index})`);
+        missingClients.push(`${String(company || 'Unnamed client-stage prospect').trim()} (row ${dataStartRow + index})`);
       }
     });
   }
@@ -426,12 +427,12 @@ function addClientDataHealthChecks_(report, sheetInfo) {
     addHealthItem_(
       report,
       'Warning',
-      'Won prospects missing from Clients tab',
+      'Client-stage prospects missing from Clients tab',
       missingClients.join('; '),
-      'Run Convert To Client for each won prospect or verify the Clients record exists.'
+      'Run Convert to Client for each client-stage prospect or verify the Clients record exists.'
     );
   } else {
-    addHealthItem_(report, 'Pass', 'Won prospects are represented in Clients', CLIENTS_SHEET, 'No action needed.');
+    addHealthItem_(report, 'Pass', 'Client-stage prospects are represented in Clients', CLIENTS_SHEET, 'No action needed.');
   }
 }
 
