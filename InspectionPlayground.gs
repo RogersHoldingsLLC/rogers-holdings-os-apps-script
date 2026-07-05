@@ -187,7 +187,7 @@ function renderInspectionPlayground_(sheet) {
   sheet.getRange('A26:H26').setValues([['Inspector', 'Category', 'Version', 'Status', 'Runtime ms', 'Findings', 'Evidence', 'Error / Notes']]);
   sheet.getRange('A60:H60').setValues([['Timestamp', 'Event', '', '', '', '', '', '']]);
 
-  sheet.getRange('A6:A10,D6:D11,A14:D14,F14:H14,A26:H26,A60:H60').setFontWeight('bold');
+  sheet.getRangeList(['A6:A10', 'D6:D11', 'A14:D14', 'F14:H14', 'A26:H26', 'A60:H60']).setFontWeight('bold');
   sheet.getRange('A38:H58').merge().setValue('Run an inspection or fetch a WebsiteDocument to view structured JSON output.').setVerticalAlignment('top').setWrap(true).setFontFamily('Menlo');
 
   sheet.setColumnWidths(1, 1, 160);

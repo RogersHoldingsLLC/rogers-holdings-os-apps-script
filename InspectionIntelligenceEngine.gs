@@ -14,7 +14,7 @@ function generateInspectionIntelligenceFindings_(input) {
   }
 
   translateInspectionResultFindings_(context).forEach(function(finding) {
-    addInspectionIntelligenceFinding_(findings, seen, finding);
+    addInspectionIntelligenceFinding_(findings, seen, finding, context);
   });
 
   getInspectionIntelligenceRules_().forEach(function(rule) {
@@ -22,7 +22,7 @@ function generateInspectionIntelligenceFindings_(input) {
       return;
     }
     if (rule.detect(context)) {
-      addInspectionIntelligenceFinding_(findings, seen, createInspectionIntelligenceFinding_(rule, context));
+      addInspectionIntelligenceFinding_(findings, seen, createInspectionIntelligenceFinding_(rule, context), context);
     }
   });
 
@@ -201,7 +201,13 @@ function translateInspectionResultFindings_(context) {
       priority: sourceFinding.priority || priorityForInspectionIntelligenceSeverity_(sourceFinding.severity),
       estimatedEffort: sourceFinding.difficulty || 'Medium',
       estimatedRoi: sourceFinding.expectedRoi || sourceFinding.expectedROI || 'Medium',
-      source: 'InspectionResult'
+      source: 'InspectionResult',
+      metadata: {
+        ruleId: sourceFinding.ruleId || (sourceFinding.metadata && sourceFinding.metadata.ruleId) || '',
+        ruleVersion: sourceFinding.ruleVersion || (sourceFinding.metadata && sourceFinding.metadata.ruleVersion) || '',
+        expectedEvidence: sourceFinding.expectedEvidence || [],
+        tags: sourceFinding.tags || []
+      }
     };
   });
 }
@@ -319,8 +325,10 @@ function inspectionIntelligenceRule_(id, category, severity, confidence, detect,
     expectedEvidence: definition.expectedEvidence || [],
     estimatedEffort: definition.estimatedEffort || '',
     expectedROI: definition.expectedROI || '',
-    tags: definition.tags || [],
-    version: definition.version || ''
+      tags: definition.tags || [],
+      version: definition.version || '',
+      title: definition.title || '',
+      description: definition.description || ''
   };
 }
 
@@ -345,6 +353,10 @@ function createInspectionIntelligenceFinding_(rule, context) {
     estimatedEffort: rule.estimatedEffort || effortForInspectionIntelligenceRule_(rule.id),
     estimatedRoi: rule.expectedROI || roiForInspectionIntelligenceRule_(rule.id, rule.severity),
     source: 'InspectionIntelligenceEngine',
+    typicalIndustryBestPractice: '',
+    whyThisMatters: '',
+    visibilityImpact: '',
+    talkingPoints: [],
     metadata: {
       ruleId: rule.ruleId || rule.id,
       ruleVersion: rule.version || '',
@@ -374,19 +386,20 @@ function buildInspectionIntelligenceEvidence_(rule, context) {
   };
 }
 
-function addInspectionIntelligenceFinding_(findings, seen, finding) {
+function addInspectionIntelligenceFinding_(findings, seen, finding, context) {
   if (!finding) {
     return;
   }
+  const enrichedFinding = enrichInspectionIntelligenceFinding_(finding, context || {});
   const key = [
-    String(finding.category || '').toLowerCase(),
-    String(finding.businessLanguage || finding.consultantObservation || '').toLowerCase()
+    String(enrichedFinding.category || '').toLowerCase(),
+    String(enrichedFinding.businessLanguage || enrichedFinding.consultantObservation || '').toLowerCase()
   ].join('|');
   if (seen[key]) {
     return;
   }
   seen[key] = true;
-  findings.push(finding);
+  findings.push(enrichedFinding);
 }
 
 function evidenceTextForInspectionIntelligenceRule_(ruleId, context) {
@@ -443,6 +456,318 @@ function evidenceLabelForInspectionIntelligenceRule_(ruleId) {
 
 function buildInspectionIntelligenceExecutiveSummary_(finding, action) {
   return `${finding} The recommended next step is to ${String(action || '').replace(/\.$/, '').toLowerCase()}.`;
+}
+
+function enrichInspectionIntelligenceFinding_(finding, context) {
+  const result = finding || {};
+  const normalizedContext = context || {};
+  const ruleId = result.findingId
+    ? String(result.findingId).replace(/^intel-/, '')
+    : (result.metadata && result.metadata.ruleId) || result.ruleId || '';
+  const rule = getInspectionRuleDefinition_(ruleId) || {};
+  const template = getInspectionConsultantTemplate_(ruleId, result.category);
+  const industryProfile = getInspectionIndustryProfile_(normalizedContext.prospect || {});
+  const issue = firstInspectionIntelligenceValue_([
+    result.businessLanguage,
+    result.consultantObservation,
+    rule.title,
+    result.supportingEvidence
+  ], 'A customer-facing website improvement was identified.');
+  const action = firstInspectionIntelligenceValue_([
+    result.recommendedAction,
+    rule.recommendedAction,
+    defaultInspectionIntelligenceAction_(result.category)
+  ], 'Improve the customer path so the next step is easier to understand and act on.');
+
+  const whyThisMatters = buildInspectionWhyThisMatters_(issue, result, rule, template, industryProfile);
+  const businessImpact = buildInspectionBusinessImpact_(result, rule, template, industryProfile);
+  const customerImpact = buildInspectionCustomerImpact_(result, rule, template, industryProfile);
+  const revenueOpportunity = buildInspectionRevenueOpportunity_(result, template, industryProfile);
+  const trustImpact = buildInspectionTrustImpact_(result, template, industryProfile);
+  const visibilityImpact = buildInspectionVisibilityImpact_(result, template, industryProfile);
+  const bestPractice = buildInspectionBestPractice_(result, template, industryProfile);
+  const talkingPoints = buildInspectionDiscoveryTalkingPoints_(issue, action, result, template, industryProfile);
+
+  result.executiveSummary = buildInspectionExecutiveSummary_(issue, action, result, template, industryProfile);
+  result.whyThisMatters = whyThisMatters;
+  result.whyThisMattersNarrative = whyThisMatters;
+  result.businessImpact = businessImpact;
+  result.customerImpact = customerImpact;
+  result.customerExperienceImpact = customerImpact;
+  result.revenueOpportunity = revenueOpportunity;
+  result.trustImpact = trustImpact;
+  result.visibilityImpact = visibilityImpact;
+  result.typicalIndustryBestPractice = bestPractice;
+  result.recommendedAction = action;
+  result.priority = result.priority || rule.priority || priorityForInspectionIntelligenceSeverity_(result.severity);
+  result.estimatedEffort = result.estimatedEffort || rule.estimatedEffort || effortForInspectionIntelligenceRule_(ruleId);
+  result.estimatedRoi = result.estimatedRoi || result.expectedROI || rule.expectedROI || roiForInspectionIntelligenceRule_(ruleId, result.severity);
+  result.expectedROI = result.expectedROI || result.estimatedRoi;
+  result.talkingPoints = talkingPoints;
+  result.discoveryMeetingTalkingPoints = talkingPoints;
+  result.consultantObservation = buildInspectionConsultantObservation_(issue, result, template, industryProfile);
+  result.metadata = result.metadata || {};
+  result.metadata.industryProfile = industryProfile.key;
+  result.metadata.enrichmentVersion = '1.0';
+  return result;
+}
+
+function getInspectionConsultantTemplate_(ruleId, category) {
+  const templates = getInspectionConsultantTemplates_();
+  const normalizedRuleId = normalizeInspectionRuleId_(ruleId);
+  if (templates[normalizedRuleId]) {
+    return templates[normalizedRuleId];
+  }
+
+  const normalizedCategory = normalizeInspectionIntelligenceText_(category);
+  if (normalizedCategory.indexOf('contact') !== -1 || normalizedCategory.indexOf('lead') !== -1) {
+    return templates.contactPath;
+  }
+  if (normalizedCategory.indexOf('trust') !== -1 || normalizedCategory.indexOf('review') !== -1 || normalizedCategory.indexOf('brand') !== -1) {
+    return templates.trustSignals;
+  }
+  if (normalizedCategory.indexOf('local') !== -1 || normalizedCategory.indexOf('google') !== -1) {
+    return templates.localVisibility;
+  }
+  if (normalizedCategory.indexOf('navigation') !== -1 || normalizedCategory.indexOf('homepage') !== -1 || normalizedCategory.indexOf('content') !== -1) {
+    return templates.clarity;
+  }
+  return templates.general;
+}
+
+function getInspectionConsultantTemplates_() {
+  return {
+    contactPath: {
+      businessImpact: 'Qualified inquiries may be lost when ready-to-act visitors cannot find a clear contact path quickly.',
+      customerImpact: 'Customers may have to work harder than expected to call, request help, book, or ask a question.',
+      revenueOpportunity: 'Improving this path can increase calls, quote requests, appointment requests, and other high-intent inquiries from existing website traffic.',
+      trustImpact: 'Clear contact details make the business feel accessible, active, and easier to trust.',
+      visibilityImpact: 'Consistent contact details also support local confidence when customers compare options across search, maps, and the website.',
+      bestPractice: 'Most strong local service websites keep phone, form, hours, and location or service-area details visible in the header, footer, and contact path.',
+      consultantLead: 'This is a customer-action issue, not just a website detail.'
+    },
+    'missing-phone-number': {
+      consultantLead: 'Customers who are ready to call should not have to search for the phone number.',
+      bestPractice: 'For local service businesses, the primary phone number should appear in the header, footer, and contact section, with mobile click-to-call support.'
+    },
+    'phone-only-in-footer': {
+      consultantLead: 'Customers looking for urgent help often decide within seconds whether to call or leave.',
+      bestPractice: 'High-performing local service pages show the primary phone number or call option in the first screen on desktop and mobile.'
+    },
+    'phone-below-first-screen': {
+      consultantLead: 'Customers looking for urgent help often decide within seconds whether to call or leave.',
+      bestPractice: 'High-performing local service pages show the primary phone number or call option in the first screen on desktop and mobile.'
+    },
+    'missing-contact-form': {
+      consultantLead: 'Not every qualified customer wants to call immediately.',
+      bestPractice: 'A strong lead-generation website offers both a direct call path and a short request form for customers who prefer to submit details online.'
+    },
+    'missing-cta-button': {
+      consultantLead: 'A visitor can understand the business and still leave if the next step is not obvious.',
+      bestPractice: 'The first screen should include one primary action tied to business value, such as Request a Quote, Schedule Service, Book an Appointment, or Call Today.'
+    },
+    'weak-cta-wording': {
+      consultantLead: 'Generic calls to action create hesitation at the exact moment a visitor is deciding what to do.',
+      bestPractice: 'CTA wording should match the customer intent: call, schedule, book, request a quote, or start a consultation.'
+    },
+    trustSignals: {
+      businessImpact: 'The business may lose comparison shoppers who need proof before contacting.',
+      customerImpact: 'Customers may feel less certain that the business is credible, active, and safe to contact.',
+      revenueOpportunity: 'Better trust signals can improve conversion from visitors who are already comparing providers.',
+      trustImpact: 'Visible proof reduces hesitation and makes the business feel more established.',
+      visibilityImpact: 'Trust content can reinforce local relevance when it includes reviews, project proof, credentials, or community signals.',
+      bestPractice: 'Strong local websites surface reviews, testimonials, credentials, guarantees, and proof points near key decision points.',
+      consultantLead: 'This is a confidence issue in the customer decision path.'
+    },
+    'missing-reviews': {
+      consultantLead: 'Reviews often do the trust-building work before a customer ever calls.',
+      bestPractice: 'Local businesses should feature recent review snippets, ratings, or a clear path to verified reviews near high-intent sections.'
+    },
+    'missing-testimonials': {
+      consultantLead: 'Customers want proof from people who have already used the business.',
+      bestPractice: 'Testimonials should be placed close to service descriptions, contact prompts, or other decision points.'
+    },
+    localVisibility: {
+      businessImpact: 'Local search and customer confidence may be weaker when location, service area, or local proof is unclear.',
+      customerImpact: 'Customers may not quickly confirm whether the business serves their location.',
+      revenueOpportunity: 'Clearer local signals can help convert nearby searchers and reduce mismatched inquiries.',
+      trustImpact: 'Location clarity makes the business feel more real, reachable, and relevant.',
+      visibilityImpact: 'Local relevance improves when website copy, page titles, service areas, and Google Business signals tell the same story.',
+      bestPractice: 'Strong local websites clearly state the primary service area, location signals, and service categories in plain English.',
+      consultantLead: 'This is a local relevance issue.'
+    },
+    clarity: {
+      businessImpact: 'The website may be asking visitors to work too hard to understand the offer, proof, or next step.',
+      customerImpact: 'Customers may need more time to understand whether the business can help them.',
+      revenueOpportunity: 'Clearer structure can improve conversion by reducing confusion before the customer leaves.',
+      trustImpact: 'A clear, organized website makes the business feel more professional and easier to evaluate.',
+      visibilityImpact: 'Clear headings, service pages, and page metadata also help search engines understand the business.',
+      bestPractice: 'A strong first impression explains what the business does, who it serves, why it can be trusted, and what the customer should do next.',
+      consultantLead: 'This is a clarity and first-impression issue.'
+    },
+    general: {
+      businessImpact: 'The website may not convert interested visitors as efficiently as it could.',
+      customerImpact: 'Customers may experience avoidable friction before taking action.',
+      revenueOpportunity: 'Improving this item can help turn more existing visitors into qualified opportunities.',
+      trustImpact: 'Reducing uncertainty helps customers feel more confident choosing the business.',
+      visibilityImpact: 'Clearer, more complete website signals can support stronger digital presence over time.',
+      bestPractice: 'The strongest business websites make the offer, proof, and next step easy to understand without extra effort.',
+      consultantLead: 'This is a practical customer-experience improvement.'
+    }
+  };
+}
+
+function getInspectionIndustryProfile_(prospect) {
+  const text = normalizeInspectionIntelligenceText_([
+    prospect && prospect.industry,
+    prospect && prospect.offerService,
+    prospect && prospect.notes,
+    prospect && prospect.summary
+  ].join(' '));
+  const profiles = getInspectionIndustryProfiles_();
+  for (let index = 0; index < profiles.length; index += 1) {
+    if (textIncludesAny_(text, profiles[index].terms)) {
+      return profiles[index];
+    }
+  }
+  return {
+    key: 'general',
+    label: 'local business',
+    customerAction: 'contact the business',
+    urgency: 'customers are comparing options and deciding who to trust',
+    proof: 'reviews, proof points, service details, and clear contact paths'
+  };
+}
+
+function getInspectionIndustryProfiles_() {
+  return [
+    {
+      key: 'hvac',
+      label: 'HVAC',
+      terms: ['hvac', 'heating', 'cooling', 'air conditioning', 'furnace'],
+      customerAction: 'schedule service or request emergency help',
+      urgency: 'customers often need help quickly when comfort, heat, or cooling is disrupted',
+      proof: 'reviews, emergency availability, service-area clarity, financing, certifications, and phone visibility'
+    },
+    {
+      key: 'roofing',
+      label: 'roofing',
+      terms: ['roof', 'roofing', 'gutter', 'storm damage'],
+      customerAction: 'request an estimate or inspection',
+      urgency: 'homeowners often compare several contractors before trusting one with a major property decision',
+      proof: 'reviews, project photos, licenses, warranties, service-area clarity, and estimate request paths'
+    },
+    {
+      key: 'medical',
+      label: 'medical',
+      terms: ['medical', 'clinic', 'doctor', 'physician', 'healthcare', 'urgent care'],
+      customerAction: 'book an appointment or call the office',
+      urgency: 'patients need confidence, clarity, and a low-friction appointment path',
+      proof: 'provider credentials, patient reviews, accepted insurance, location, hours, and appointment options'
+    },
+    {
+      key: 'dental',
+      label: 'dental',
+      terms: ['dental', 'dentist', 'orthodont', 'teeth', 'oral'],
+      customerAction: 'request an appointment',
+      urgency: 'patients often choose the practice that feels trustworthy, convenient, and easy to contact',
+      proof: 'patient reviews, credentials, before/after proof, insurance information, hours, and appointment CTAs'
+    },
+    {
+      key: 'restaurant',
+      label: 'restaurant',
+      terms: ['restaurant', 'cafe', 'coffee', 'bar', 'food', 'menu', 'dining'],
+      customerAction: 'view the menu, call, order, or visit',
+      urgency: 'customers make quick decisions based on menu clarity, hours, reviews, location, and visual confidence',
+      proof: 'menu access, hours, location, reviews, photos, online ordering, and social proof'
+    },
+    {
+      key: 'legal',
+      label: 'legal',
+      terms: ['legal', 'law', 'attorney', 'lawyer', 'firm'],
+      customerAction: 'request a consultation',
+      urgency: 'potential clients need trust, discretion, credibility, and a clear consultation path',
+      proof: 'practice areas, attorney credentials, reviews, consultation CTAs, case experience, and trust language'
+    },
+    {
+      key: 'plumbing',
+      label: 'plumbing',
+      terms: ['plumb', 'drain', 'water heater', 'pipe'],
+      customerAction: 'call or schedule service',
+      urgency: 'customers may be dealing with urgent home problems and often choose the fastest credible option',
+      proof: 'phone visibility, emergency messaging, service-area clarity, reviews, licenses, and schedule options'
+    },
+    {
+      key: 'fitness',
+      label: 'fitness',
+      terms: ['fitness', 'gym', 'training', 'personal trainer', 'wellness'],
+      customerAction: 'book a visit, trial, or consultation',
+      urgency: 'customers need to understand the offer, atmosphere, proof, and first step before committing',
+      proof: 'program clarity, testimonials, photos, pricing or trial options, location, and booking CTAs'
+    }
+  ];
+}
+
+function buildInspectionExecutiveSummary_(issue, action, finding, template, industryProfile) {
+  return `${issue} For a ${industryProfile.label} business, this matters because ${industryProfile.urgency}. ${action}`;
+}
+
+function buildInspectionWhyThisMatters_(issue, finding, rule, template, industryProfile) {
+  return `${template.consultantLead || 'This item affects the customer decision path'} For a ${industryProfile.label} business, ${industryProfile.urgency}. ${issue}`;
+}
+
+function buildInspectionBusinessImpact_(finding, rule, template, industryProfile) {
+  return firstInspectionIntelligenceValue_([
+    finding.businessImpact,
+    rule.businessReason,
+    template.businessImpact
+  ], `This can affect how many qualified customers ${industryProfile.customerAction}.`);
+}
+
+function buildInspectionCustomerImpact_(finding, rule, template, industryProfile) {
+  return firstInspectionIntelligenceValue_([
+    finding.customerImpact,
+    rule.customerReason,
+    template.customerImpact
+  ], `Customers may have a harder time deciding whether to ${industryProfile.customerAction}.`);
+}
+
+function buildInspectionRevenueOpportunity_(finding, template, industryProfile) {
+  return firstInspectionIntelligenceValue_([
+    finding.revenueOpportunity,
+    template.revenueOpportunity
+  ], `The opportunity is to convert more existing visitors into people who ${industryProfile.customerAction}.`);
+}
+
+function buildInspectionTrustImpact_(finding, template, industryProfile) {
+  return firstInspectionIntelligenceValue_([
+    finding.trustImpact,
+    template.trustImpact
+  ], `This can weaken confidence because customers expect to see ${industryProfile.proof}.`);
+}
+
+function buildInspectionVisibilityImpact_(finding, template, industryProfile) {
+  return firstInspectionIntelligenceValue_([
+    finding.visibilityImpact,
+    template.visibilityImpact
+  ], 'This can weaken the signals customers and search engines use to understand the business.');
+}
+
+function buildInspectionBestPractice_(finding, template, industryProfile) {
+  return `${template.bestPractice || 'Strong websites make the offer, proof, and next step easy to understand.'} In ${industryProfile.label}, this usually means showing ${industryProfile.proof}.`;
+}
+
+function buildInspectionConsultantObservation_(issue, finding, template, industryProfile) {
+  return `${template.consultantLead || 'This is a practical customer-experience improvement'} ${issue} The key question for the discovery meeting is whether this friction shows up in real customer behavior, such as fewer calls, weaker quote requests, or confusion about the next step.`;
+}
+
+function buildInspectionDiscoveryTalkingPoints_(issue, action, finding, template, industryProfile) {
+  return [
+    `Ask whether customers usually ${industryProfile.customerAction}, and which path matters most right now.`,
+    `Confirm whether the owner has heard customer confusion related to this issue: ${issue}`,
+    `Frame the recommendation around business outcomes: more leads, stronger trust, clearer visibility, and less customer friction.`,
+    `Discuss the simplest first improvement: ${String(action || '').replace(/\.$/, '')}.`
+  ];
 }
 
 function consultantObservationForInspectionCategory_(category, issue) {
