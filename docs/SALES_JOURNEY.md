@@ -147,10 +147,40 @@ Client:
 ## Recommended Flow
 
 1. Generate the Executive Snapshot.
-2. Use the snapshot in outreach to request a short discovery meeting.
-3. During the meeting, review the Digital Business Assessment.
-4. After priorities are confirmed, send the Improvement Plan.
-5. When accepted, start the project and convert the business to Client.
+2. Use the snapshot in outreach, then run **Confirm Executive Snapshot Sent** only after it is actually sent.
+3. Create the discovery Calendar event; only successful Calendar creation confirms **Discovery Meeting Scheduled**.
+4. During the meeting, review the Digital Business Assessment, then run **Confirm Assessment Presented**.
+5. Generate the Improvement Plan, send it, then run **Confirm Improvement Plan Sent**.
+6. When accepted, run **Record Improvement Plan Accepted / Start Project**.
+7. After onboarding is complete, run **Complete Client Onboarding**.
+
+Generating, regenerating, previewing, auditing, creating files, or creating a Gmail draft never changes CRM Status. Use **Move to Nurture** or **Mark Lost** only for confirmed operator outcomes. Invalid stage jumps are blocked.
+
+## Approved CRM Transition Matrix
+
+| Current Status | Allowed next Status |
+| --- | --- |
+| Lead Found | Executive Snapshot Sent, Nurture, Lost |
+| Executive Snapshot Sent | Discovery Meeting Scheduled, Nurture, Lost |
+| Discovery Meeting Scheduled | Digital Business Assessment Presented, Nurture, Lost |
+| Digital Business Assessment Presented | Improvement Plan Sent, Nurture, Lost |
+| Improvement Plan Sent | Project Started, Nurture, Lost |
+| Project Started | Client only |
+| Client | Client only |
+| Lost | Lost only |
+| Nurture | Nurture only, unless **Reactivate Nurtured Prospect** explicitly confirms re-entry at Lead Found |
+
+Manual edits use the same matrix. Multi-cell Status edits are rejected by the lifecycle handler. Each affected Status cell is restored from independently verified prior evidence; if no prior evidence exists, only that Status cell is cleared and the row is quarantined as **Reconciliation Required**. Adjacent pasted columns are never rewritten by lifecycle recovery. Nurture re-entry cannot be performed by directly editing Status.
+
+## Retry and Reconciliation Behavior
+
+- Lifecycle operations use a document lock and a durable operation key.
+- Status, Next Action, Last Activity, confirmation time, and lifecycle operation evidence are committed together on the prospect row.
+- If the final row write fails, the prior row is restored and verified when possible. If restoration cannot be verified, the row is marked **Reconciliation Required**.
+- Follow-up and Activity Feed effects are idempotently reconciled. Repeating a confirmation checks and repairs incomplete downstream work rather than duplicating it.
+- Discovery scheduling stores a Calendar operation key bound to prospect identity, exact start, exact end, and calendar identity, plus the event ID. A stored event is reused only when its operation evidence and exact time both match. A different-time event requires explicit rescheduling, and ambiguous/conflicting results block new invitations until reconciled.
+- Client/project operations upsert and then re-read their persisted records before Status advances. IDs, company/client linkage, status, and service identity are verified; missing, duplicate, or ambiguous matches stop the lifecycle commit and remain marked for reconciliation. Partial operations can be repaired by repeating the same explicit action.
+- **Audit Legacy Lifecycle Values** is read-only. It inventories unrecognized Status and Next Action values without converting artifact labels into confirmed customer events.
 
 ## Future Visual Evidence Plan
 

@@ -2932,8 +2932,7 @@ function generateProposal() {
   applySmartFindingsToProspect_(sheet, table.headers, selectedRow, prospect);
   const proposal = buildProposal_(prospect);
   showProposalModal_(prospect, proposal);
-  setProspectStatusIfHeader_(sheet, table.headers, selectedRow, 'Improvement Plan Sent');
-  setIfHeaderCell_(sheet, table.headers, selectedRow, 'Next Action', 'Convert to Client');
+  setIfHeaderCell_(sheet, table.headers, selectedRow, 'Next Action', 'Confirm Improvement Plan Sent');
   logProposalGenerated_(ss, prospect, proposal);
   updateSelectedProspectLastActivity_(sheet, table.headers, selectedRow);
   refreshSalesOperatingSystem_();
@@ -3232,7 +3231,7 @@ function logProposalGenerated_(ss, prospect, proposal) {
   setIfHeader_(rowValues, table.headers, 'Company', prospect.company);
   setIfHeader_(rowValues, table.headers, 'Activity Type', 'Improvement Plan Generated');
   setIfHeader_(rowValues, table.headers, 'Activity Notes', `Generated Improvement Plan for ${proposal.recommendedService}.`);
-  setIfHeader_(rowValues, table.headers, 'Next Action', 'Convert to Client');
+  setIfHeader_(rowValues, table.headers, 'Next Action', 'Confirm Improvement Plan Sent');
 
   const targetRow = Math.max(sheet.getLastRow() + 1, table.headerRow + 1);
   sheet.getRange(targetRow, 1, 1, table.lastColumn).setValues([rowValues]);

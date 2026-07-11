@@ -164,14 +164,12 @@ function sendAuditPackage() {
       console.log('Send Audit Package: Gmail draft created without attachments');
     }
 
-    setProspectStatusIfHeader_(context.sheet, context.table.headers, context.selectedRow, 'Digital Business Assessment Presented');
-    setIfHeaderCell_(context.sheet, context.table.headers, context.selectedRow, 'Next Action', 'Follow Up');
-    updateSelectedProspectFollowUpDate_(context.sheet, context.table.headers, context.selectedRow, 7);
+    setIfHeaderCell_(context.sheet, context.table.headers, context.selectedRow, 'Next Action', 'Present Digital Business Assessment');
     updateSelectedProspectLastActivity_(context.sheet, context.table.headers, context.selectedRow);
     logPipelineActivity_(
       context.ss,
       prospect.company,
-      'Digital Business Assessment Sent',
+      'Digital Business Assessment Gmail Draft Created',
       draftCreatedWithAttachments
         ? 'Digital Business Assessment Gmail draft created with assessment PDF and Improvement Plan PDF attached.'
         : 'Digital Business Assessment Gmail draft created without attachments; Drive folder link included due to attachment failure.'
@@ -364,8 +362,7 @@ function createOutreachGmailDraft() {
   }
 
   logOutreachGmailDraftCreated_(ss, prospect, drafts, recipient);
-  setProspectStatusIfHeader_(sheet, table.headers, selectedRow, 'Executive Snapshot Sent');
-  setIfHeaderCell_(sheet, table.headers, selectedRow, 'Next Action', 'Schedule Discovery Meeting');
+  setIfHeaderCell_(sheet, table.headers, selectedRow, 'Next Action', 'Confirm Executive Snapshot Sent');
   updateSelectedProspectLastActivity_(sheet, table.headers, selectedRow);
   refreshSalesOperatingSystem_();
 

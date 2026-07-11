@@ -5,102 +5,60 @@
 
 function convertToClient() {
   const context = getSelectedProspectContext_(['Company', 'Status']);
-  if (!context) {
-    return;
+  if (!context) return;
+  const status = normalizePipelineStage_(getValueByHeader_(context.values, context.table.headers, 'Status')) || 'Lead Found';
+  if (status === 'Improvement Plan Sent') {
+    return recordImprovementPlanAccepted();
   }
+  if (status === 'Project Started' || status === 'Client') {
+    return completeClientOnboarding();
+  }
+  SpreadsheetApp.getUi().alert('Rogers Holdings OS', `Cannot convert from ${status}. Confirm the preceding lifecycle events first.`, SpreadsheetApp.getUi().ButtonSet.OK);
+}
 
+function recordImprovementPlanAccepted() {
+  return completeProspectClientOperation_('Project Started', 'Record Improvement Plan Accepted / Start Project', 'Improvement Plan Accepted', 'Operator confirmed acceptance; client record and project were successfully prepared.');
+}
+
+function completeClientOnboarding() {
+  return completeProspectClientOperation_('Client', 'Complete Client Onboarding', 'Client Onboarding Completed', 'Operator confirmed onboarding completion after client and project records were successfully prepared.');
+}
+
+function completeProspectClientOperation_(targetStage, title, activityType, activityNotes) {
+  const context = getSelectedProspectContext_(['Company', 'Status']);
+  if (!context) return null;
+  const current = normalizePipelineStage_(getValueByHeader_(context.values, context.table.headers, 'Status')) || 'Lead Found';
+  const validation = validateProspectStageTransition_(current, targetStage);
   const ui = SpreadsheetApp.getUi();
-  const clientSheet = getOrCreateClientsSheet_(context.ss);
-  const clientTable = ensureClientColumns_(clientSheet);
-  const prospectHeaders = ensureProspectConversionColumns_(context.sheet, context.table.headers);
-  const prospectValues = context.sheet.getRange(context.selectedRow, 1, 1, context.sheet.getLastColumn()).getValues()[0];
-  const prospect = {
-    company: getValueByHeader_(prospectValues, prospectHeaders, 'Company'),
-    contact: getValueByHeader_(prospectValues, prospectHeaders, 'Contact'),
-    email: getValueByHeader_(prospectValues, prospectHeaders, 'Email'),
-    phone: getValueByHeader_(prospectValues, prospectHeaders, 'Phone'),
-    website: getValueByHeader_(prospectValues, prospectHeaders, 'Website'),
-    industry: getValueByHeader_(prospectValues, prospectHeaders, 'Industry'),
-    service: getValueByHeader_(prospectValues, prospectHeaders, 'Offer / Service'),
-    priorityTier: getValueByHeader_(prospectValues, prospectHeaders, 'Priority Tier'),
-    auditScore: getValueByHeader_(prospectValues, prospectHeaders, 'Audit Score'),
-    auditOutcome: getValueByHeader_(prospectValues, prospectHeaders, 'Audit Outcome'),
-    notes: getValueByHeader_(prospectValues, prospectHeaders, 'Notes')
-  };
-
-  if (clientExists_(clientSheet, clientTable.headers, prospect.company, prospect.website)) {
-    ui.alert('Rogers Holdings OS', 'This prospect already exists in the Clients tab.', ui.ButtonSet.OK);
-    return;
+  if (!validation.allowed) {
+    ui.alert('Rogers Holdings OS', validation.message, ui.ButtonSet.OK);
+    return null;
   }
-
-  const contractPrompt = ui.prompt(
-    'Convert Prospect To Client',
-    'Enter Contract Value:',
-    ui.ButtonSet.OK_CANCEL
-  );
-  if (contractPrompt.getSelectedButton() !== ui.Button.OK) {
-    return;
+  if (!validation.idempotent && ui.alert(title, `Confirm this completed event for ${context.prospect.company}?`, ui.ButtonSet.YES_NO) !== ui.Button.YES) return null;
+  const lock = LockService.getDocumentLock();
+  try {
+    lock.waitLock(30000);
+    const result = convertWonProspectToClient_(context, { targetStage: targetStage, activityType: activityType, activityNotes: activityNotes, lockHeld: true });
+    ui.alert('Rogers Holdings OS', validation.idempotent
+      ? `${targetStage} was already confirmed. Client, project, follow-up, activity, and workspace state were reconciled.\n\nClient ID: ${result.clientId}`
+      : `${targetStage} confirmed.\n\nClient ID: ${result.clientId}`, ui.ButtonSet.OK);
+    return result;
+  } catch (error) {
+    try {
+      setLifecycleOperationMarker_(context, buildLifecycleOperationKey_(context, targetStage), 'Reconciliation Required', `Client/project operation failed and requires retry or review: ${error && error.message ? error.message : String(error)}`);
+    } catch (markerError) {
+      console.error(markerError);
+    }
+    const currentAfterFailure = normalizePipelineStage_(context.sheet.getRange(context.selectedRow, context.table.headers.Status).getValue()) || String(context.sheet.getRange(context.selectedRow, context.table.headers.Status).getValue() || '').trim();
+    ui.alert('Rogers Holdings OS', `Operation did not complete. Current CRM Status: ${currentAfterFailure || '(blank)'}. Review Lifecycle Operation State and Details before retrying.\n\n${error && error.message ? error.message : String(error)}`, ui.ButtonSet.OK);
+    return null;
+  } finally {
+    lock.releaseLock();
   }
-
-  const contractValue = parseCurrencyValue_(contractPrompt.getResponseText());
-  if (contractValue === null) {
-    ui.alert('Rogers Holdings OS', 'Enter a valid contract value, then run Convert Prospect To Client again.', ui.ButtonSet.OK);
-    return;
-  }
-
-  const startDate = startOfDay_(new Date());
-
-  const clientFolders = createClientFolderStructure_(prospect.company);
-  moveExistingAuditPackageFilesToAuditFolder_(clientFolders.root, clientFolders.audit);
-  createClientOnboardingFiles_(clientFolders.root, prospect);
-  const clientResult = upsertClientRecordFromProspect_(clientSheet, clientTable.headers, prospect, {
-    contractValue: contractValue,
-    startDate: startDate,
-    activityType: 'Client Converted'
-  });
-  const clientValues = clientSheet.getRange(clientResult.rowNumber, 1, 1, clientTable.lastColumn).getValues()[0];
-  const projectResult = upsertProjectFromClient_(context.ss, buildProjectClientModel_(clientValues, clientTable.headers), {
-    status: 'Planning',
-    notes: 'Project created from client conversion.'
-  });
-  setProspectStatus_(context.sheet, prospectHeaders, context.selectedRow, 'Client');
-  updateSelectedProspectLastActivity_(context.sheet, prospectHeaders, context.selectedRow);
-  setSelectedProspectClosedDate_(context.sheet, prospectHeaders, context.selectedRow, new Date());
-  logPipelineActivity_(context.ss, prospect.company, 'Client Converted', 'Converted prospect to active client');
-  logPipelineActivity_(context.ss, prospect.company, projectResult.created ? 'Project Started' : 'Project Updated', projectResult.created ? 'Project started from client conversion.' : 'Existing project updated from client conversion.');
-  context.sheet.deleteRow(context.selectedRow);
-  refreshSalesOperatingSystem_();
-
-  ui.alert('Rogers Holdings OS', 'Prospect converted to active client.', ui.ButtonSet.OK);
 }
 
 function convertWonProspectToClient() {
-  const context = getSelectedProspectContext_(['Company', 'Status']);
-  if (!context) {
-    return;
-  }
-
-  const ui = SpreadsheetApp.getUi();
-  const status = normalizePipelineStage_(getValueByHeader_(context.values, context.table.headers, 'Status'));
-  if (normalizePipelineStage_(status) !== 'Client' && status !== 'Won') {
-    const response = ui.alert(
-      'Rogers Holdings OS',
-      'This prospect is not marked Client. Convert this prospect to Client?',
-      ui.ButtonSet.YES_NO
-    );
-    if (response !== ui.Button.YES) {
-      return;
-    }
-  }
-
-  const result = convertWonProspectToClient_(context);
-  ui.alert(
-    'Rogers Holdings OS',
-    result.created
-      ? `Client created.\n\nClient ID: ${result.clientId}`
-      : `Client updated.\n\nClient ID: ${result.clientId}`,
-    ui.ButtonSet.OK
-  );
+  return convertToClient();
 }
 
 function createClientFolderStructure_(company) {
@@ -390,34 +348,87 @@ function findExistingClientRow_(sheet, headers, company, website) {
   return null;
 }
 
-function convertWonProspectToClient_(context) {
+function convertWonProspectToClient_(context, options) {
+  const settings = options || {};
+  const targetStage = settings.targetStage || 'Client';
+  const operationKey = buildLifecycleOperationKey_(context, targetStage);
+  ensureLifecycleReconciliationColumns_(context);
+  setLifecycleOperationMarker_(context, operationKey, 'Preparing Prerequisites', `Preparing Client and Project records for ${targetStage}.`);
   const clientSheet = getOrCreateClientsSheet_(context.ss);
   const clientTable = ensureClientColumns_(clientSheet);
   const prospectHeaders = ensureProspectConversionColumns_(context.sheet, context.table.headers);
   const prospectValues = context.sheet.getRange(context.selectedRow, 1, 1, context.sheet.getLastColumn()).getValues()[0];
   const prospect = buildClientProspectFromRow_(prospectValues, prospectHeaders);
   const result = upsertClientRecordFromProspect_(clientSheet, clientTable.headers, prospect, {
-    startDate: startOfDay_(new Date())
+    startDate: startOfDay_(new Date()),
+    status: targetStage === 'Client' ? 'Active' : 'Onboarding'
   });
-
-  setProspectStatusIfHeader_(context.sheet, prospectHeaders, context.selectedRow, 'Client');
-  updateSelectedProspectLastActivity_(context.sheet, prospectHeaders, context.selectedRow);
-  setSelectedProspectClosedDate_(context.sheet, prospectHeaders, context.selectedRow, new Date());
-  logPipelineActivity_(context.ss, prospect.company, 'Client Converted', result.created ? 'Prospect converted to new client record.' : 'Prospect updated existing client record.');
-  logPipelineActivity_(context.ss, prospect.company, result.created ? 'Client Created' : 'Client Updated', result.created ? 'Client record created from won prospect.' : 'Client record updated from won prospect.');
-  const clientValues = clientSheet.getRange(result.rowNumber, 1, 1, clientTable.lastColumn).getValues()[0];
-  syncFollowUpForClient_(context.ss, clientValues, clientTable.headers);
+  const verifiedClient = verifyPersistedClientRecord_(clientSheet, clientTable, result, prospect, targetStage === 'Client' ? 'Active' : 'Onboarding');
+  const clientValues = verifiedClient.values;
   const projectResult = upsertProjectFromClient_(context.ss, buildProjectClientModel_(clientValues, clientTable.headers), {
     status: 'Planning',
     notes: 'Project created from won prospect conversion.'
   });
-  logPipelineActivity_(context.ss, prospect.company, projectResult.created ? 'Project Started' : 'Project Updated', projectResult.created ? 'Project started from client conversion.' : 'Existing project updated from client conversion.');
-  refreshClientWorkspaceForClientRow_(context.ss, clientSheet, clientTable.headers, result.rowNumber, {
-    logOpen: false
+  const verifiedProject = verifyPersistedProjectRecord_(context.ss, projectResult, buildProjectClientModel_(clientValues, clientTable.headers), projectResult.status || 'Planning');
+  if (!result || !result.clientId || !projectResult || !projectResult.projectId || !verifiedClient.verified || !verifiedProject.verified) {
+    setLifecycleOperationMarker_(context, operationKey, 'Reconciliation Required', 'Client or Project verification did not return the required identifiers.');
+    throw new Error('Client and Project prerequisites could not be verified.');
+  }
+  if (targetStage === 'Client') {
+    syncFollowUpForClient_(context.ss, clientValues, clientTable.headers);
+  }
+  refreshClientWorkspaceForClientRow_(context.ss, clientSheet, clientTable.headers, result.rowNumber, { logOpen: false });
+  context.table.headers = prospectHeaders;
+  applyConfirmedProspectTransition_(context, targetStage, settings.activityType || 'Client Converted', settings.activityNotes || 'Client conversion completed successfully.', {
+    lockHeld: !!settings.lockHeld,
+    operationKey: operationKey,
+    extraRowValues: targetStage === 'Client' ? { 'Closed Date': new Date() } : {}
   });
+  if (projectResult.created) {
+    logPipelineActivity_(context.ss, prospect.company, 'Project Started', 'Project created after Improvement Plan acceptance.');
+  }
   refreshSalesOperatingSystem_();
 
   return result;
+}
+
+function verifyPersistedClientRecord_(sheet, table, result, prospect, expectedStatus) {
+  if (!result || !result.clientId || !result.rowNumber) throw new Error('Client upsert did not return a verifiable identifier and row.');
+  const rowCount = Math.max(sheet.getLastRow() - table.headerRow, 0);
+  const rows = rowCount ? sheet.getRange(table.headerRow + 1, 1, rowCount, table.lastColumn).getValues() : [];
+  const expected = {
+    clientId: String(result.clientId), company: normalizeLookupKey_(prospect.company),
+    website: normalizeWebsiteKey_(prospect.website), status: String(expectedStatus || '')
+  };
+  const matches = rows.map(function(values, index) {
+    return { rowNumber: table.headerRow + 1 + index, values: values };
+  }).filter(function(item) {
+    const id = String(getValueByHeader_(item.values, table.headers, 'Client ID') || '');
+    const company = normalizeLookupKey_(getValueByHeader_(item.values, table.headers, 'Company') || getValueByHeader_(item.values, table.headers, 'Client Name'));
+    const website = normalizeWebsiteKey_(getValueByHeader_(item.values, table.headers, 'Website'));
+    return id === expected.clientId || (expected.company && company === expected.company) || (expected.website && website === expected.website);
+  });
+  const evaluation = evaluatePersistedClientMatches_(matches.map(function(item) {
+    return {
+      rowNumber: item.rowNumber,
+      clientId: String(getValueByHeader_(item.values, table.headers, 'Client ID') || ''),
+      company: normalizeLookupKey_(getValueByHeader_(item.values, table.headers, 'Company') || getValueByHeader_(item.values, table.headers, 'Client Name')),
+      website: normalizeWebsiteKey_(getValueByHeader_(item.values, table.headers, 'Website')),
+      status: String(getValueByHeader_(item.values, table.headers, 'Status') || ''), values: item.values
+    };
+  }), expected);
+  if (!evaluation.verified) throw new Error(evaluation.message);
+  return evaluation.match;
+}
+
+function evaluatePersistedClientMatches_(matches, expected) {
+  if (!matches || matches.length === 0) return { verified: false, message: 'Client upsert could not be re-read from the persisted sheet.' };
+  if (matches.length !== 1) return { verified: false, message: `Client lookup is ambiguous; ${matches.length} persisted rows match the expected identity.` };
+  const match = matches[0];
+  if (match.clientId !== expected.clientId || match.company !== expected.company || (expected.website && match.website !== expected.website) || match.status !== expected.status) {
+    return { verified: false, message: 'Persisted Client record does not match the expected ID, company/website linkage, or status.' };
+  }
+  return { verified: true, match: match };
 }
 
 function buildClientProspectFromRow_(rowValues, headers) {
@@ -477,7 +488,7 @@ function upsertClientRecordFromProspect_(sheet, headers, prospect, options) {
   setIfHeader_(rowValues, headers, 'Priority Tier', prospect.priorityTier);
   setIfHeader_(rowValues, headers, 'Contract Value', settings.contractValue || getValueByHeader_(existingValues, headers, 'Contract Value'));
   setIfHeader_(rowValues, headers, 'Client Since', startDate);
-  setIfHeader_(rowValues, headers, 'Status', 'Active');
+  setIfHeader_(rowValues, headers, 'Status', settings.status || 'Active');
   setIfHeader_(rowValues, headers, 'Last Activity', now);
   setIfHeader_(rowValues, headers, 'Notes', firstNonBlank_([prospect.notes, getValueByHeader_(existingValues, headers, 'Notes')]));
   setIfHeader_(rowValues, headers, 'Client', firstNonBlank_([prospect.company, getValueByHeader_(existingValues, headers, 'Client')]));

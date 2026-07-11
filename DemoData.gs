@@ -165,7 +165,7 @@ function buildDemoProspectRecords_() {
       'Audit Outcome': 'Good Fit',
       'Priority Tier': 'B - Good',
       Status: 'Client',
-      'Next Action': 'Start Project',
+      'Next Action': 'Follow Up',
       'Follow-Up Date': addDays_(today, 4),
       'Offer / Service': 'Google Business Optimization',
       Notes: 'A few visibility improvements could make the cafe easier to find in local search.',

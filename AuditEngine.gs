@@ -150,8 +150,7 @@ function generateAuditPackageForContext_(context, prospect) {
 
   setIfHeaderCell_(context.sheet, headers, context.selectedRow, 'Audit Package Generated', 'Yes');
   setIfHeaderCell_(context.sheet, headers, context.selectedRow, 'Audit Package Date', now);
-  setProspectStatusIfHeader_(context.sheet, headers, context.selectedRow, 'Digital Business Assessment Presented');
-  setIfHeaderCell_(context.sheet, headers, context.selectedRow, 'Next Action', 'Generate Improvement Plan');
+  setIfHeaderCell_(context.sheet, headers, context.selectedRow, 'Next Action', 'Present Digital Business Assessment');
   updateSelectedProspectLastActivity_(context.sheet, headers, context.selectedRow);
   logPipelineActivity_(
     context.ss,
@@ -402,7 +401,6 @@ function applyWebsiteAuditToolResults_(context, auditPayload) {
   setIfHeaderCell_(sheet, headers, selectedRow, 'Competitive Position', auditPayload.competitivePosition);
   setIfHeaderCell_(sheet, headers, selectedRow, 'Competitor Summary', auditPayload.competitorSummary);
   setIfHeaderCell_(sheet, headers, selectedRow, 'Audit Source', 'Website Audit Tool');
-  setProspectStatusIfHeader_(sheet, headers, selectedRow, 'Digital Business Assessment Presented');
   updateSelectedProspectLastActivity_(sheet, headers, selectedRow);
   logPipelineActivity_(context.ss, auditPayload.company, 'Website Audit Tool', summary);
 }
@@ -526,7 +524,6 @@ function generateExecutiveSnapshot() {
       'Executive Snapshot Generated',
       'Generated Executive Snapshot.pdf for meeting-focused outreach.'
     );
-    setProspectStatusIfHeader_(context.sheet, context.table.headers, context.selectedRow, 'Executive Snapshot Sent');
     setIfHeaderCell_(context.sheet, context.table.headers, context.selectedRow, 'Next Action', 'Create Outreach Draft');
     updateSelectedProspectLastActivity_(context.sheet, context.table.headers, context.selectedRow);
     refreshSalesOperatingSystem_();
@@ -653,13 +650,12 @@ function buildFullProspectPackageSummary_(prospect, folder, packageResult, gmail
     'Audit Report.pdf: ' + auditReportStatus,
     'Proposal.pdf: ' + proposalStatus,
     'Gmail draft created: ' + (gmailDraftCreated ? 'Yes' : 'No'),
-    'Next Action: Schedule Discovery Meeting'
+    'Next Action: Confirm Executive Snapshot Sent after it is actually sent'
   ].join('\n');
 }
 
 function updateFullPackageProspectFields_(sheet, headers, selectedRow) {
-  setIfHeaderCell_(sheet, headers, selectedRow, 'Status', 'Executive Snapshot Sent');
-  setIfHeaderCell_(sheet, headers, selectedRow, 'Next Action', 'Schedule Discovery Meeting');
+  setIfHeaderCell_(sheet, headers, selectedRow, 'Next Action', 'Confirm Executive Snapshot Sent');
   setIfHeaderCell_(sheet, headers, selectedRow, 'Last Activity', new Date());
   setIfHeaderCell_(sheet, headers, selectedRow, 'Audit Package Generated', 'Yes');
   setIfHeaderCell_(sheet, headers, selectedRow, 'Proposal Generated', 'Yes');
@@ -887,7 +883,6 @@ function runWebsiteAudit() {
   setIfHeaderCell_(context.sheet, context.table.headers, context.selectedRow, 'Notes', audit.notes);
   setIfHeaderCell_(context.sheet, context.table.headers, context.selectedRow, 'Summary', audit.summary);
   setIfHeaderCell_(context.sheet, context.table.headers, context.selectedRow, 'Audit Source', 'Quick Internal Audit');
-  setProspectStatusIfHeader_(context.sheet, context.table.headers, context.selectedRow, 'Digital Business Assessment Presented');
   updateSelectedProspectLastActivity_(context.sheet, context.table.headers, context.selectedRow);
   logPipelineActivity_(context.ss, prospect.company, 'Quick Internal Audit', audit.summary);
   refreshSalesOperatingSystem_();

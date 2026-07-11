@@ -2,6 +2,38 @@
 
 All notable Rogers Holdings OS changes are tracked here.
 
+## [1.0.0-rc] - 2026-07-10
+
+### Fixed
+
+- Separated deliverable generation, preview, audit completion, file creation, and Gmail draft creation from confirmed CRM lifecycle stages.
+- Added guarded lifecycle transitions with clear invalid-jump messages and idempotent repeated confirmations.
+- Replaced ambiguous automatic stage actions with explicit confirmations for sent, presented, accepted, onboarding, nurture, and lost outcomes.
+- Kept Discovery Meeting Scheduled tied to successful Google Calendar event creation.
+- Added attributable Activity Feed logging and validation for manual CRM Status edits.
+- Updated Next Action, follow-up, and dashboard behavior to reflect confirmed events only.
+- Added document locking and durable reconciliation markers for lifecycle transitions, manual edits, Calendar scheduling, and client/project conversion.
+- Added Calendar operation-key and event-ID reconciliation so ambiguous or repeated scheduling attempts do not blindly send another invitation.
+- Made repeated lifecycle confirmations repair incomplete downstream work instead of exiting without reconciliation.
+- Enforced the approved strict transition matrix, including explicit Nurture re-entry and terminal Project Started, Client, and Lost rules.
+- Hardened manual Status edits against missing prior values, unsupported multi-cell changes, concurrency, and unverifiable writes.
+- Added a read-only legacy lifecycle audit and removed silent artifact-label fallback to Lead Found.
+- Remapped legacy Convert to Client and Start Project Next Actions to the explicit Improvement Plan outcome confirmation.
+- Made unsupported manual Status edits fail closed by restoring verified prior values or clearing only an unverifiable Status cell before marking reconciliation.
+- Bound Calendar reconciliation to prospect, exact start/end time, calendar identity, operation evidence, and event ID; conflicting or different-time events now fail closed.
+- Added persisted Client and Project re-read verification, including duplicate and ambiguous identity rejection, before CRM Status advancement.
+- Made operation-key fallback identity row-specific when Prospect ID is unavailable.
+
+### Tests
+
+- Added deterministic transition-matrix, lifecycle normalization, artifact-label preservation, and legacy Next Action compatibility tests via `npm run test:lifecycle`.
+- Added deterministic manual restoration, Calendar identity/conflict, persisted Client/Project verification, ambiguity, and partial-retry regression coverage.
+
+### Validation
+
+- `npm run status` passed.
+- `npm run validate` passed for 23 authoritative Apps Script files.
+
 ## [1.0.0-rc] - 2026-06-25
 
 ### Added

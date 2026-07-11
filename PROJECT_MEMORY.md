@@ -70,6 +70,12 @@ Business lifecycle:
 Lead Found -> Executive Snapshot Sent -> Discovery Meeting Scheduled -> Digital Business Assessment Presented -> Improvement Plan Sent -> Project Started -> Client
 ```
 
+CRM Status is a confirmed-event field. Generating or previewing artifacts, completing an audit, creating files, and creating Gmail drafts do not advance it. Operators use explicit confirmation actions for sent/presented/accepted/onboarded outcomes; successful Calendar event creation may confirm Discovery Meeting Scheduled. Invalid stage jumps are blocked, and repeated confirmations are idempotent.
+
+Lifecycle writes use document locking, durable operation markers, and retry reconciliation. The final prospect-row commit includes Status, Next Action, Last Activity, confirmation time, and operation evidence. Calendar retries reconcile a stored operation key/event ID before any insertion. Client/project retries upsert prerequisites and repair incomplete follow-up, Activity Feed, Closed Date, and workspace effects. Nurture can re-enter only through the explicit reactivation action at Lead Found; Project Started can move only to Client.
+
+Manual Status edits fail closed when prior confirmed state cannot be proven: the handler restores a verified snapshot or clears only the Status cell and marks reconciliation. Calendar event reuse requires the same prospect-bound operation key and exact start/end time. Client and Project prerequisite records are re-read and identity/status/linkage verified before CRM Status advances. These controls still require live Apps Script and disposable-workbook acceptance testing before production deployment.
+
 ## Important Public Entry Points
 
 Menu and user-facing workflows include:

@@ -126,6 +126,44 @@ function repairInvalidDropdownValues() {
   );
 }
 
+function auditLegacyLifecycleValues() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(MASTER_PROSPECT_SHEET);
+  if (!sheet) {
+    SpreadsheetApp.getUi().alert('Rogers Holdings OS', 'Master Prospect Tracker not found.', SpreadsheetApp.getUi().ButtonSet.OK);
+    return [];
+  }
+  const table = getHeaderTable_(sheet, ['Company', 'Status']);
+  const findings = inventoryLegacyLifecycleValues_(sheet, table);
+  const rows = findings.length
+    ? findings.map(function(item) { return `<tr><td>${item.row}</td><td>${escapeHtml_(item.company)}</td><td>${escapeHtml_(item.field)}</td><td>${escapeHtml_(item.value)}</td></tr>`; }).join('')
+    : '<tr><td colspan="4">No unrecognized lifecycle values found.</td></tr>';
+  const html = HtmlService.createHtmlOutput(
+    '<div style="font-family:Arial,sans-serif;padding:16px"><h2>Legacy Lifecycle Audit</h2>' +
+    '<p>This report is read-only. Artifact labels are not converted into confirmed customer events.</p>' +
+    '<table style="border-collapse:collapse;width:100%"><tr><th>Row</th><th>Company</th><th>Field</th><th>Unrecognized value</th></tr>' + rows + '</table></div>'
+  ).setWidth(720).setHeight(520);
+  SpreadsheetApp.getUi().showModalDialog(html, 'Rogers Holdings OS');
+  return findings;
+}
+
+function inventoryLegacyLifecycleValues_(sheet, table) {
+  const rowCount = Math.max(sheet.getLastRow() - table.headerRow, 0);
+  if (!rowCount) return [];
+  const values = sheet.getRange(table.headerRow + 1, 1, rowCount, table.lastColumn).getValues();
+  const allowedNextActions = PROSPECT_DROPDOWN_DEFAULTS['Next Action'];
+  const findings = [];
+  values.forEach(function(row, index) {
+    const company = String(getValueByHeader_(row, table.headers, 'Company') || '').trim();
+    if (!company) return;
+    const status = String(getValueByHeader_(row, table.headers, 'Status') || '').trim();
+    const nextAction = String(getValueByHeader_(row, table.headers, 'Next Action') || '').trim();
+    if (status && PIPELINE_STAGES.indexOf(status) === -1) findings.push({ row: table.headerRow + 1 + index, company: company, field: 'Status', value: status });
+    if (nextAction && !inferAllowedDropdownValue_(allowedNextActions, nextAction)) findings.push({ row: table.headerRow + 1 + index, company: company, field: 'Next Action', value: nextAction });
+  });
+  return findings;
+}
+
 function repairInvalidDropdownValuesForSheet_(sheet, table) {
   const headers = table.headers;
   const dataStartRow = table.headerRow + 1;
@@ -583,6 +621,25 @@ function syncFollowUpForProspectRow_(sheet, headers, selectedRow, status) {
     return;
   }
 
+  let followUp = null;
+  let existingExpectedFollowUp = null;
+  if (rule && !rule.archive) {
+    const dueDate = getFollowUpDueDateForRule_(rule, values, headers);
+    followUp = {
+      company: company,
+      contact: getValueByHeader_(values, headers, 'Contact'),
+      email: getValueByHeader_(values, headers, 'Email'),
+      relatedProspectId: getValueByHeader_(values, headers, 'Prospect ID') || `MPT-${selectedRow}`,
+      relatedClientId: '', currentStatus: normalizedStatus, followUpType: rule.type, dueDate: dueDate,
+      priority: getValueByHeader_(values, headers, 'Priority Tier') || rule.priority,
+      assignedTo: getRogersContactInfo_().name, notes: rule.notes
+    };
+    const followUpSheet = getOrCreateFollowUpsSheet_(ss);
+    const followUpTable = ensureFollowUpColumns_(followUpSheet);
+    existingExpectedFollowUp = findOpenFollowUp_(followUpSheet, followUpTable.headers, followUp);
+    if (existingExpectedFollowUp) return;
+  }
+
   const completedCount = completeOpenFollowUpsForCompany_(ss, company);
   if (completedCount) {
     logPipelineActivity_(ss, company, 'Follow-Up Completed', `${completedCount} previous open follow-up task(s) completed after status changed to ${normalizedStatus}.`);
@@ -594,22 +651,9 @@ function syncFollowUpForProspectRow_(sheet, headers, selectedRow, status) {
     return;
   }
 
-  const dueDate = getFollowUpDueDateForRule_(rule, values, headers);
-  const result = upsertOpenFollowUp_(ss, {
-    company: company,
-    contact: getValueByHeader_(values, headers, 'Contact'),
-    email: getValueByHeader_(values, headers, 'Email'),
-    relatedProspectId: getValueByHeader_(values, headers, 'Prospect ID') || `MPT-${selectedRow}`,
-    relatedClientId: '',
-    currentStatus: normalizedStatus,
-    followUpType: rule.type,
-    dueDate: dueDate,
-    priority: getValueByHeader_(values, headers, 'Priority Tier') || rule.priority,
-    assignedTo: getRogersContactInfo_().name,
-    notes: rule.notes
-  });
+  const result = upsertOpenFollowUp_(ss, followUp);
 
-  logPipelineActivity_(ss, company, result.created ? 'Follow-Up Created' : 'Follow-Up Updated', `${rule.type} due ${formatDisplayDate_(dueDate)}.`);
+  logPipelineActivity_(ss, company, result.created ? 'Follow-Up Created' : 'Follow-Up Updated', `${rule.type} due ${formatDisplayDate_(followUp.dueDate)}.`);
 }
 
 function syncFollowUpForClient_(ss, clientValues, clientHeaders) {
@@ -622,7 +666,7 @@ function syncFollowUpForClient_(ss, clientValues, clientHeaders) {
   }
 
   const dueDate = startOfDay_(new Date());
-  const result = upsertOpenFollowUp_(ss, {
+  const followUp = {
     company: company,
     contact: getValueByHeader_(clientValues, clientHeaders, 'Contact'),
     email: getValueByHeader_(clientValues, clientHeaders, 'Email'),
@@ -634,7 +678,11 @@ function syncFollowUpForClient_(ss, clientValues, clientHeaders) {
     priority: 'A - Hot',
     assignedTo: getRogersContactInfo_().name,
     notes: 'Welcome client and confirm onboarding next steps.'
-  });
+  };
+  const followUpSheet = getOrCreateFollowUpsSheet_(ss);
+  const followUpTable = ensureFollowUpColumns_(followUpSheet);
+  if (findOpenFollowUp_(followUpSheet, followUpTable.headers, followUp)) return;
+  const result = upsertOpenFollowUp_(ss, followUp);
 
   logPipelineActivity_(ss, company, result.created ? 'Follow-Up Created' : 'Follow-Up Updated', `Client Welcome Task due ${formatDisplayDate_(dueDate)}.`);
 }
@@ -1143,8 +1191,56 @@ function upsertProjectFromClient_(ss, client, options) {
     created: !existing,
     updated: !!existing,
     rowNumber: targetRow,
-    projectId: projectId
+    projectId: projectId,
+    status: status
   };
+}
+
+function verifyPersistedProjectRecord_(ss, result, client, expectedStatus) {
+  if (!result || !result.projectId || !result.rowNumber) throw new Error('Project upsert did not return a verifiable identifier and row.');
+  const sheet = getOrCreateProjectsSheet_(ss);
+  const table = ensureProjectColumns_(sheet);
+  const rowCount = Math.max(sheet.getLastRow() - table.headerRow, 0);
+  const rows = rowCount ? sheet.getRange(table.headerRow + 1, 1, rowCount, table.lastColumn).getValues() : [];
+  const expected = {
+    projectId: String(result.projectId), clientId: String(client.clientId || ''),
+    company: normalizeLookupKey_(client.company), service: normalizeLookupKey_(client.service),
+    status: String(expectedStatus || '')
+  };
+  const matches = rows.map(function(values, index) {
+    return { rowNumber: table.headerRow + 1 + index, values: values };
+  }).filter(function(item) {
+    const projectId = String(getValueByHeader_(item.values, table.headers, 'Project ID') || '');
+    const clientId = String(getValueByHeader_(item.values, table.headers, 'Client ID') || '');
+    const company = normalizeLookupKey_(getValueByHeader_(item.values, table.headers, 'Client'));
+    const service = normalizeLookupKey_(getValueByHeader_(item.values, table.headers, 'Service'));
+    const sameLinkage = (expected.clientId && clientId === expected.clientId) || (expected.company && company === expected.company);
+    return projectId === expected.projectId || (sameLinkage && (!expected.service || !service || service === expected.service));
+  });
+  const evaluation = evaluatePersistedProjectMatches_(matches.map(function(item) {
+    return {
+      rowNumber: item.rowNumber,
+      projectId: String(getValueByHeader_(item.values, table.headers, 'Project ID') || ''),
+      clientId: String(getValueByHeader_(item.values, table.headers, 'Client ID') || ''),
+      company: normalizeLookupKey_(getValueByHeader_(item.values, table.headers, 'Client')),
+      service: normalizeLookupKey_(getValueByHeader_(item.values, table.headers, 'Service')),
+      status: String(getValueByHeader_(item.values, table.headers, 'Status') || ''), values: item.values
+    };
+  }), expected);
+  if (!evaluation.verified) throw new Error(evaluation.message);
+  return evaluation.match;
+}
+
+function evaluatePersistedProjectMatches_(matches, expected) {
+  if (!matches || matches.length === 0) return { verified: false, message: 'Project upsert could not be re-read from the persisted sheet.' };
+  if (matches.length !== 1) return { verified: false, message: `Project lookup is ambiguous; ${matches.length} persisted rows match the expected identity.` };
+  const match = matches[0];
+  const linked = expected.clientId ? match.clientId === expected.clientId : match.company === expected.company;
+  const serviceMatches = !expected.service || match.service === expected.service;
+  if (match.projectId !== expected.projectId || !linked || !serviceMatches || match.status !== expected.status) {
+    return { verified: false, message: 'Persisted Project record does not match the expected ID, client linkage, service, or status.' };
+  }
+  return { verified: true, match: match };
 }
 
 function findExistingProject_(sheet, headers, clientId, company, service) {
@@ -1698,28 +1794,7 @@ function runDiscoveryMeetingNextAction_(context) {
 }
 
 function runDefaultNextAction_(context, status) {
-  if (status === 'Follow Up Due') {
-    return promptFollowUpOutcome_(context);
-  }
-
-  if (status === 'Draft Created' || status === 'Email Sent') {
-    return promptScheduleDiscoveryFromNextAction_(context);
-  }
-
-  if (status === 'Audit Complete' || status === 'Audit Package Sent') {
-    return runDiscoveryMeetingNextAction_(context);
-  }
-
-  if (status === 'Proposal Sent') {
-    return promptImprovementPlanOutcome_(context);
-  }
-
-  if (status === 'Won') {
-    return openOrCreateClientFromNextAction_(context);
-  }
-
-  generateExecutiveSnapshot();
-  return `Status "${status}" was not mapped, so Rogers Holdings OS generated the Executive Snapshot.`;
+  throw new Error(`Status "${status}" is not an approved CRM lifecycle stage. Select a valid confirmed stage before running Next Action.`);
 }
 
 function promptReviewGmailDraft_(context) {
@@ -1771,17 +1846,11 @@ function promptFollowUpOutcome_(context) {
     return 'Created a new outreach draft from follow-up outcome.';
   }
   if (outcome === 'assessment') {
-    setProspectStatusIfHeader_(context.sheet, headers, context.selectedRow, 'Digital Business Assessment Presented');
-    setIfHeaderCell_(context.sheet, headers, context.selectedRow, 'Next Action', 'Generate Improvement Plan');
-    updateSelectedProspectLastActivity_(context.sheet, headers, context.selectedRow);
-    logPipelineActivity_(context.ss, company, 'Digital Business Assessment Presented', 'Follow-up outcome marked as Digital Business Assessment Presented.');
+    applyConfirmedProspectTransition_(context, 'Digital Business Assessment Presented', 'Digital Business Assessment Presented', 'Operator confirmed presentation through Follow-Up Outcome.');
     return 'Marked Digital Business Assessment as presented.';
   }
   if (outcome === 'improvement plan' || outcome === 'plan') {
-    setProspectStatusIfHeader_(context.sheet, headers, context.selectedRow, 'Improvement Plan Sent');
-    setIfHeaderCell_(context.sheet, headers, context.selectedRow, 'Next Action', 'Convert to Client');
-    updateSelectedProspectLastActivity_(context.sheet, headers, context.selectedRow);
-    logPipelineActivity_(context.ss, company, 'Improvement Plan Sent', 'Follow-up outcome marked as Improvement Plan Sent.');
+    applyConfirmedProspectTransition_(context, 'Improvement Plan Sent', 'Improvement Plan Sent', 'Operator confirmed sending through Follow-Up Outcome.');
     return 'Marked Improvement Plan as sent.';
   }
   if (outcome === 'discovery' || outcome === 'meeting') {
@@ -1797,10 +1866,7 @@ function promptFollowUpOutcome_(context) {
     return 'Marked prospect as Lost.';
   }
   if (outcome === 'nurture') {
-    setProspectStatusIfHeader_(context.sheet, headers, context.selectedRow, 'Nurture');
-    setIfHeaderCell_(context.sheet, headers, context.selectedRow, 'Next Action', 'Nurture');
-    updateSelectedProspectLastActivity_(context.sheet, headers, context.selectedRow);
-    logPipelineActivity_(context.ss, company, 'Prospect Nurture', 'Follow-up outcome marked as Nurture.');
+    applyConfirmedProspectTransition_(context, 'Nurture', 'Prospect Nurture', 'Operator moved prospect to Nurture through Follow-Up Outcome.');
     return 'Moved prospect to Nurture.';
   }
 
@@ -1847,10 +1913,13 @@ function promptImprovementPlanOutcome_(context) {
 }
 
 function openOrCreateClientFromNextAction_(context) {
-  const result = convertWonProspectToClient_(context);
-  return result.created
-    ? `Created client record ${result.clientId}.`
-    : `Updated existing client record ${result.clientId}.`;
+  const status = normalizePipelineStage_(getValueByHeader_(context.values, context.table.headers, 'Status'));
+  if (status === 'Project Started') {
+    completeClientOnboarding();
+    return 'Opened the explicit Client Onboarding completion confirmation.';
+  }
+  openClientWorkspace();
+  return 'Opened the Client Workspace.';
 }
 
 function archiveLostProspectFromNextAction_(context) {
@@ -1901,47 +1970,269 @@ function refreshNextActionDashboards_() {
   refreshExecutiveDashboard();
 }
 
-function advanceProspectStage() {
-  const context = getSelectedProspectContext_(['Company', 'Status']);
-  if (!context) {
-    return;
+function validateProspectStageTransition_(currentStage, requestedStage, options) {
+  const settings = options || {};
+  const current = normalizePipelineStage_(currentStage) || String(currentStage || '').trim() || 'Lead Found';
+  const requested = normalizePipelineStage_(requestedStage) || String(requestedStage || '').trim();
+  if (PIPELINE_STAGES.indexOf(requested) === -1) {
+    return { allowed: false, idempotent: false, message: `Invalid CRM Status: ${requested || '(blank)'}. Use an approved lifecycle stage.` };
   }
+  if (current === requested) {
+    return { allowed: true, idempotent: true, message: '' };
+  }
+  const allowed = {
+    'Lead Found': ['Executive Snapshot Sent', 'Nurture', 'Lost'],
+    'Executive Snapshot Sent': ['Discovery Meeting Scheduled', 'Nurture', 'Lost'],
+    'Discovery Meeting Scheduled': ['Digital Business Assessment Presented', 'Nurture', 'Lost'],
+    'Digital Business Assessment Presented': ['Improvement Plan Sent', 'Nurture', 'Lost'],
+    'Improvement Plan Sent': ['Project Started', 'Nurture', 'Lost'],
+    'Project Started': ['Client'],
+    'Client': [],
+    'Nurture': settings.allowNurtureReentry ? ['Lead Found'] : [],
+    'Lost': []
+  };
+  if ((allowed[current] || []).indexOf(requested) !== -1) {
+    return { allowed: true, idempotent: false, message: '' };
+  }
+  return {
+    allowed: false,
+    idempotent: false,
+    message: `Invalid CRM lifecycle transition from ${current} to ${requested}. Complete the next confirmed event before advancing.`
+  };
+}
 
-  const currentStage = normalizePipelineStage_(getValueByHeader_(context.values, context.table.headers, 'Status'));
-  const nextStage = getNextPipelineStage_(currentStage);
+function buildLifecycleOperationKey_(context, requestedStage) {
+  const values = context.sheet.getRange(context.selectedRow, 1, 1, context.sheet.getLastColumn()).getValues()[0];
+  const prospectId = getValueByHeader_(values, context.table.headers, 'Prospect ID');
+  const identity = String(prospectId || `${context.sheet.getSheetId()}-ROW-${context.selectedRow}`).trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  return `LIFECYCLE:${identity}:${String(requestedStage || '').toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+}
 
-  setProspectStatus_(context.sheet, context.table.headers, context.selectedRow, nextStage);
-  updateSelectedProspectLastActivity_(context.sheet, context.table.headers, context.selectedRow);
-  logPipelineActivity_(context.ss, context.prospect.company, 'Prospect Stage Advanced', `Advanced prospect stage from ${currentStage || 'Unassigned'} to ${nextStage}.`);
+function ensureLifecycleReconciliationColumns_(context) {
+  const table = ensureSheetColumns_(context.sheet, LIFECYCLE_RECONCILIATION_COLUMNS);
+  context.table.headers = table.headers;
+  context.table.lastColumn = table.lastColumn;
+  return table.headers;
+}
+
+function getLifecycleOperationState_(context) {
+  const headers = ensureLifecycleReconciliationColumns_(context);
+  const values = context.sheet.getRange(context.selectedRow, 1, 1, context.table.lastColumn).getValues()[0];
+  return {
+    key: String(getValueByHeader_(values, headers, 'Lifecycle Operation Key') || ''),
+    state: String(getValueByHeader_(values, headers, 'Lifecycle Operation State') || ''),
+    details: String(getValueByHeader_(values, headers, 'Lifecycle Operation Details') || '')
+  };
+}
+
+function setLifecycleOperationMarker_(context, key, state, details) {
+  const headers = ensureLifecycleReconciliationColumns_(context);
+  setIfHeaderCell_(context.sheet, headers, context.selectedRow, 'Lifecycle Operation Key', key);
+  setIfHeaderCell_(context.sheet, headers, context.selectedRow, 'Lifecycle Operation State', state);
+  setIfHeaderCell_(context.sheet, headers, context.selectedRow, 'Lifecycle Operation Details', details || '');
+}
+
+function markLifecycleReconciliationRequired_(sheet, headers, selectedRow, details) {
+  const table = ensureSheetColumns_(sheet, LIFECYCLE_RECONCILIATION_COLUMNS);
+  setIfHeaderCell_(sheet, table.headers, selectedRow, 'Lifecycle Operation State', 'Reconciliation Required');
+  setIfHeaderCell_(sheet, table.headers, selectedRow, 'Lifecycle Operation Details', details || 'Review this lifecycle operation before continuing.');
+}
+
+function lifecycleStatusSnapshotKey_(sheet, row) {
+  return `CRM_STATUS:${sheet.getSheetId()}:${row}`;
+}
+
+function getLifecycleStatusSnapshot_(sheet, row) {
+  return PropertiesService.getDocumentProperties().getProperty(lifecycleStatusSnapshotKey_(sheet, row)) || '';
+}
+
+function setLifecycleStatusSnapshot_(sheet, row, status) {
+  PropertiesService.getDocumentProperties().setProperty(lifecycleStatusSnapshotKey_(sheet, row), String(status || ''));
+}
+
+function lifecycleActivityExists_(ss, operationKey) {
+  const sheet = ss.getSheetByName(ACTIVITY_FEED_SHEET);
+  if (!sheet || !operationKey) return false;
+  const match = sheet.createTextFinder(`[Operation ${operationKey}]`).matchCase(true).findNext();
+  return !!match;
+}
+
+function reconcileConfirmedProspectTransition_(context, requestedStage, activityType, activityNotes, operationKey) {
+  try {
+    syncFollowUpForProspectRow_(context.sheet, context.table.headers, context.selectedRow, requestedStage);
+    if (!lifecycleActivityExists_(context.ss, operationKey)) {
+      logPipelineActivity_(context.ss, context.prospect.company, activityType, `${activityNotes} [Operation ${operationKey}]`);
+    }
+    setLifecycleOperationMarker_(context, operationKey, 'Complete', `Confirmed ${requestedStage}; follow-up and activity evidence reconciled.`);
+    return { reconciled: true };
+  } catch (error) {
+    const message = error && error.message ? error.message : String(error);
+    setLifecycleOperationMarker_(context, operationKey, 'Reconciliation Required', `CRM Status is ${requestedStage}; downstream reconciliation failed: ${message}`);
+    throw new Error(`CRM Status is ${requestedStage}, but reconciliation is required: ${message}`);
+  }
+}
+
+function commitProspectLifecycleRow_(context, currentStage, requestedStage, operationKey, options) {
+  const settings = options || {};
+  const headers = ensureLifecycleReconciliationColumns_(context);
+  const range = context.sheet.getRange(context.selectedRow, 1, 1, context.table.lastColumn);
+  const before = range.getValues()[0];
+  if (settings.previousStage) setIfHeader_(before, headers, 'Status', currentStage);
+  const after = before.slice();
+  const now = new Date();
+  setIfHeader_(after, headers, 'Status', requestedStage);
+  const nextActions = {
+    'Lead Found': 'Generate Executive Snapshot', 'Executive Snapshot Sent': 'Schedule Discovery Meeting',
+    'Discovery Meeting Scheduled': 'Present Digital Business Assessment', 'Digital Business Assessment Presented': 'Generate Improvement Plan',
+    'Improvement Plan Sent': 'Record Improvement Plan Outcome', 'Project Started': 'Complete Client Onboarding',
+    'Client': 'Follow Up', 'Nurture': 'Follow Up', 'Lost': 'Archived'
+  };
+  setIfHeader_(after, headers, 'Next Action', nextActions[requestedStage] || 'Follow Up');
+  setIfHeader_(after, headers, 'Last Activity', now);
+  setIfHeader_(after, headers, 'Lifecycle Operation Key', operationKey);
+  setIfHeader_(after, headers, 'Lifecycle Operation State', 'Committed; Reconciliation Pending');
+  setIfHeader_(after, headers, 'Lifecycle Operation Details', `Confirmed transition from ${currentStage} to ${requestedStage}.`);
+  setIfHeader_(after, headers, 'Lifecycle Confirmed At', now);
+  Object.keys(settings.extraRowValues || {}).forEach(function(header) {
+    setIfHeader_(after, headers, header, settings.extraRowValues[header]);
+  });
+  try {
+    range.setValues([after]);
+    const persisted = normalizePipelineStage_(context.sheet.getRange(context.selectedRow, headers.Status).getValue());
+    if (persisted !== requestedStage) throw new Error(`Status verification failed; expected ${requestedStage}, found ${persisted || '(blank)'}.`);
+    setLifecycleStatusSnapshot_(context.sheet, context.selectedRow, requestedStage);
+  } catch (error) {
+    let restored = false;
+    try {
+      range.setValues([before]);
+      const restoredStatus = normalizePipelineStage_(context.sheet.getRange(context.selectedRow, headers.Status).getValue()) || String(context.sheet.getRange(context.selectedRow, headers.Status).getValue() || '').trim();
+      restored = restoredStatus === currentStage;
+    } catch (restoreError) {
+      console.error(restoreError);
+    }
+    if (!restored) {
+      markLifecycleReconciliationRequired_(context.sheet, headers, context.selectedRow, `Final lifecycle write failed and prior values could not be verified: ${error && error.message ? error.message : String(error)}`);
+    }
+    throw new Error(restored
+      ? `Lifecycle commit failed; the prior Status ${currentStage} was restored and verified.`
+      : 'Lifecycle commit failed and rollback could not be verified. Reconciliation is required.');
+  }
+}
+
+function setNextActionForConfirmedStage_(sheet, headers, selectedRow, status) {
+  const nextActions = {
+    'Lead Found': 'Generate Executive Snapshot',
+    'Executive Snapshot Sent': 'Schedule Discovery Meeting',
+    'Discovery Meeting Scheduled': 'Present Digital Business Assessment',
+    'Digital Business Assessment Presented': 'Generate Improvement Plan',
+    'Improvement Plan Sent': 'Record Improvement Plan Outcome',
+    'Project Started': 'Complete Client Onboarding',
+    'Client': 'Follow Up',
+    'Nurture': 'Follow Up',
+    'Lost': 'Archived'
+  };
+  setIfHeaderCell_(sheet, headers, selectedRow, 'Next Action', nextActions[status] || 'Follow Up');
+}
+
+function applyConfirmedProspectTransition_(context, requestedStage, activityType, activityNotes, options) {
+  const settings = options || {};
+  let lock = null;
+  if (!settings.lockHeld) {
+    lock = LockService.getDocumentLock();
+    lock.waitLock(30000);
+  }
+  try {
+  const headers = ensureLifecycleReconciliationColumns_(context);
+  const persistedCurrent = normalizePipelineStage_(getValueByHeader_(context.sheet.getRange(context.selectedRow, 1, 1, context.sheet.getLastColumn()).getValues()[0], headers, 'Status')) || 'Lead Found';
+  const current = settings.previousStage || persistedCurrent;
+  const validation = validateProspectStageTransition_(current, requestedStage, settings);
+  if (!validation.allowed) {
+    throw new Error(validation.message);
+  }
+  const operationKey = settings.operationKey || buildLifecycleOperationKey_(context, requestedStage);
+  if (validation.idempotent) {
+    const marker = getLifecycleOperationState_(context);
+    if (marker.key === operationKey && marker.state === 'Complete') return { changed: false, stage: requestedStage, reconciled: true };
+    reconcileConfirmedProspectTransition_(context, requestedStage, activityType, activityNotes, operationKey);
+    return { changed: false, stage: requestedStage, reconciled: true };
+  }
+  commitProspectLifecycleRow_(context, current, requestedStage, operationKey, settings);
+  reconcileConfirmedProspectTransition_(context, requestedStage, activityType, activityNotes, operationKey);
+  return { changed: true, stage: requestedStage, reconciled: true };
+  } finally {
+    if (lock) lock.releaseLock();
+  }
+}
+
+function confirmSelectedProspectTransition_(requestedStage, title, activityType, activityNotes) {
+  const context = getSelectedProspectContext_(['Company', 'Status']);
+  if (!context) return null;
+  const current = normalizePipelineStage_(getValueByHeader_(context.values, context.table.headers, 'Status')) || 'Lead Found';
+  const validation = validateProspectStageTransition_(current, requestedStage);
+  const ui = SpreadsheetApp.getUi();
+  if (!validation.allowed) {
+    ui.alert('Rogers Holdings OS', validation.message, ui.ButtonSet.OK);
+    return null;
+  }
+  const marker = getLifecycleOperationState_(context);
+  if (!validation.idempotent && ui.alert(title, `Confirm the real-world event for ${context.prospect.company}?`, ui.ButtonSet.YES_NO) !== ui.Button.YES) return null;
+  applyConfirmedProspectTransition_(context, requestedStage, activityType, activityNotes);
   refreshSalesOperatingSystem_();
+  ui.alert('Rogers Holdings OS', validation.idempotent
+    ? `${requestedStage} was already confirmed. Reconciliation was checked${marker.state === 'Complete' ? '; no repair was needed.' : ' and incomplete downstream work was repaired.'}`
+    : `CRM Status updated to ${requestedStage}.`, ui.ButtonSet.OK);
+  return context;
+}
 
-  SpreadsheetApp.getUi().alert('Rogers Holdings OS', `Prospect advanced to ${nextStage}.`, SpreadsheetApp.getUi().ButtonSet.OK);
+function confirmExecutiveSnapshotSent() {
+  return confirmSelectedProspectTransition_('Executive Snapshot Sent', 'Confirm Executive Snapshot Sent', 'Executive Snapshot Sent', 'Operator confirmed the Executive Snapshot was sent.');
+}
+
+function confirmAssessmentPresented() {
+  return confirmSelectedProspectTransition_('Digital Business Assessment Presented', 'Confirm Assessment Presented', 'Digital Business Assessment Presented', 'Operator confirmed the assessment was presented.');
+}
+
+function confirmImprovementPlanSent() {
+  return confirmSelectedProspectTransition_('Improvement Plan Sent', 'Confirm Improvement Plan Sent', 'Improvement Plan Sent', 'Operator confirmed the Improvement Plan was sent.');
+}
+
+function moveProspectToNurture() {
+  return confirmSelectedProspectTransition_('Nurture', 'Move to Nurture', 'Prospect Nurture', 'Operator moved the prospect to Nurture.');
+}
+
+function reactivateNurturedProspect() {
+  const context = getSelectedProspectContext_(['Company', 'Status']);
+  if (!context) return null;
+  const current = normalizePipelineStage_(getValueByHeader_(context.values, context.table.headers, 'Status'));
+  const ui = SpreadsheetApp.getUi();
+  if (current !== 'Nurture') {
+    ui.alert('Rogers Holdings OS', 'Only a Nurture prospect can be explicitly reactivated.', ui.ButtonSet.OK);
+    return null;
+  }
+  if (ui.alert('Reactivate Nurtured Prospect', `Confirm ${context.prospect.company} should re-enter the active lifecycle at Lead Found?`, ui.ButtonSet.YES_NO) !== ui.Button.YES) return null;
+  applyConfirmedProspectTransition_(context, 'Lead Found', 'Nurtured Prospect Reactivated', 'Operator explicitly confirmed re-entry at Lead Found.', { allowNurtureReentry: true });
+  refreshSalesOperatingSystem_();
+  return context;
+}
+
+function advanceProspectStage() {
+  SpreadsheetApp.getUi().alert('Rogers Holdings OS', 'Automatic stage advancement is disabled. Use the explicit confirmation action for the real-world event that occurred.', SpreadsheetApp.getUi().ButtonSet.OK);
 }
 
 function markProspectWon() {
-  setSelectedProspectTerminalStage_('Client', 'Client Converted', 'Converted prospect to Client.');
+  recordImprovementPlanAccepted();
 }
 
 function markProspectLost() {
-  setSelectedProspectTerminalStage_('Lost', 'Deal Lost', 'Marked prospect as Lost.');
+  return confirmSelectedProspectTransition_('Lost', 'Mark Lost', 'Deal Lost', 'Operator confirmed the prospect was lost.');
 }
 
 function markEmailSent() {
-  updateSelectedProspectFollowUpStage_(
-    'Email Sent',
-    'Email Sent',
-    'Intro email sent',
-    'Intro email sent'
-  );
+  confirmExecutiveSnapshotSent();
 }
 
 function markFollowUpComplete() {
-  updateSelectedProspectFollowUpStage_(
-    'Follow Up Due',
-    'Follow-Up Completed',
-    'Follow-up completed; next follow-up scheduled',
-    'Follow-up completed'
-  );
+  completeFollowUp();
 }
 
 function updateSelectedProspectFollowUpStage_(status, activityType, activityNotes, successMessage) {
@@ -2053,40 +2344,34 @@ function normalizeProspectStatus_(value, allowedValues) {
   const text = String(value || '').trim();
   const key = normalizeDropdownValue_(text);
   const candidatesByKey = {
-    draft: ['Executive Snapshot Sent'],
-    'draft created': ['Executive Snapshot Sent'],
-    'gmail draft created': ['Executive Snapshot Sent'],
-    'executive snapshot generated': ['Executive Snapshot Sent'],
     'executive snapshot sent': ['Executive Snapshot Sent'],
-    audited: ['Digital Business Assessment Presented'],
-    'audit complete': ['Digital Business Assessment Presented'],
-    'audit completed': ['Digital Business Assessment Presented'],
-    'audit package sent': ['Digital Business Assessment Presented'],
-    'package sent': ['Digital Business Assessment Presented'],
     'digital business assessment presented': ['Digital Business Assessment Presented'],
     discovery: ['Discovery Meeting Scheduled'],
     'discovery scheduled': ['Discovery Meeting Scheduled'],
     'discovery meeting scheduled': ['Discovery Meeting Scheduled'],
-    'proposal sent': ['Improvement Plan Sent'],
-    proposal: ['Improvement Plan Sent'],
     'improvement plan sent': ['Improvement Plan Sent'],
-    'follow up due': ['Nurture'],
-    won: ['Client'],
-    active: ['Client'],
     client: ['Client'],
     'project started': ['Project Started'],
-    archived: ['Lost']
+    nurture: ['Nurture'],
+    lost: ['Lost']
   };
-  return chooseAllowedValue_(
-    approvedProspectDropdownValues_(allowedValues, 'Status'),
-    (candidatesByKey[key] || [text]).concat(['Lead Found']),
-    inferAllowedDropdownValue_(allowedValues, text) || text
-  );
+  const allowed = approvedProspectDropdownValues_(allowedValues, 'Status');
+  const exact = inferAllowedDropdownValue_(allowed, text);
+  if (exact) return exact;
+  const candidates = candidatesByKey[key] || [];
+  for (let index = 0; index < candidates.length; index += 1) {
+    const matched = inferAllowedDropdownValue_(allowed, candidates[index]);
+    if (matched) return matched;
+  }
+  return text;
 }
 
 function normalizeNextAction_(value, allowedValues) {
   const text = String(value || '').trim();
   const key = normalizeDropdownValue_(text);
+  if (key === 'convert to client' || key === 'start project') {
+    return 'Record Improvement Plan Outcome';
+  }
   const candidatesByKey = {
     'generate executive snapshot': ['Generate Executive Snapshot'],
     snapshot: ['Generate Executive Snapshot'],
@@ -2105,8 +2390,6 @@ function normalizeNextAction_(value, allowedValues) {
     'conduct discovery call': ['Present Digital Business Assessment'],
     'present digital business assessment': ['Present Digital Business Assessment'],
     discovery: ['Schedule Discovery Meeting'],
-    'convert to client': ['Convert to Client'],
-    'start project': ['Start Project'],
     'follow-up': ['Follow Up'],
     'follow up': ['Follow Up'],
     archived: ['Nurture', 'Follow Up'],
@@ -3713,27 +3996,6 @@ function normalizeWebsiteKey_(value) {
     .trim();
 }
 
-function setSelectedProspectTerminalStage_(stage, activityType, activityNotes) {
-  const context = getSelectedProspectContext_(['Company', 'Status']);
-  if (!context) {
-    return;
-  }
-
-  setProspectStatus_(context.sheet, context.table.headers, context.selectedRow, stage);
-  updateSelectedProspectLastActivity_(context.sheet, context.table.headers, context.selectedRow);
-  logPipelineActivity_(context.ss, context.prospect.company, activityType, activityNotes);
-  let clientMessage = '';
-  if (normalizePipelineStage_(stage) === 'Client' || stage === 'Won') {
-    const clientResult = convertWonProspectToClient_(context);
-    clientMessage = clientResult.created
-      ? `\n\nClient record created: ${clientResult.clientId}`
-      : `\n\nClient record updated: ${clientResult.clientId}`;
-  }
-  refreshSalesOperatingSystem_();
-
-  SpreadsheetApp.getUi().alert('Rogers Holdings OS', `Prospect marked ${stage}.${clientMessage}`, SpreadsheetApp.getUi().ButtonSet.OK);
-}
-
 function getSelectedProspectContext_(requiredHeaders) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const ui = SpreadsheetApp.getUi();
@@ -3847,18 +4109,8 @@ function getSelectedFollowUpSourceContext_(showAlert) {
 function normalizePipelineStage_(stage) {
   const value = String(stage || '').trim().toLowerCase();
   const aliases = {
-    'audit complete': 'Digital Business Assessment Presented',
-    'audit completed': 'Digital Business Assessment Presented',
-    'audit package sent': 'Digital Business Assessment Presented',
-    'draft created': 'Executive Snapshot Sent',
-    'gmail draft created': 'Executive Snapshot Sent',
-    'email sent': 'Executive Snapshot Sent',
-    'follow up due': 'Nurture',
-    'proposal sent': 'Improvement Plan Sent',
     'discovery scheduled': 'Discovery Meeting Scheduled',
-    'discovery call scheduled': 'Discovery Meeting Scheduled',
-    won: 'Client',
-    active: 'Client'
+    'discovery call scheduled': 'Discovery Meeting Scheduled'
   };
   const normalizedValue = String(aliases[value] || value).toLowerCase();
   const match = PIPELINE_STAGES.filter(function(candidate) {
@@ -3890,8 +4142,17 @@ function setProspectStatus_(sheet, headers, selectedRow, status) {
   }
 
   const normalizedStatus = normalizeProspectDropdownWriteValue_(sheet, headers, 'Status', status);
+  const currentStatus = normalizePipelineStage_(sheet.getRange(selectedRow, headers.Status).getValue()) || 'Lead Found';
+  const validation = validateProspectStageTransition_(currentStatus, normalizedStatus);
+  if (!validation.allowed) {
+    throw new Error(validation.message);
+  }
+  if (validation.idempotent) {
+    return false;
+  }
   sheet.getRange(selectedRow, headers.Status).setValue(normalizedStatus);
   syncFollowUpForProspectRow_(sheet, headers, selectedRow, normalizedStatus);
+  return true;
 }
 
 function setProspectStatusIfHeader_(sheet, headers, selectedRow, status) {
@@ -3900,8 +4161,17 @@ function setProspectStatusIfHeader_(sheet, headers, selectedRow, status) {
   }
 
   const normalizedStatus = normalizeProspectDropdownWriteValue_(sheet, headers, 'Status', status);
+  const currentStatus = normalizePipelineStage_(sheet.getRange(selectedRow, headers.Status).getValue()) || 'Lead Found';
+  const validation = validateProspectStageTransition_(currentStatus, normalizedStatus);
+  if (!validation.allowed) {
+    throw new Error(validation.message);
+  }
+  if (validation.idempotent) {
+    return false;
+  }
   sheet.getRange(selectedRow, headers.Status).setValue(normalizedStatus);
   syncFollowUpForProspectRow_(sheet, headers, selectedRow, normalizedStatus);
+  return true;
 }
 
 function logPipelineActivity_(ss, company, activityType, activityNotes) {
@@ -4017,24 +4287,24 @@ function updatePipelineDashboardMetrics_() {
   const followUpsCompleted = countActivityTypes_(['Follow-Up Completed', 'Follow Up Completed']);
   const discoveryCallsScheduled = countActivityTypes_(['Discovery Meeting Scheduled', 'Discovery Call Scheduled']);
   const auditPackagesGenerated = countActivityTypes_(['Digital Business Assessment Generated', 'Audit Package Generated']);
-  const auditPackagesSent = countActivityTypes_(['Digital Business Assessment Sent', 'Audit Package Sent']);
+  const auditPackagesSent = countActivityTypes_(['Digital Business Assessment Presented']);
   const auditsCompletedToday = countActivityTypesToday_(['Website Audit Tool', 'Website Audit']);
   const packagesGeneratedToday = countActivityTypesToday_(['Digital Business Assessment Generated', 'Audit Package Generated']);
   const clientMetrics = getClientRevenueMetrics_();
   const followUpMetrics = getFollowUpMetrics_();
   const projectMetrics = getProjectMetrics_();
-  const wonDeals = statusCounts.Client || statusCounts.Won || 0;
+  const wonDeals = statusCounts.Client || 0;
   const lostDeals = statusCounts.Lost || 0;
   const decidedDeals = wonDeals + lostDeals;
   const winRate = decidedDeals ? wonDeals / decidedDeals : 0;
   const rows = [
     ['Metric', 'Value', 'Updated At'],
     ['Total Leads', totalLeads, new Date()],
-    ['Digital Business Assessments Presented', statusCounts['Digital Business Assessment Presented'] || statusCounts['Audit Complete'] || 0, new Date()],
+    ['Digital Business Assessments Presented', statusCounts['Digital Business Assessment Presented'] || 0, new Date()],
     ['Audits Completed Today', auditsCompletedToday, new Date()],
-    ['Outreach Drafts Created', statusCounts['Executive Snapshot Sent'] || statusCounts['Draft Created'] || 0, new Date()],
-    ['Emails Sent', statusCounts['Email Sent'] || 0, new Date()],
-    ['Improvement Plans Sent', statusCounts['Improvement Plan Sent'] || statusCounts['Proposal Sent'] || 0, new Date()],
+    ['Outreach Drafts Created', countActivityTypes_(['Outreach Draft Created']), new Date()],
+    ['Executive Snapshots Sent', statusCounts['Executive Snapshot Sent'] || 0, new Date()],
+    ['Improvement Plans Sent', statusCounts['Improvement Plan Sent'] || 0, new Date()],
     ['Clients', wonDeals, new Date()],
     ['Lost Deals', lostDeals, new Date()],
     ['Win Rate %', winRate, new Date()],
@@ -5395,7 +5665,7 @@ function updateExecutiveDashboardClientSummary_() {
   const recentConversions = getRecentClientConversions_();
   const discoveryCallsScheduled = countActivityTypes_(['Discovery Meeting Scheduled', 'Discovery Call Scheduled']);
   const auditPackagesGenerated = countActivityTypes_(['Digital Business Assessment Generated', 'Audit Package Generated']);
-  const auditPackagesSent = countActivityTypes_(['Digital Business Assessment Sent', 'Audit Package Sent']);
+  const auditPackagesSent = countActivityTypes_(['Digital Business Assessment Presented']);
   const output = [
     ['CLIENT SUMMARY', '', ''],
     ['Total Clients', metrics.totalClients, ''],
@@ -5404,7 +5674,7 @@ function updateExecutiveDashboardClientSummary_() {
     ['Revenue', metrics.totalRevenue, ''],
     ['Discovery Meetings Scheduled', discoveryCallsScheduled, ''],
     ['Digital Business Assessments Generated', auditPackagesGenerated, ''],
-    ['Digital Business Assessments Sent', auditPackagesSent, ''],
+    ['Digital Business Assessments Presented', auditPackagesSent, ''],
     ['Recent Conversions', '', '']
   ].concat(recentConversions.map(function(conversion) {
     return [conversion.clientName, conversion.clientSince, conversion.contractValue];

@@ -5,6 +5,7 @@
   "description": "Safe local deployment workflow for Rogers Holdings OS Google Apps Script files.",
   "scripts": {
     "validate": "node scripts/validate.js",
+    "test:lifecycle": "node scripts/test-crm-lifecycle.js",
     "deploy": "node scripts/deploy.js",
     "backup": "node scripts/backup.js",
     "status": "node scripts/status.js"

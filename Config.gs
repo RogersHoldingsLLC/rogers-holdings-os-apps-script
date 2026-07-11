@@ -189,6 +189,16 @@ var PIPELINE_STAGES = [
   'Lost'
 ];
 
+var LIFECYCLE_RECONCILIATION_COLUMNS = [
+  'Lifecycle Operation Key',
+  'Lifecycle Operation State',
+  'Lifecycle Operation Details',
+  'Lifecycle Confirmed At',
+  'Calendar Operation Key',
+  'Calendar Event ID',
+  'Calendar Operation State'
+];
+
 var PIPELINE_STAGE_COLORS = {
   'Lead Found': '#d9d9d9',
   'Executive Snapshot Sent': '#d9d2e9',
@@ -218,13 +228,18 @@ var PROSPECT_DROPDOWN_DEFAULTS = {
   'Next Action': [
     'Generate Executive Snapshot',
     'Create Outreach Draft',
+    'Confirm Executive Snapshot Sent',
     'Schedule Discovery Meeting',
     'Present Digital Business Assessment',
+    'Confirm Assessment Presented',
     'Generate Improvement Plan',
-    'Convert to Client',
-    'Start Project',
+    'Confirm Improvement Plan Sent',
+    'Record Improvement Plan Outcome',
+    'Complete Client Onboarding',
+    'Reactivate Nurtured Prospect',
     'Follow Up',
-    'Nurture'
+    'Nurture',
+    'Archived'
   ],
   'Offer / Service': [
     'Website Audit',
