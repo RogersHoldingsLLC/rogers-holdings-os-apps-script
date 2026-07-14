@@ -6,6 +6,30 @@ All notable Rogers Holdings OS changes are tracked here.
 
 ### Fixed
 
+- Made Apps Script deployment target selection explicit: acceptance and production now have separate deploy/status commands, visible Script IDs, exact confirmations, and no default target.
+- Added production deployment gates for the full release test set, clean working tree, approved branch, backup, and guaranteed restoration of the acceptance `.clasp.json` after either push success or failure.
+
+- Standardized operator-facing Follow-Up terminology and aligned Prospect Workspace actions with canonical workflow language.
+- Replaced Website Audit Tool and Drive raw-error alerts with concise recovery guidance while preserving technical diagnostics in logs.
+- Added action-specific Deliverable Preview progress/success states and consistent asynchronous failure handling.
+- Polished Bulk Prospect Import capitalization, ellipses, loading states, action hierarchy, and completion messaging.
+- Presented business-friendly Health Check names while retaining the existing technical report data and diagnostics.
+
+- Removed a duplicate client-conversion menu entry while preserving the existing conversion workflow entry point.
+- Limited developer-only website audit controls in Prospect Workspace to developer mode so production workspaces present only operator-facing actions.
+- Removed non-persistent Edit and Save controls from deliverable previews so every visible action has a real, durable outcome.
+- Unified Gmail draft reconciliation across Create Outreach Gmail Draft, Send Digital Business Assessment, and Run Full Prospect Package using the current authenticated account, normalized recipient email, and exact normalized subject; one match is refreshed, no match creates one draft, and multiple matches fail safely.
+- Prevented attachment-error fallback from creating a second assessment draft after an ambiguous Gmail result by reconciling the exact recipient/subject before creating the folder-link fallback.
+- Made Gmail Activity Feed events distinguish created drafts from updated drafts and occur only after verified Gmail success.
+- Reconciled canonical `AuditReport.pdf` and legacy `Audit Report.pdf` as one package artifact, trashing every active copy of both names before creating exactly one fresh canonical report and returning per-name removal counts.
+- Made package artifact reconciliation deterministic: repeated generation now leaves exactly one active `AuditReport.pdf`, `Proposal.pdf`, and `Outreach Email Draft.txt` in the resolved package folder and returns explicit replacement/update/duplicate-removal results.
+- Added explicit Audit Source validation for `Website Audit Tool` and `Quick Internal Audit`, repairing inherited Priority Tier validation without changing existing provenance cells.
+- Restricted verified client-facing rendering to exact Website Audit Tool provenance, valid production score/outcome/tier values, and existing PDF narrative; blank, placeholder, inferred, and arbitrary provenance now fail closed with field-specific guidance.
+- Distinguished the Drive artifact `Outreach Email Draft.txt` from a real Gmail draft in Activity Feed events while preserving the existing Gmail workflows.
+- Added an idempotent Master Prospect Tracker schema repair for the required `Audit Source` field, preserving existing columns and values, placing a missing field after `Priority Tier`, and never inferring provenance for legacy audit rows.
+- Separated fresh website-audit acquisition from local Digital Business Assessment rendering so complete, verified prospect audit data no longer requires `WEBSITE_AUDIT_TOOL_URL` to generate package files.
+- Preserved stored screenshot and evidence fields in locally rendered audit reports, blocked Quick Internal Audit placeholders from client-facing rendering, and clarified missing-endpoint errors for fresh audit acquisition.
+- Changed a missing Website Audit Tool endpoint from a platform health failure to an acquisition warning and made Full Prospect Package retries reuse an exact existing Gmail draft instead of creating a duplicate.
 - Separated deliverable generation, preview, audit completion, file creation, and Gmail draft creation from confirmed CRM lifecycle stages.
 - Added guarded lifecycle transitions with clear invalid-jump messages and idempotent repeated confirmations.
 - Replaced ambiguous automatic stage actions with explicit confirmations for sent, presented, accepted, onboarding, nurture, and lost outcomes.
@@ -26,6 +50,10 @@ All notable Rogers Holdings OS changes are tracked here.
 
 ### Tests
 
+- Added deterministic deployment safety coverage for target rejection/selection, dirty-tree and confirmation rejection, configuration restoration after successful and failed pushes, and prevention of implicit production deployment.
+- Expanded deterministic Gmail coverage for first-run creation, exact-match reuse across all three public workflows, ambiguous attachment persistence, single folder-link fallback, multiple-match rejection, and success-evidence ordering.
+- Expanded deterministic audit rendering coverage for Audit Source validation repair, strict provenance eligibility, production field validation, narrative readiness, and Drive-file versus Gmail activity wording.
+- Added deterministic audit acquisition/local rendering, evidence preservation, missing endpoint, placeholder rejection, Gmail draft retry, and Health Check warning coverage via `npm run test:audit-rendering`.
 - Added deterministic transition-matrix, lifecycle normalization, artifact-label preservation, and legacy Next Action compatibility tests via `npm run test:lifecycle`.
 - Added deterministic manual restoration, Calendar identity/conflict, persisted Client/Project verification, ambiguity, and partial-retry regression coverage.
 

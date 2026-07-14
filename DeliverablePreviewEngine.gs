@@ -76,11 +76,8 @@ function renderActionButtons_(config) {
   const gmailAction = settings.gmailAction || 'createOutreachGmailDraft';
   return [
     '<div class="button-row">',
-    '<button class="primary" type="button" onclick="setPreviewMode_()">Preview</button>',
-    `<button type="button" onclick="toggleEditMode_()" ${settings.editable ? '' : 'disabled'}>Edit</button>`,
-    `<button type="button" onclick="runPreviewServerAction_('${escapeHtml_(generatePdfAction)}', 'PDF generation started.')">Generate PDF</button>`,
-    `<button type="button" onclick="runPreviewServerAction_('${escapeHtml_(gmailAction)}', 'Gmail draft creation started.')">Create Gmail Draft</button>`,
-    `<button type="button" onclick="savePreviewEdits_()" ${settings.editable ? '' : 'disabled'}>Save</button>`,
+    `<button class="primary" type="button" onclick="runPreviewServerAction_(this, '${escapeHtml_(generatePdfAction)}', 'Generating PDF…', 'PDF generated successfully.')">Generate PDF</button>`,
+    `<button type="button" onclick="runPreviewServerAction_(this, '${escapeHtml_(gmailAction)}', 'Creating Gmail draft…', 'Gmail draft created successfully.')">Create Gmail Draft</button>`,
     '<button type="button" onclick="google.script.host.close()">Close</button>',
     '</div>'
   ].join('');
@@ -279,13 +276,10 @@ function renderPreviewStyles_() {
 function renderPreviewClientScript_() {
   return [
     '<script>',
-    'var editMode=false;',
-    'function setPreviewMode_(){editMode=false;document.querySelectorAll(".editable-field").forEach(function(el){el.contentEditable="false";});setStatus_("Preview mode");}',
-    'function toggleEditMode_(){editMode=!editMode;document.querySelectorAll(".editable-field").forEach(function(el){el.contentEditable=editMode?"true":"false";});setStatus_(editMode?"Edit mode enabled":"Preview mode");}',
-    'function savePreviewEdits_(){setPreviewMode_();setStatus_("Local edits saved in this preview. Regenerate the deliverable to persist changes.");}',
-    'function runPreviewServerAction_(fn,msg){if(!fn){setStatus_("No action configured for this button.");return;}setStatus_(msg||"Running action...");try{google.script.run.withSuccessHandler(function(){setStatus_("Action complete.");})[fn]();}catch(e){setStatus_("Action could not be started: "+e.message);}}',
+    'function setPreviewButtonsDisabled_(disabled){document.querySelectorAll(".button-row button").forEach(function(button){button.disabled=disabled;});}',
+    'function previewFailureMessage_(error){var detail=error&&error.message?error.message:"";return detail?"Action could not be completed. "+detail:"Action could not be completed. Please try again.";}',
+    'function runPreviewServerAction_(button,fn,pendingMessage,successMessage){if(!fn){setStatus_("This action is not available from this preview.");return;}setPreviewButtonsDisabled_(true);setStatus_(pendingMessage||"Working…");try{google.script.run.withSuccessHandler(function(){setPreviewButtonsDisabled_(false);setStatus_(successMessage||"Action completed successfully.");}).withFailureHandler(function(error){setPreviewButtonsDisabled_(false);setStatus_(previewFailureMessage_(error));})[fn]();}catch(e){setPreviewButtonsDisabled_(false);setStatus_(previewFailureMessage_(e));}}',
     'function setStatus_(message){var el=document.getElementById("previewStatus");if(el){el.textContent=message;}}',
-    'setPreviewMode_();',
     '</script>'
   ].join('');
 }

@@ -39,7 +39,7 @@ Required services:
 - Google Calendar, including Advanced Calendar service for the primary path and `CalendarApp` for fallback testing.
 - Google Drive for folders, text artifacts, PDFs, and client workspace artifacts.
 - PDF generation dependencies used by Apps Script.
-- Website Audit Tool endpoint only when exercising real audit retrieval; use approved non-production inputs.
+- Website Audit Tool endpoint only when exercising fresh real-audit retrieval; use approved non-production inputs. Local assessment/package rendering must succeed without it when the prospect has complete verified audit fields.
 
 ## 1.2 Permissions
 
@@ -99,6 +99,16 @@ Create uniquely named records so searches cannot overlap:
 | Blank workbook fixture | Empty-state dashboard and sheet behavior |
 
 For each synthetic record capture the starting row, Prospect ID, company, email, website, current Status, and expected operation identity.
+
+## 1.5 Audit acquisition and local rendering
+
+- Treat fresh audit acquisition and client-facing deliverable rendering as separate acceptance surfaces.
+- Verified local rendering requires `Audit Source` to equal `Website Audit Tool` exactly; Audit Score to be numeric from 0 through 100; Audit Outcome to equal `Strong Fit`, `Good Fit`, `Needs Nurture`, or `Poor Fit`; Priority Tier to equal `A - Hot`, `B - Good`, or `C - Later`; and Summary or Notes to provide the narrative used by the PDF.
+- Blank, `Quick Internal Audit`, `D - Nurture`, `Authoritative Import`, arbitrary text, the general Source column, and inferred provenance must never qualify for client-facing assessment rendering.
+- Audit Source validation permits only `Website Audit Tool` and `Quick Internal Audit`; blank legacy values remain permitted but unverified. Schema repair must preserve existing cell contents while replacing inherited or incorrect validation.
+- With no endpoint configured, System Health Check must warn that fresh acquisition is blocked without reporting the entire platform unhealthy.
+- With complete verified audit data and no endpoint, Generate Digital Business Assessment and Full Prospect Package must render locally, preserve stored evidence, preserve lifecycle Status, and avoid duplicate active files or Gmail drafts on retry.
+- With missing or placeholder audit data and no endpoint, package generation must fail before client-facing files or Gmail drafts are created and must not mark the package complete.
 
 # 2. CRM Lifecycle
 
@@ -266,16 +276,16 @@ Execute the following matrix. Apply all common assertions in §2.1.
 
 # 5. Gmail Testing
 
-Gmail workflows create drafts; they do not confirm that anything was sent and must not advance lifecycle Status.
+Gmail workflows create drafts; they do not confirm that anything was sent and must not advance lifecycle Status. `Generate Digital Business Assessment` creates `Outreach Email Draft.txt` in Drive and logs `Outreach Draft File Created`; it does not create or claim to create a Gmail draft. Every Gmail-producing workflow reconciles drafts in the current authenticated Gmail account by normalized recipient email and exact normalized subject. One match is refreshed, no match creates one draft, and multiple matches fail safely without creating or updating a draft. Gmail-specific success wording is reserved for a verified Gmail create or update operation.
 
 | ID | Test | Procedure | Expected result | Evidence |
 | --- | --- | --- | --- | --- |
 | GML-01 | Executive Snapshot draft | Create outreach draft for Lead Found | Correct tester recipient, subject/body, company, links/attachments; Status unchanged; Next Action requests explicit sent confirmation | Draft and row |
 | GML-02 | Assessment draft | Run Send Digital Business Assessment | Draft only; correct assessment/proposal attachments or documented link fallback; Status unchanged | Draft, attachments, row |
 | GML-03 | Proposal draft/path | Generate plan and exercise applicable draft workflow | Draft/content identifies Improvement Plan; Status unchanged until explicit sent confirmation | Draft/artifact and row |
-| GML-04 | Regeneration | Repeat draft action | Behavior is intentional and understandable; no lifecycle advancement; record whether draft is updated or a second draft is created | Draft counts and Activity Feed |
+| GML-04 | Regeneration | Repeat Create Outreach Gmail Draft, Send Digital Business Assessment, and Run Full Prospect Package | Each retry refreshes the single exact recipient/subject draft; no second draft and no lifecycle advancement; Activity Feed distinguishes Created from Updated | Draft IDs/counts and Activity Feed |
 | GML-05 | Failed draft | Remove recipient or revoke Gmail permission | No false success, no lifecycle advancement; actionable error; partial draft behavior documented | Error, draft search, row |
-| GML-06 | Duplicate prevention | Retry after ambiguous/partial draft failure | No misleading Activity Feed evidence; any duplicate behavior is identified and accepted or filed as defect | Draft IDs/counts |
+| GML-06 | Duplicate prevention | Retry after ambiguous/partial draft failure; separately seed two exact recipient/subject drafts | A persisted attachment draft is retained without fallback duplication; no persisted draft produces exactly one folder-link fallback; multiple matches fail clearly with no new draft, success flag, or Gmail success activity | Draft IDs/counts, error, flags, Activity Feed |
 | GML-07 | No automatic send | Inspect Sent and tester inbox after draft workflows | No message sent until operator manually sends | Sent/Drafts screenshots |
 
 # 6. PDF Generation

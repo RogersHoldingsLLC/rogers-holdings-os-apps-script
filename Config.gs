@@ -258,6 +258,28 @@ var PROSPECT_DROPDOWN_DEFAULTS = {
   ]
 };
 
+var AUDIT_SOURCE_VALUES = [
+  'Website Audit Tool',
+  'Quick Internal Audit'
+];
+
+var VERIFIED_CLIENT_FACING_AUDIT_SOURCES = [
+  'Website Audit Tool'
+];
+
+var VERIFIED_CLIENT_FACING_AUDIT_OUTCOMES = [
+  'Strong Fit',
+  'Good Fit',
+  'Needs Nurture',
+  'Poor Fit'
+];
+
+var VERIFIED_CLIENT_FACING_PRIORITY_TIERS = [
+  'A - Hot',
+  'B - Good',
+  'C - Later'
+];
+
 var DEMO_COMPANY_NAMES = [
   'Bluegrass Roofing Co',
   'Commonwealth Plumbing',

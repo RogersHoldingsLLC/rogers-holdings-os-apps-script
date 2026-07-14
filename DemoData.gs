@@ -602,7 +602,7 @@ function createDemoCompanyDriveAssets_(companyName, prospect) {
   const internalProspect = demoProspectToInternalProspect_(prospect);
   const proposal = buildProposal_(internalProspect);
   trashLegacyAuditPackageTextFiles_(folder);
-  upsertAuditPackageBlobFile_(folder, 'Audit Report.pdf', buildAuditReportPdfBlob_(internalProspect, { text: buildDemoAuditReportText_(prospect) }));
+  upsertAuditPackageBlobFile_(folder, 'AuditReport.pdf', buildAuditReportPdfBlob_(internalProspect, { text: buildDemoAuditReportText_(prospect) }));
   upsertAuditPackageTextFile_(folder, 'Outreach Email Draft.txt', buildAuditPackageOutreachText_(buildOutreachDrafts_(internalProspect)), MimeType.PLAIN_TEXT);
   upsertAuditPackageBlobFile_(folder, 'Proposal.pdf', buildProposalPdfBlob_(internalProspect, proposal));
   filesCreated += 3;

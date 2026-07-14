@@ -48,7 +48,6 @@ function onOpen(e) {
     .addItem('Refresh Follow-Ups', 'refreshFollowUps');
 
   const clientProjectMenu = ui.createMenu('Clients & Projects')
-    .addItem('Convert Prospect To Client', 'convertToClient')
     .addItem('Convert Prospect to Client', 'convertWonProspectToClient')
     .addItem('Create Project', 'createProject')
     .addItem('Update Project Status', 'updateProjectStatus')

@@ -41,7 +41,7 @@ function main() {
     .sort()
     .forEach((file) => copyIfExists(file, targetDir));
 
-  ['package.json', 'README.md', '.clasp.json', '.claspignore', 'appsscript.json'].forEach((file) => {
+  ['package.json', 'README.md', '.clasp.json', '.clasp.production.json', '.claspignore', 'appsscript.json'].forEach((file) => {
     copyIfExists(file, targetDir);
   });
   copyDirectoryIfExists('scripts', targetDir);

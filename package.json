@@ -6,9 +6,15 @@
   "scripts": {
     "validate": "node scripts/validate.js",
     "test:lifecycle": "node scripts/test-crm-lifecycle.js",
+    "test:audit-rendering": "node scripts/test-audit-rendering.js",
+    "test": "node scripts/test-deploy.js",
     "deploy": "node scripts/deploy.js",
+    "deploy:acceptance": "node scripts/deploy.js acceptance",
+    "deploy:production": "node scripts/deploy.js production",
     "backup": "node scripts/backup.js",
-    "status": "node scripts/status.js"
+    "status": "node scripts/status.js",
+    "status:acceptance": "node scripts/status.js acceptance",
+    "status:production": "node scripts/status.js production"
   },
   "devDependencies": {}
 }

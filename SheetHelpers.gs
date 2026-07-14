@@ -25,6 +25,7 @@ function updateSelectedProspectFollowUpDate_(sheet, headers, selectedRow, daysFr
 function refreshSalesOperatingSystem_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   standardizeMasterProspectTrackerColumns_();
+  ensureMasterProspectAuditSourceColumn_();
   ensureAuditPackageColumns_();
   getOrCreateClientsSheet_(ss);
   getOrCreateClientWorkspaceSheet_(ss);
@@ -43,7 +44,7 @@ function resetTestData() {
   const ui = SpreadsheetApp.getUi();
   const response = ui.alert(
     'Reset Test Data',
-    'This will delete test/prospect/client/follow-up/project/activity data but preserve Rogers Holdings OS structure. Continue?',
+    'This will delete test, prospect, client, Follow-Up, project, and activity data but preserve Rogers Holdings OS structure. Continue?',
     ui.ButtonSet.YES_NO
   );
 
@@ -500,12 +501,12 @@ function createFollowUp() {
     dueDate: dueDate,
     priority: context.priority,
     assignedTo: getRogersContactInfo_().name,
-    notes: 'Manual follow-up created.'
+    notes: 'Manual Follow-Up created.'
   });
 
   logPipelineActivity_(context.ss, context.company, result.created ? 'Follow-Up Created' : 'Follow-Up Updated', `${result.followUpType} due ${formatDisplayDate_(dueDate)}.`);
   refreshSalesOperatingSystem_();
-  ui.alert('Rogers Holdings OS', result.created ? 'Follow-up created.' : 'Existing open follow-up updated.', ui.ButtonSet.OK);
+  ui.alert('Rogers Holdings OS', result.created ? 'Follow-Up created.' : 'Existing open Follow-Up updated.', ui.ButtonSet.OK);
 }
 
 function completeFollowUp() {
@@ -534,13 +535,13 @@ function completeFollowUp() {
   }
 
   if (!completedCount) {
-    ui.alert('Rogers Holdings OS', 'No open follow-ups were found to complete.', ui.ButtonSet.OK);
+    ui.alert('Rogers Holdings OS', 'No open Follow-Ups were found to complete.', ui.ButtonSet.OK);
     return;
   }
 
-  logPipelineActivity_(ss, company, 'Follow-Up Completed', `${completedCount} follow-up task(s) completed.`);
+  logPipelineActivity_(ss, company, 'Follow-Up Completed', `${completedCount} Follow-Up task(s) completed.`);
   refreshSalesOperatingSystem_();
-  ui.alert('Rogers Holdings OS', 'Follow-up completed.', ui.ButtonSet.OK);
+  ui.alert('Rogers Holdings OS', 'Follow-Up completed.', ui.ButtonSet.OK);
 }
 
 function refreshFollowUps() {
@@ -642,11 +643,11 @@ function syncFollowUpForProspectRow_(sheet, headers, selectedRow, status) {
 
   const completedCount = completeOpenFollowUpsForCompany_(ss, company);
   if (completedCount) {
-    logPipelineActivity_(ss, company, 'Follow-Up Completed', `${completedCount} previous open follow-up task(s) completed after status changed to ${normalizedStatus}.`);
+    logPipelineActivity_(ss, company, 'Follow-Up Completed', `${completedCount} previous open Follow-Up task(s) completed after status changed to ${normalizedStatus}.`);
   }
   if (!rule || rule.archive) {
     if (rule && rule.archive) {
-      logPipelineActivity_(ss, company, 'Follow-Up Archived', 'Open follow-ups completed because the record moved to Lost.');
+      logPipelineActivity_(ss, company, 'Follow-Up Archived', 'Open Follow-Ups completed because the record moved to Lost.');
     }
     return;
   }
@@ -693,11 +694,11 @@ function getFollowUpRuleForStatus_(status) {
     'Executive Snapshot Sent': { type: 'Discovery Meeting', days: 3, priority: 'A - Hot', notes: 'Schedule discovery meeting.' },
     'Discovery Meeting Scheduled': { type: 'Discovery Reminder', days: 1, priority: 'A - Hot', notes: 'Reminder one day before discovery meeting.', useDiscoveryDate: true },
     'Digital Business Assessment Presented': { type: 'Improvement Plan', days: 1, priority: 'A - Hot', notes: 'Generate Improvement Plan after assessment review.' },
-    'Improvement Plan Sent': { type: 'Follow-Up', days: 3, priority: 'A - Hot', notes: 'Follow up after Improvement Plan sent.' },
+    'Improvement Plan Sent': { type: 'Follow-Up', days: 3, priority: 'A - Hot', notes: 'Follow-Up after Improvement Plan sent.' },
     'Project Started': { type: 'Project Kickoff', days: 0, priority: 'A - Hot', notes: 'Confirm kickoff details and first project milestone.' },
     'Client': { type: 'Client Welcome Task', days: 0, priority: 'A - Hot', notes: 'Welcome client and confirm onboarding next steps.' },
-    'No Response': { type: 'Follow-Up', days: 7, priority: 'B - Good', notes: 'Follow up after no response.' },
-    'Second No Response': { type: 'Final Follow-Up', days: 14, priority: 'B - Good', notes: 'Send final follow-up.' },
+    'No Response': { type: 'Follow-Up', days: 7, priority: 'B - Good', notes: 'Follow-Up after no response.' },
+    'Second No Response': { type: 'Final Follow-Up', days: 14, priority: 'B - Good', notes: 'Send final Follow-Up.' },
     'Lost': { archive: true }
   };
   return rules[status] || null;
@@ -1821,8 +1822,8 @@ function scheduleNextActionFollowUp_(context) {
   setIfHeaderCell_(context.sheet, headers, context.selectedRow, 'Next Action', 'Follow Up');
   updateSelectedProspectFollowUpDate_(context.sheet, headers, context.selectedRow, 7);
   updateSelectedProspectLastActivity_(context.sheet, headers, context.selectedRow);
-  logPipelineActivity_(context.ss, company, 'Follow-Up Scheduled', 'Follow-up scheduled 7 days after email sent.');
-  return 'Scheduled follow-up for 7 days from today.';
+  logPipelineActivity_(context.ss, company, 'Follow-Up Scheduled', 'Follow-Up scheduled 7 days after email sent.');
+  return 'Scheduled Follow-Up for 7 days from today.';
 }
 
 function promptFollowUpOutcome_(context) {
@@ -1832,18 +1833,18 @@ function promptFollowUpOutcome_(context) {
   const history = buildNextActionFollowUpHistory_(context.ss, company);
   const response = ui.prompt(
     'Follow-Up Outcome',
-    history + '\n\nEnter next outcome: Snapshot, Discovery, Assessment, Improvement Plan, Client, Lost, Nurture, or Follow Up',
+    history + '\n\nEnter next outcome: Snapshot, Discovery, Assessment, Improvement Plan, Client, Lost, Nurture, or Follow-Up',
     ui.ButtonSet.OK_CANCEL
   );
 
   if (response.getSelectedButton() !== ui.Button.OK) {
-    return 'Follow-up history displayed. No outcome was selected.';
+    return 'Follow-Up history displayed. No outcome was selected.';
   }
 
   const outcome = String(response.getResponseText() || '').trim().toLowerCase();
   if (outcome === 'snapshot') {
     createOutreachGmailDraft();
-    return 'Created a new outreach draft from follow-up outcome.';
+    return 'Created a new outreach draft from Follow-Up outcome.';
   }
   if (outcome === 'assessment') {
     applyConfirmedProspectTransition_(context, 'Digital Business Assessment Presented', 'Digital Business Assessment Presented', 'Operator confirmed presentation through Follow-Up Outcome.');
@@ -1871,7 +1872,7 @@ function promptFollowUpOutcome_(context) {
   }
 
   scheduleNextActionFollowUp_(context);
-  return 'Scheduled the next follow-up.';
+  return 'Scheduled the next Follow-Up.';
 }
 
 function promptScheduleDiscoveryFromNextAction_(context) {
@@ -1957,7 +1958,7 @@ function isHeaderMarkedYesForNextAction_(context, header) {
 function buildNextActionFollowUpHistory_(ss, company) {
   const activities = getRecentActivityForCompany_(ss, company, 5);
   if (!activities.length) {
-    return 'No recent follow-up history found.';
+    return 'No recent Follow-Up history found.';
   }
 
   return 'Recent activity:\n' + activities.map(function(activity) {
@@ -2063,7 +2064,7 @@ function reconcileConfirmedProspectTransition_(context, requestedStage, activity
     if (!lifecycleActivityExists_(context.ss, operationKey)) {
       logPipelineActivity_(context.ss, context.prospect.company, activityType, `${activityNotes} [Operation ${operationKey}]`);
     }
-    setLifecycleOperationMarker_(context, operationKey, 'Complete', `Confirmed ${requestedStage}; follow-up and activity evidence reconciled.`);
+    setLifecycleOperationMarker_(context, operationKey, 'Complete', `Confirmed ${requestedStage}; Follow-Up and activity evidence reconciled.`);
     return { reconciled: true };
   } catch (error) {
     const message = error && error.message ? error.message : String(error);
@@ -2528,6 +2529,7 @@ function getDemoProspectHeaders_() {
     'Audit Score',
     'Audit Outcome',
     'Priority Tier',
+    'Audit Source',
     'Status',
     'Next Action',
     'Follow-Up Date',
@@ -2966,7 +2968,7 @@ function clientNextFollowUpSummary_(followUps) {
     return !item.completed;
   })[0];
   if (!next) {
-    return 'No open follow-up scheduled.';
+    return 'No open Follow-Up scheduled.';
   }
   return `${next.type || 'Follow-Up'} due ${formatDisplayDate_(next.dueDate)}`;
 }
@@ -2978,7 +2980,7 @@ function clientLastFollowUpSummary_(followUps) {
     return dateSortValue_(b.completedDate) - dateSortValue_(a.completedDate);
   })[0];
   if (!completed) {
-    return 'No completed follow-up yet.';
+    return 'No completed Follow-Up yet.';
   }
   return `${completed.type || 'Follow-Up'} completed ${formatDisplayDate_(completed.completedDate)}`;
 }
@@ -2989,10 +2991,10 @@ function clientUpcomingTaskRows_(followUps) {
   }).slice(0, 6).map(function(item) {
     return [
       `${item.type || 'Follow-Up'} | ${formatDisplayDate_(item.dueDate)}`,
-      item.notes || item.priority || 'Follow-up task'
+      item.notes || item.priority || 'Follow-Up task'
     ];
   });
-  return rows.length ? rows : [['Upcoming Tasks', 'No open follow-up tasks.']];
+  return rows.length ? rows : [['Upcoming Tasks', 'No open Follow-Up tasks.']];
 }
 
 function openBulkProspectImport() {
@@ -3080,6 +3082,15 @@ function buildBulkProspectImportHtml_() {
             font-weight: 700;
             text-transform: uppercase;
           }
+          button.secondary {
+            border-color: rgba(216, 173, 77, .65);
+            background: transparent;
+            color: #f7f3ea;
+          }
+          button:disabled {
+            cursor: wait;
+            opacity: .55;
+          }
           .result {
             border: 1px solid rgba(184, 135, 40, .45);
             background: #181818;
@@ -3114,14 +3125,14 @@ function buildBulkProspectImportHtml_() {
           <label for="industry">Industry</label>
           <input id="industry" placeholder="Roofing">
 
-          <button onclick="addSingleLine()">Add To Paste Area</button>
+          <button id="addButton" class="secondary" onclick="addSingleLine()">Add to Paste Area</button>
 
           <label for="bulk">Paste Prospects</label>
           <textarea id="bulk" placeholder="Company | Website | City | State | Industry"></textarea>
           <div class="hint">One prospect per line. Format: Company | Website | City | State | Industry</div>
 
-          <button onclick="importProspects()">Import Prospects</button>
-          <div id="result" class="result">Imported: 0\\nSkipped Duplicates: 0\\nErrors: 0</div>
+          <button id="importButton" onclick="importProspects()">Import Prospects</button>
+          <div id="result" class="result">Ready to import prospects.</div>
         </div>
 
         <script>
@@ -3139,18 +3150,31 @@ function buildBulkProspectImportHtml_() {
 
           function importProspects() {
             const result = document.getElementById('result');
-            result.textContent = 'Importing...';
+            const importButton = document.getElementById('importButton');
+            const addButton = document.getElementById('addButton');
+            importButton.disabled = true;
+            addButton.disabled = true;
+            importButton.textContent = 'Importing…';
+            result.textContent = 'Importing prospects…';
             google.script.run
               .withSuccessHandler(function(summary) {
+                importButton.disabled = false;
+                addButton.disabled = false;
+                importButton.textContent = 'Import Prospects';
                 result.textContent = [
-                  'Imported: ' + summary.imported,
-                  'Skipped Duplicates: ' + summary.skippedDuplicates,
-                  'Errors: ' + summary.errors.length,
+                  summary.errors.length ? 'Import completed with items to review.' : 'Prospect import completed successfully.',
+                  '',
+                  'Prospects imported: ' + summary.imported,
+                  'Duplicates skipped: ' + summary.skippedDuplicates,
+                  'Items to review: ' + summary.errors.length,
                   summary.errors.length ? '\\nErrors:\\n- ' + summary.errors.join('\\n- ') : ''
                 ].join('\\n');
               })
               .withFailureHandler(function(error) {
-                result.textContent = error && error.message ? error.message : String(error);
+                importButton.disabled = false;
+                addButton.disabled = false;
+                importButton.textContent = 'Import Prospects';
+                result.textContent = 'The import could not be completed. Review the prospect data and try again.';
               })
               .bulkImportProspects(document.getElementById('bulk').value);
           }
@@ -3376,6 +3400,12 @@ function getRecentActivityForCompany_(ss, company, limit) {
 function buildProspectWorkspaceHtml_(workspace) {
   const prospect = workspace.prospect;
   const client = workspace.client;
+  const developmentActionsHtml = typeof isDeveloperModeEnabled_ === 'function' && isDeveloperModeEnabled_()
+    ? `
+      <button onclick="runAction('workspaceRunRealWebsiteAudit')">Run Real Website Audit</button>
+      <button onclick="runAction('workspaceRunWebsiteAudit')">Quick Internal Audit</button>
+    `
+    : '';
   const activityRows = workspace.activity.length
     ? workspace.activity.map(function(activity) {
       return `
@@ -3521,14 +3551,13 @@ function buildProspectWorkspaceHtml_(workspace) {
           </div>
 
           <div class="actions">
-            <button onclick="runAction('workspaceRunRealWebsiteAudit')">Run Real Website Audit</button>
-            <button onclick="runAction('workspaceRunWebsiteAudit')">Quick Internal Audit</button>
+            ${developmentActionsHtml}
             <button onclick="runAction('workspaceGenerateAuditPackage')">Generate Digital Business Assessment</button>
-            <button onclick="runAction('workspaceCreateGmailDraft')">Create Gmail Draft</button>
+            <button onclick="runAction('workspaceCreateGmailDraft')">Create Outreach Gmail Draft</button>
             <button onclick="runAction('workspaceGenerateProposal')" class="secondary">Generate Improvement Plan</button>
-            <button onclick="runAction('workspaceMarkEmailSent')" class="secondary">Mark Email Sent</button>
-            <button onclick="runAction('workspaceMarkFollowUpComplete')" class="secondary">Mark Follow-Up Complete</button>
-            <button onclick="runAction('workspaceConvertToClient')" class="secondary">Convert To Client</button>
+            <button onclick="runAction('workspaceMarkEmailSent')" class="secondary">Confirm Executive Snapshot Sent</button>
+            <button onclick="runAction('workspaceMarkFollowUpComplete')" class="secondary">Complete Follow-Up</button>
+            <button onclick="runAction('workspaceConvertToClient')" class="secondary">Continue Client Conversion</button>
           </div>
 
           <h2>Company</h2>
@@ -3631,6 +3660,92 @@ function ensureAuditPackageColumns_() {
     'Audit Package Generated',
     'Audit Package Date'
   ]).headers;
+}
+
+function ensureMasterProspectAuditSourceColumn_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(MASTER_PROSPECT_SHEET);
+  if (!sheet) {
+    return {
+      changed: false,
+      error: `Required sheet not found: "${MASTER_PROSPECT_SHEET}".`
+    };
+  }
+
+  const table = getHealthHeaderTable_(sheet);
+  if (table.headers['Audit Source']) {
+    const validationRepaired = ensureAuditSourceColumnValidation_(sheet, table.headerRow, table.headers['Audit Source']);
+    return {
+      changed: false,
+      column: table.headers['Audit Source'],
+      validationRepaired: validationRepaired
+    };
+  }
+
+  if (!table.headers['Priority Tier']) {
+    const appendedTable = ensureSheetColumns_(sheet, ['Audit Source']);
+    const validationRepaired = ensureAuditSourceColumnValidation_(sheet, appendedTable.headerRow, appendedTable.headers['Audit Source']);
+    return {
+      changed: true,
+      column: appendedTable.headers['Audit Source'],
+      appended: true,
+      validationRepaired: validationRepaired
+    };
+  }
+
+  const auditSourceColumn = table.headers['Priority Tier'] + 1;
+  sheet.insertColumnAfter(table.headers['Priority Tier']);
+  sheet.getRange(table.headerRow, auditSourceColumn).setValue('Audit Source');
+  const validationRepaired = ensureAuditSourceColumnValidation_(sheet, table.headerRow, auditSourceColumn);
+  return {
+    changed: true,
+    column: auditSourceColumn,
+    appended: false,
+    validationRepaired: validationRepaired
+  };
+}
+
+function ensureAuditSourceColumnValidation_(sheet, headerRow, column) {
+  const rowCount = Math.max(sheet.getMaxRows() - headerRow, 1);
+  const range = sheet.getRange(headerRow + 1, column, rowCount, 1);
+  const validations = range.getDataValidations();
+  const alreadyApproved = validations.every(function(row) {
+    return isApprovedAuditSourceValidationRule_(row[0]);
+  });
+
+  if (alreadyApproved) {
+    return false;
+  }
+
+  const rule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(AUDIT_SOURCE_VALUES, true)
+    .setAllowInvalid(false)
+    .build();
+  range.setDataValidation(rule);
+  return true;
+}
+
+function isApprovedAuditSourceValidationRule_(rule) {
+  if (!rule || rule.getCriteriaType() !== SpreadsheetApp.DataValidationCriteria.VALUE_IN_LIST) {
+    return false;
+  }
+
+  if (typeof rule.getAllowInvalid === 'function' && rule.getAllowInvalid()) {
+    return false;
+  }
+
+  const criteriaValues = rule.getCriteriaValues();
+  const allowedValues = criteriaValues && criteriaValues[0] || [];
+  if (!criteriaValues || criteriaValues[1] !== true) {
+    return false;
+  }
+  if (allowedValues.length !== AUDIT_SOURCE_VALUES.length) {
+    return false;
+  }
+
+  return AUDIT_SOURCE_VALUES.every(function(value, index) {
+    return allowedValues[index] === value;
+  });
 }
 
 function standardizeMasterProspectTrackerColumns_() {
@@ -4041,7 +4156,7 @@ function getSelectedFollowUpSourceContext_(showAlert) {
   const sheet = ss.getActiveSheet();
   if (!sheet) {
     if (showAlert) {
-      ui.alert('Rogers Holdings OS', 'Select a prospect or client row before creating a follow-up.', ui.ButtonSet.OK);
+      ui.alert('Rogers Holdings OS', 'Select a prospect or client row before creating a Follow-Up.', ui.ButtonSet.OK);
     }
     return null;
   }
@@ -4101,7 +4216,7 @@ function getSelectedFollowUpSourceContext_(showAlert) {
   }
 
   if (showAlert) {
-    ui.alert('Rogers Holdings OS', 'Select a row on Master Prospect Tracker or Clients before creating a follow-up.', ui.ButtonSet.OK);
+    ui.alert('Rogers Holdings OS', 'Select a row on Master Prospect Tracker or Clients before creating a Follow-Up.', ui.ButtonSet.OK);
   }
   return null;
 }
@@ -4302,7 +4417,7 @@ function updatePipelineDashboardMetrics_() {
     ['Total Leads', totalLeads, new Date()],
     ['Digital Business Assessments Presented', statusCounts['Digital Business Assessment Presented'] || 0, new Date()],
     ['Audits Completed Today', auditsCompletedToday, new Date()],
-    ['Outreach Drafts Created', countActivityTypes_(['Outreach Draft Created']), new Date()],
+    ['Outreach Drafts Created', countActivityTypes_(['Outreach Draft File Created', 'Outreach Gmail Draft Created', 'Outreach Draft Created']), new Date()],
     ['Executive Snapshots Sent', statusCounts['Executive Snapshot Sent'] || 0, new Date()],
     ['Improvement Plans Sent', statusCounts['Improvement Plan Sent'] || 0, new Date()],
     ['Clients', wonDeals, new Date()],
@@ -4636,7 +4751,7 @@ function updateFollowUpQueue_(data) {
       item.nextAction || item.followUpType || '',
       item.lastActivity || ''
     ];
-  }) : [['No open follow-ups. Create one from the Follow-Ups menu when needed.', '', '', '', '', '', '']]);
+  }) : [['No open Follow-Ups. Create one from the Follow-Ups menu when needed.', '', '', '', '', '', '']]);
 
   sheet.getRange(34, 1, rows.length, rows[0].length).setValues(rows);
   sheet.getRange(36, 5, Math.max(rows.length - 2, 1), 1).setNumberFormat('yyyy-mm-dd');
@@ -5596,6 +5711,7 @@ function applyMasterProspectColumnWidths_(sheet, headers) {
   setColumnWidthIfHeader_(sheet, headers, 'Audit Score', 95);
   setColumnWidthIfHeader_(sheet, headers, 'Audit Outcome', 230);
   setColumnWidthIfHeader_(sheet, headers, 'Priority Tier', 130);
+  setColumnWidthIfHeader_(sheet, headers, 'Audit Source', 160);
   setColumnWidthIfHeader_(sheet, headers, 'Status', 140);
   setColumnWidthIfHeader_(sheet, headers, 'Next Action', 240);
   setColumnWidthIfHeader_(sheet, headers, 'Follow-Up Date', 130);

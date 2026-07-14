@@ -40,17 +40,22 @@ function completeProspectClientOperation_(targetStage, title, activityType, acti
     lock.waitLock(30000);
     const result = convertWonProspectToClient_(context, { targetStage: targetStage, activityType: activityType, activityNotes: activityNotes, lockHeld: true });
     ui.alert('Rogers Holdings OS', validation.idempotent
-      ? `${targetStage} was already confirmed. Client, project, follow-up, activity, and workspace state were reconciled.\n\nClient ID: ${result.clientId}`
+      ? `${targetStage} was already confirmed. Client, project, Follow-Up, activity, and workspace state were reconciled.\n\nClient ID: ${result.clientId}`
       : `${targetStage} confirmed.\n\nClient ID: ${result.clientId}`, ui.ButtonSet.OK);
     return result;
   } catch (error) {
+    console.error('Client/project Drive operation failed', {
+      company: context.prospect && context.prospect.company,
+      targetStage: targetStage,
+      error: error && error.stack ? error.stack : (error && error.message ? error.message : String(error))
+    });
     try {
       setLifecycleOperationMarker_(context, buildLifecycleOperationKey_(context, targetStage), 'Reconciliation Required', `Client/project operation failed and requires retry or review: ${error && error.message ? error.message : String(error)}`);
     } catch (markerError) {
       console.error(markerError);
     }
     const currentAfterFailure = normalizePipelineStage_(context.sheet.getRange(context.selectedRow, context.table.headers.Status).getValue()) || String(context.sheet.getRange(context.selectedRow, context.table.headers.Status).getValue() || '').trim();
-    ui.alert('Rogers Holdings OS', `Operation did not complete. Current CRM Status: ${currentAfterFailure || '(blank)'}. Review Lifecycle Operation State and Details before retrying.\n\n${error && error.message ? error.message : String(error)}`, ui.ButtonSet.OK);
+    ui.alert('Rogers Holdings OS', `The Drive operation could not be completed. Current CRM Status: ${currentAfterFailure || '(blank)'}. Confirm Drive access, review Lifecycle Operation State and Details, then retry the same action.`, ui.ButtonSet.OK);
     return null;
   } finally {
     lock.releaseLock();
@@ -210,25 +215,29 @@ function getOrCreateAuditPackageFolder_(company) {
 
 function storeAuditPackageFiles_(folder, reportFile, drafts, proposal, prospect) {
   const packageFiles = [];
+  const reconciliationResults = [];
   trashLegacyAuditPackageTextFiles_(folder);
-  packageFiles.push(upsertAuditPackageBlobFile_(
+  packageFiles.push(reconcileAuditReportFile_(
     folder,
-    'Audit Report.pdf',
-    buildAuditReportPdfBlob_(prospect, reportFile)
+    buildAuditReportPdfBlob_(prospect, reportFile),
+    reconciliationResults
   ));
 
   packageFiles.push(upsertAuditPackageTextFile_(
     folder,
     'Outreach Email Draft.txt',
     buildAuditPackageOutreachText_(drafts),
-    MimeType.PLAIN_TEXT
+    MimeType.PLAIN_TEXT,
+    reconciliationResults
   ));
   packageFiles.push(upsertAuditPackageBlobFile_(
     folder,
     'Proposal.pdf',
-    buildProposalPdfBlob_(prospect, proposal)
+    buildProposalPdfBlob_(prospect, proposal),
+    reconciliationResults
   ));
 
+  packageFiles.reconciliationResults = reconciliationResults;
   return packageFiles;
 }
 
@@ -244,28 +253,89 @@ function trashLegacyAuditPackageTextFiles_(folder) {
   });
 }
 
-function upsertAuditPackageTextFile_(folder, fileName, contents, mimeType) {
-  const existingFile = findAuditPackageFileByName_(folder, fileName);
+function upsertAuditPackageTextFile_(folder, fileName, contents, mimeType, reconciliationResults) {
+  const existingFiles = findAllAuditPackageFilesByName_(folder, fileName);
+  const existingFile = existingFiles.length ? existingFiles[0] : null;
   if (existingFile) {
     existingFile.setContent(contents);
     existingFile.setDescription(`Updated by Rogers Holdings OS on ${new Date().toISOString()}`);
+    trashAuditPackageFiles_(existingFiles.slice(1));
+    recordAuditPackageReconciliation_(reconciliationResults, fileName, 'updated', existingFiles.length - 1, 0);
     return existingFile;
   }
 
   const file = folder.createFile(fileName, contents, mimeType);
   file.setDescription(`Created by Rogers Holdings OS on ${new Date().toISOString()}`);
+  recordAuditPackageReconciliation_(reconciliationResults, fileName, 'created', 0, 0);
   return file;
 }
 
-function upsertAuditPackageBlobFile_(folder, fileName, blob) {
-  const existingFile = findAuditPackageFileByName_(folder, fileName);
-  if (existingFile) {
-    existingFile.setTrashed(true);
-  }
+function upsertAuditPackageBlobFile_(folder, fileName, blob, reconciliationResults) {
+  const existingFiles = findAllAuditPackageFilesByName_(folder, fileName);
+  trashAuditPackageFiles_(existingFiles);
 
   const file = folder.createFile(blob.setName(fileName));
-  file.setDescription(`${existingFile ? 'Updated' : 'Created'} by Rogers Holdings OS on ${new Date().toISOString()}`);
+  file.setDescription(`${existingFiles.length ? 'Replaced' : 'Created'} by Rogers Holdings OS on ${new Date().toISOString()}`);
+  recordAuditPackageReconciliation_(
+    reconciliationResults,
+    fileName,
+    existingFiles.length ? 'replaced' : 'created',
+    Math.max(existingFiles.length - 1, 0),
+    existingFiles.length
+  );
   return file;
+}
+
+function reconcileAuditReportFile_(folder, blob, reconciliationResults) {
+  const canonicalFileName = 'AuditReport.pdf';
+  const legacyFileName = 'Audit Report.pdf';
+  const canonicalFiles = findAllAuditPackageFilesByName_(folder, canonicalFileName);
+  const legacyFiles = findAllAuditPackageFilesByName_(folder, legacyFileName);
+  trashAuditPackageFiles_(canonicalFiles.concat(legacyFiles));
+
+  const file = folder.createFile(blob.setName(canonicalFileName));
+  file.setDescription(`${canonicalFiles.length || legacyFiles.length ? 'Replaced' : 'Created'} by Rogers Holdings OS on ${new Date().toISOString()}`);
+  if (reconciliationResults) {
+    reconciliationResults.push({
+      fileName: canonicalFileName,
+      action: canonicalFiles.length || legacyFiles.length ? 'replaced' : 'created',
+      updated: false,
+      replaced: Boolean(canonicalFiles.length || legacyFiles.length),
+      removedDuplicates: Math.max(canonicalFiles.length + legacyFiles.length - 1, 0),
+      removedPrevious: canonicalFiles.length + legacyFiles.length,
+      canonicalCopiesRemoved: canonicalFiles.length,
+      legacyCopiesRemoved: legacyFiles.length,
+      createdFileName: canonicalFileName
+    });
+  }
+  return file;
+}
+
+function findAllAuditPackageFilesByName_(folder, fileName) {
+  const files = folder.getFilesByName(fileName);
+  const matches = [];
+  while (files.hasNext()) {
+    matches.push(files.next());
+  }
+  return matches;
+}
+
+function trashAuditPackageFiles_(files) {
+  files.forEach(function(file) {
+    file.setTrashed(true);
+  });
+}
+
+function recordAuditPackageReconciliation_(results, fileName, action, removedDuplicates, removedPrevious) {
+  if (!results) return;
+  results.push({
+    fileName: fileName,
+    action: action,
+    updated: action === 'updated',
+    replaced: action === 'replaced',
+    removedDuplicates: removedDuplicates,
+    removedPrevious: removedPrevious
+  });
 }
 
 function findAuditPackageFileByName_(folder, fileName) {

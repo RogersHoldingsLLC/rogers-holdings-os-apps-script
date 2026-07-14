@@ -20,7 +20,17 @@ Primary services:
 - Google Calendar
 - Google Drive
 - GitHub/local filesystem
-- Website Audit Tool API
+- Website Audit Tool API (optional acquisition dependency; required only for fresh real-audit retrieval)
+
+## Audit Acquisition and Rendering
+
+V1 separates audit acquisition from deliverable rendering. `runRealWebsiteAudit` requires an approved Website Audit Tool endpoint. `generateAuditPackage` and `runFullProspectPackage` use the same fail-closed local-rendering gate: `Audit Source` must equal `Website Audit Tool` exactly; Audit Score must be numeric from 0 through 100; Audit Outcome must equal `Strong Fit`, `Good Fit`, `Needs Nurture`, or `Poor Fit`; Priority Tier must equal `A - Hot`, `B - Good`, or `C - Later`; and Summary or Notes must supply PDF narrative. Blank, Quick Internal Audit, `D - Nurture`, `Authoritative Import`, arbitrary text, the general Source column, and inferred provenance do not qualify. Stored screenshot and evidence fields flow into the existing PDF renderer. The internal Inspection Engine remains developer-only and is not the production audit acquisition path.
+
+Master Prospect Tracker startup repair ensures the required `Audit Source` header exists without moving an existing column or changing its cells. A missing header is placed immediately after `Priority Tier`, or appended if `Priority Tier` is itself missing so Health Check can report that separate defect. The column receives its own dropdown containing only `Website Audit Tool` and `Quick Internal Audit`; inherited or incorrect validation is replaced without changing existing cell contents. Legacy audit provenance is never inferred: existing values are preserved exactly, blank legacy values remain blank, and invalid legacy values remain visible but blocked from client-facing rendering.
+
+`Generate Digital Business Assessment` creates `AuditReport.pdf`, `Proposal.pdf`, and `Outreach Email Draft.txt` in Drive. Audit-report regeneration treats canonical `AuditReport.pdf` and legacy `Audit Report.pdf` as one logical artifact within the resolved package folder, trashes every active copy of both names, creates one fresh canonical file, and reports canonical removals, legacy removals, and the created filename. Proposal regeneration still replaces exact-name predecessors, while the outreach text draft still updates in place and removes exact-name duplicates. It logs `Outreach Draft File Created` and does not create a Gmail draft. `Create Outreach Gmail Draft`, `Run Full Prospect Package`, and `Send Digital Business Assessment` retain their real Gmail-draft behavior and use Gmail-specific success wording only after Gmail creation or update succeeds.
+
+All Gmail-producing workflows use one exact-match reconciliation rule within the current authenticated Gmail account: recipient email is trimmed and case-normalized, subject is trimmed and then matched exactly, one matching draft is refreshed, no match creates exactly one draft, and multiple matches fail safely without creating or updating another draft. Assessment attachment failures reconcile again before using the folder-link fallback so an ambiguously persisted attachment draft and a fallback draft cannot both be created. Activity Feed events distinguish Gmail drafts created from Gmail drafts updated and are written only after verified Gmail success.
 
 ## Authoritative Source
 
@@ -110,16 +120,20 @@ Do not rename these without updating `Menu.gs` and validating menu targets.
 
 Recent local checks pass:
 
-- `npm run status`
+- `npm run status:acceptance`
+- `npm run status:production`
 - `npm run validate`
 - duplicate function verification
 - menu target verification
 
-Deployment is manual and must be explicitly run with:
+Deployment has no default target. The disposable acceptance project and production project must be selected explicitly:
 
 ```bash
-npm run deploy
+npm run deploy:acceptance
+npm run deploy:production
 ```
+
+Acceptance uses `.clasp.json` and requires `DEPLOY ACCEPTANCE`. Production uses `.clasp.production.json`, requires exact typed `DEPLOY PRODUCTION`, all release checks, a clean tree, and `main` (or an exact branch explicitly approved with `APPROVED_RELEASE_BRANCH`). Production temporarily swaps the clasp configuration only around the push and restores `.clasp.json` after success or failure. Neither workflow uses `--force`.
 
 ## Known Technical Debt
 
@@ -150,3 +164,7 @@ Rogers Holdings OS should feel:
 - Small-business focused
 
 Avoid customer-facing language that sounds internal, robotic, or prospecting-oriented.
+
+V1 operator surfaces use consistent `Follow-Up` terminology, canonical workflow labels, concise recovery guidance, and business-friendly Health Check names. Technical exception detail remains available in logs and the underlying Health Check report rather than being exposed as raw operator copy.
+
+Production UI polish also requires that developer-only audit controls remain behind developer mode, duplicate menu commands are not displayed, and preview dialogs do not present editing or saving controls unless those controls persist changes.

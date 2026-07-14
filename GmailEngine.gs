@@ -62,6 +62,66 @@ function buildOutreachDrafts_(prospect) {
   };
 }
 
+function normalizeGmailDraftRecipient_(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function normalizeGmailDraftSubject_(value) {
+  return String(value || '').trim();
+}
+
+function findExactGmailDraftMatches_(recipient, subject) {
+  const normalizedRecipient = normalizeGmailDraftRecipient_(recipient);
+  const normalizedSubject = normalizeGmailDraftSubject_(subject);
+  return GmailApp.getDrafts().filter(function(draft) {
+    const message = draft.getMessage();
+    return normalizeGmailDraftRecipient_(message.getTo()) === normalizedRecipient &&
+      normalizeGmailDraftSubject_(message.getSubject()) === normalizedSubject;
+  });
+}
+
+function assertUnambiguousGmailDraftMatches_(matches, recipient, subject) {
+  if (matches.length > 1) {
+    throw new Error(`Multiple Gmail drafts match recipient ${String(recipient || '').trim()} and subject "${normalizeGmailDraftSubject_(subject)}" in the current Gmail account. Resolve the duplicate drafts before retrying; no new draft was created.`);
+  }
+}
+
+function reconcileExactGmailDraft_(recipient, subject, body, options) {
+  const matches = findExactGmailDraftMatches_(recipient, subject);
+  assertUnambiguousGmailDraftMatches_(matches, recipient, subject);
+  if (matches.length === 1) {
+    matches[0].update(recipient, subject, body, options || {});
+    return { draft: matches[0], created: false, updated: true };
+  }
+  return { draft: GmailApp.createDraft(recipient, subject, body, options || {}), created: true, updated: false };
+}
+
+function reconcileAfterAmbiguousGmailCreateError_(recipient, subject) {
+  const matches = findExactGmailDraftMatches_(recipient, subject);
+  assertUnambiguousGmailDraftMatches_(matches, recipient, subject);
+  return matches.length === 1
+    ? { draft: matches[0], created: false, updated: false, retainedAfterError: true }
+    : null;
+}
+
+function createOrReconcileAssessmentGmailDraft_(recipient, subject, body, attachments, fallbackBody) {
+  try {
+    const result = reconcileExactGmailDraft_(recipient, subject, body, { attachments: attachments });
+    result.withAttachments = true;
+    return result;
+  } catch (attachmentError) {
+    const persisted = reconcileAfterAmbiguousGmailCreateError_(recipient, subject);
+    if (persisted) {
+      persisted.withAttachments = null;
+      return persisted;
+    }
+    const fallback = reconcileExactGmailDraft_(recipient, subject, fallbackBody);
+    fallback.withAttachments = false;
+    fallback.attachmentError = attachmentError;
+    return fallback;
+  }
+}
+
 function sendAuditPackage() {
   const context = getSelectedProspectContext_([
     'Company'
@@ -129,54 +189,31 @@ function sendAuditPackage() {
     });
     const subject = `Website Improvement Opportunities for ${prospect.company}`;
     const body = buildAuditPackageSendEmailBody_(prospect, folder);
-    let draftCreatedWithAttachments = false;
-
-    try {
-      const attachments = [
-        packageFiles.auditReport.getBlob(),
-        packageFiles.proposalDraft.getBlob()
-      ];
-      console.log('Send Audit Package: attachments prepared', {
-        attachmentCount: attachments.length
-      });
-      console.log('Send Audit Package: Gmail draft attempted with attachments');
-      GmailApp.createDraft(
-        String(prospect.email || '').trim(),
-        subject,
-        body,
-        {
-          attachments: attachments
-        }
-      );
-      draftCreatedWithAttachments = true;
-      console.log('Send Audit Package: Gmail draft created with attachments');
-    } catch (attachmentError) {
-      console.warn(
-        'Send Audit Package: attachment draft failed, attempting draft without attachments: ' +
-        (attachmentError && attachmentError.message ? attachmentError.message : String(attachmentError))
-      );
-      console.log('Send Audit Package: Gmail draft attempted without attachments');
-      GmailApp.createDraft(
-        String(prospect.email || '').trim(),
-        subject,
-        buildAuditPackageSendEmailBody_(prospect, folder, true)
-      );
-      console.log('Send Audit Package: Gmail draft created without attachments');
-    }
+    const attachments = [packageFiles.auditReport.getBlob(), packageFiles.proposalDraft.getBlob()];
+    console.log('Send Audit Package: attachments prepared', { attachmentCount: attachments.length });
+    const gmailDraftResult = createOrReconcileAssessmentGmailDraft_(
+      String(prospect.email || '').trim(), subject, body, attachments,
+      buildAuditPackageSendEmailBody_(prospect, folder, true)
+    );
+    const draftActivityType = gmailDraftResult.created
+      ? 'Digital Business Assessment Gmail Draft Created'
+      : 'Digital Business Assessment Gmail Draft Updated';
 
     setIfHeaderCell_(context.sheet, context.table.headers, context.selectedRow, 'Next Action', 'Present Digital Business Assessment');
     updateSelectedProspectLastActivity_(context.sheet, context.table.headers, context.selectedRow);
     logPipelineActivity_(
       context.ss,
       prospect.company,
-      'Digital Business Assessment Gmail Draft Created',
-      draftCreatedWithAttachments
-        ? 'Digital Business Assessment Gmail draft created with assessment PDF and Improvement Plan PDF attached.'
-        : 'Digital Business Assessment Gmail draft created without attachments; Drive folder link included due to attachment failure.'
+      draftActivityType,
+      gmailDraftResult.withAttachments === true
+        ? `${gmailDraftResult.created ? 'Created' : gmailDraftResult.updated ? 'Updated' : 'Retained'} Digital Business Assessment Gmail draft with assessment PDF and Improvement Plan PDF attached.`
+        : gmailDraftResult.withAttachments === false
+          ? `${gmailDraftResult.created ? 'Created' : 'Updated'} Digital Business Assessment Gmail draft without attachments; Drive folder link included due to attachment failure.`
+          : 'Retained the single matching Digital Business Assessment Gmail draft after an ambiguous attachment operation; no fallback duplicate was created.'
     );
     refreshSalesOperatingSystem_();
 
-    ui.alert('Rogers Holdings OS', 'Digital Business Assessment Gmail Draft Created', ui.ButtonSet.OK);
+    ui.alert('Rogers Holdings OS', draftActivityType, ui.ButtonSet.OK);
   } catch (error) {
     ui.alert(
       'Rogers Holdings OS',
@@ -191,7 +228,8 @@ function getRequiredAuditPackageFiles_(folder, prospect) {
     const companyKey = normalizeLookupKey_(prospect.company);
     const fileKey = normalizeLookupKey_(fileName);
     const isPdf = /\.pdf$/i.test(fileName);
-    return fileName === 'Audit Report.pdf' ||
+    return fileName === 'AuditReport.pdf' ||
+      fileName === 'Audit Report.pdf' ||
       (fileName.indexOf('Audit Report') === 0 && isPdf) ||
       (companyKey && fileKey.indexOf(companyKey) !== -1 && fileName.indexOf('Report') !== -1 && isPdf);
   });
@@ -200,7 +238,7 @@ function getRequiredAuditPackageFiles_(folder, prospect) {
   const missing = [];
 
   if (!auditReport) {
-    missing.push('Audit Report.pdf');
+    missing.push('AuditReport.pdf');
   }
   if (!outreachDraft) {
     missing.push('Outreach Email Draft');
@@ -347,8 +385,9 @@ function createOutreachGmailDraft() {
   const drafts = buildOutreachDrafts_(prospect);
   const recipient = String(prospect.email || '').trim();
 
+  let gmailDraftResult = null;
   try {
-    GmailApp.createDraft(recipient, drafts.subject, drafts.initialEmail);
+    gmailDraftResult = reconcileExactGmailDraft_(recipient, drafts.subject, drafts.initialEmail);
   } catch (error) {
     if (!recipient) {
       ui.alert(
@@ -361,7 +400,7 @@ function createOutreachGmailDraft() {
     throw error;
   }
 
-  logOutreachGmailDraftCreated_(ss, prospect, drafts, recipient);
+  logOutreachGmailDraftReconciled_(ss, prospect, drafts, recipient, gmailDraftResult);
   setIfHeaderCell_(sheet, table.headers, selectedRow, 'Next Action', 'Confirm Executive Snapshot Sent');
   updateSelectedProspectLastActivity_(sheet, table.headers, selectedRow);
   refreshSalesOperatingSystem_();
@@ -384,7 +423,7 @@ function requiredProspectFieldsMissing_(prospect, fieldPairs) {
     });
 }
 
-function logOutreachGmailDraftCreated_(ss, prospect, drafts, recipient) {
+function logOutreachGmailDraftReconciled_(ss, prospect, drafts, recipient, result) {
   const sheet = getRequiredSheet_(ss, ACTIVITY_FEED_SHEET);
   const table = getHeaderTable_(sheet, [
     'Date',
@@ -397,8 +436,9 @@ function logOutreachGmailDraftCreated_(ss, prospect, drafts, recipient) {
   const rowValues = new Array(table.lastColumn).fill('');
   setIfHeader_(rowValues, table.headers, 'Date', new Date());
   setIfHeader_(rowValues, table.headers, 'Company', prospect.company);
-  setIfHeader_(rowValues, table.headers, 'Activity Type', 'Outreach Draft Created');
-  setIfHeader_(rowValues, table.headers, 'Activity Notes', 'Created outreach Gmail draft. Subject: ' + drafts.subject + '.' + recipientNote);
+  const action = result && result.created ? 'Created' : 'Updated';
+  setIfHeader_(rowValues, table.headers, 'Activity Type', `Outreach Gmail Draft ${action}`);
+  setIfHeader_(rowValues, table.headers, 'Activity Notes', `${action} outreach Gmail draft. Subject: ${drafts.subject}.${recipientNote}`);
   setIfHeader_(rowValues, table.headers, 'Next Action', 'Schedule Discovery Meeting');
 
   const targetRow = Math.max(sheet.getLastRow() + 1, table.headerRow + 1);

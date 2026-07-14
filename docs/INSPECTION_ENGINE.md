@@ -11,6 +11,7 @@ The Inspection Engine separates inspection from report generation.
 Current state:
 
 - Existing audit workflows still produce audit data and PDFs the same way.
+- V1 separates acquisition from rendering: the approved Website Audit Tool endpoint is used only to acquire fresh real-audit data, while complete verified prospect audit data is rendered locally by the existing PDF engine.
 - `PdfEngine.gs` remains the presentation layer.
 - `InspectionEngine.gs` introduces reusable objects and helpers for future structured inspections.
 - `InspectionOrchestrator.gs` provides the central `runInspection(url, options)` entrypoint for coordinating inspectors.
@@ -38,6 +39,8 @@ flowchart LR
 ```
 
 The first version is intentionally non-invasive. No current workflow calls the Inspection Engine yet.
+
+The internal Inspection Engine is not a fallback for a missing Website Audit Tool endpoint. Quick Internal Audit and developer-playground results are not verified client-facing audit data. Production assessment/package rendering may reuse complete verified fields and stored evidence already present on the prospect row, but it does not invoke this Inspection Engine or invent missing evidence.
 
 ## Website Fetch Engine
 

@@ -100,7 +100,8 @@ clasp login
 ### Check project status
 
 ```bash
-npm run status
+npm run status:acceptance
+npm run status:production
 ```
 
 ### Validate source
@@ -133,15 +134,21 @@ backups/rogers-os-local-<timestamp>/
 ### Deploy
 
 ```bash
-npm run deploy
+npm run deploy:acceptance
+npm run deploy:production
 ```
 
-Deployment flow:
+`.clasp.json` always identifies the disposable acceptance project. `.clasp.production.json` identifies production. There is no default deployment target: `npm run deploy` rejects a missing target.
 
-1. Run validation.
-2. Create a local backup.
-3. Confirm `clasp` and `.clasp.json`.
-4. Run `clasp push`.
+Acceptance deployment displays the acceptance Script ID and requires the exact confirmation `DEPLOY ACCEPTANCE`, then validates, backs up, and pushes with `.clasp.json`.
+
+Production deployment displays the production Script ID and requires the exact confirmation `DEPLOY PRODUCTION`. It then requires a clean working tree and the `main` branch, runs validation, lifecycle tests, audit-rendering tests, and `git diff --check`, and creates a backup. The production configuration is installed only for the duration of `clasp push`; the original `.clasp.json` is restored whether the push succeeds or fails. The workflow never adds `--force`.
+
+To deploy from an intentional release branch, approve that exact current branch for one command:
+
+```bash
+APPROVED_RELEASE_BRANCH=release/v1.0 npm run deploy:production
+```
 
 Do not deploy unless validation passes.
 
@@ -159,12 +166,12 @@ Do not deploy unless validation passes.
 
 ## Required Script Properties
 
-Common required or recommended Apps Script properties:
+Common optional or recommended Apps Script properties:
 
-- `WEBSITE_AUDIT_TOOL_URL` or `WEBSITE_AUDIT_TOOL_ENDPOINT`
+- `WEBSITE_AUDIT_TOOL_URL` or `WEBSITE_AUDIT_TOOL_ENDPOINT` — required only to acquire fresh real-audit data from the approved Website Audit Tool
 - `BRAND_ASSET_FOLDER_ID` or `ROGERS_BRAND_ASSET_FOLDER_ID`
 
-Health Check reports missing configuration and service access issues.
+Audit acquisition and deliverable rendering are separate. Digital Business Assessment and Full Prospect Package rendering use the local PDF engine when the selected prospect already has Audit Score, Audit Outcome, Priority Tier, and a non-placeholder Audit Source. Existing screenshot and evidence fields are reused; no evidence is invented. Quick Internal Audit data is not eligible for client-facing rendering. Health Check reports a missing Website Audit Tool endpoint as a warning that blocks fresh audit acquisition, not as a platform-wide failure.
 
 ## Health Check
 
