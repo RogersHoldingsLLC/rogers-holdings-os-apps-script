@@ -535,13 +535,13 @@ function completeFollowUp() {
   }
 
   if (!completedCount) {
-    ui.alert('Rogers Holdings OS', 'No open Follow-Ups were found to complete.', ui.ButtonSet.OK);
+    ui.alert('No Open Follow-Ups', 'There are no open Follow-Ups for the selected record. No changes were made.', ui.ButtonSet.OK);
     return;
   }
 
   logPipelineActivity_(ss, company, 'Follow-Up Completed', `${completedCount} Follow-Up task(s) completed.`);
   refreshSalesOperatingSystem_();
-  ui.alert('Rogers Holdings OS', 'Follow-Up completed.', ui.ButtonSet.OK);
+  ui.alert('Follow-Up Complete', 'The Follow-Up has been completed and the activity record is up to date.', ui.ButtonSet.OK);
 }
 
 function refreshFollowUps() {
@@ -1055,7 +1055,7 @@ function completeProject() {
   logPipelineActivity_(context.ss, context.company, 'Project Completed', 'Project marked completed.');
   logPipelineActivity_(context.ss, context.company, 'Deliverable Completed', getProjectDeliverableActivityNotes_(context.values, context.headers));
   refreshSalesOperatingSystem_();
-  SpreadsheetApp.getUi().alert('Rogers Holdings OS', 'Project completed.', SpreadsheetApp.getUi().ButtonSet.OK);
+  SpreadsheetApp.getUi().alert('Project Complete', 'The project has been marked complete and the activity record is up to date.', SpreadsheetApp.getUi().ButtonSet.OK);
 }
 
 function refreshProjects() {
@@ -1958,7 +1958,7 @@ function isHeaderMarkedYesForNextAction_(context, header) {
 function buildNextActionFollowUpHistory_(ss, company) {
   const activities = getRecentActivityForCompany_(ss, company, 5);
   if (!activities.length) {
-    return 'No recent Follow-Up history found.';
+    return 'No Follow-Up history is available yet.';
   }
 
   return 'Recent activity:\n' + activities.map(function(activity) {
@@ -2905,7 +2905,7 @@ function clientActivityRows_(activities) {
       `${activity.activityType || ''}${activity.notes ? ' - ' + activity.notes : ''}`
     ];
   });
-  return values.length ? values : [['Activity', 'No recent client activity yet.']];
+  return values.length ? values : [['Activity', 'Client activity will appear here as work is completed.']];
 }
 
 function clientDocumentRows_(model) {
@@ -2916,7 +2916,7 @@ function clientDocumentRows_(model) {
   (model.documents || []).slice(0, 7).forEach(function(fileName) {
     rows.push(['File', fileName]);
   });
-  return rows.length ? rows : [['Documents', 'No client documents found yet.']];
+  return rows.length ? rows : [['Documents', 'Client documents will appear here when they are available.']];
 }
 
 function clientCurrentProject_(model) {
@@ -2960,7 +2960,7 @@ function clientProjectRows_(projects) {
       `${project.deliverables || 'Deliverables not set'} | Due ${formatDisplayDate_(project.dueDate)}`
     ];
   });
-  return rows.length ? rows : [['Projects', 'No active project yet.']];
+  return rows.length ? rows : [['Projects', 'No Active Projects — create a project when client work is ready to begin.']];
 }
 
 function clientNextFollowUpSummary_(followUps) {
@@ -2980,7 +2980,7 @@ function clientLastFollowUpSummary_(followUps) {
     return dateSortValue_(b.completedDate) - dateSortValue_(a.completedDate);
   })[0];
   if (!completed) {
-    return 'No completed Follow-Up yet.';
+    return 'No completed Follow-Ups yet.';
   }
   return `${completed.type || 'Follow-Up'} completed ${formatDisplayDate_(completed.completedDate)}`;
 }
@@ -3418,7 +3418,7 @@ function buildProspectWorkspaceHtml_(workspace) {
         </div>
       `;
     }).join('')
-    : '<p class="muted">No activity recorded yet.</p>';
+    : '<p class="muted">No Activity Yet — completed actions will appear here.</p>';
 
   const clientHtml = client
     ? `
@@ -3428,7 +3428,7 @@ function buildProspectWorkspaceHtml_(workspace) {
         ${workspaceFieldHtml_('Client Status', client.status)}
       </div>
     `
-    : '<p class="muted">No active client record found.</p>';
+    : '<p class="muted">No Active Client Record — convert the prospect after the Improvement Plan is accepted.</p>';
 
   return `
     <!doctype html>

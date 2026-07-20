@@ -4,6 +4,8 @@ const path = require('path');
 const vm = require('vm');
 
 const root = path.resolve(__dirname, '..');
+let aboutHtml = '';
+let aboutDialogTitle = '';
 const context = vm.createContext({
   console,
   firstNonBlank_(values) {
@@ -13,14 +15,39 @@ const context = vm.createContext({
     getScriptProperties() {
       return { getProperty() { return ''; } };
     }
+  },
+  HtmlService: {
+    createHtmlOutput(html) {
+      aboutHtml = html;
+      return {
+        setWidth() { return this; },
+        setHeight() { return this; }
+      };
+    }
+  },
+  SpreadsheetApp: {
+    getUi() {
+      return {
+        showModalDialog(output, title) {
+          aboutDialogTitle = title;
+        }
+      };
+    }
   }
 });
 vm.runInContext(fs.readFileSync(path.join(root, 'Config.gs'), 'utf8'), context, { filename: 'Config.gs' });
 vm.runInContext(fs.readFileSync(path.join(root, 'SheetHelpers.gs'), 'utf8'), context, { filename: 'SheetHelpers.gs' });
+vm.runInContext(fs.readFileSync(path.join(root, 'Menu.gs'), 'utf8'), context, { filename: 'Menu.gs' });
 vm.runInContext(fs.readFileSync(path.join(root, 'AuditEngine.gs'), 'utf8'), context, { filename: 'AuditEngine.gs' });
 vm.runInContext(fs.readFileSync(path.join(root, 'GmailEngine.gs'), 'utf8'), context, { filename: 'GmailEngine.gs' });
 vm.runInContext(fs.readFileSync(path.join(root, 'HealthCheck.gs'), 'utf8'), context, { filename: 'HealthCheck.gs' });
 const realLogPipelineActivity = context.logPipelineActivity_;
+
+context.showProductAbout();
+assert.strictEqual(aboutDialogTitle, 'About');
+assert.match(aboutHtml, /1\.0\.0-rc/, 'About displays the release-candidate version');
+assert.match(aboutHtml, /2026\.07\.20-rc/, 'About displays the release-candidate build');
+assert.match(aboutHtml, /not yet approved for production/, 'About identifies the production gate');
 
 const verified = {
   company: 'Acceptance Test Co',

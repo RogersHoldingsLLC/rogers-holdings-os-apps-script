@@ -1,6 +1,6 @@
 {
   "name": "rogers-holdings-os-apps-script",
-  "version": "1.0.0",
+  "version": "1.0.0-rc",
   "private": true,
   "description": "Safe local deployment workflow for Rogers Holdings OS Google Apps Script files.",
   "scripts": {

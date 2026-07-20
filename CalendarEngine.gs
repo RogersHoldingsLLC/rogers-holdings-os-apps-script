@@ -146,7 +146,11 @@ function createDiscoveryCall() {
     }
     refreshSalesOperatingSystem_();
 
-    ui.alert('Rogers Holdings OS', 'Discovery Call Created', ui.ButtonSet.OK);
+    ui.alert(
+      'Discovery Call Scheduled',
+      `The Calendar event for ${prospect.company} has been verified and the prospect record is up to date.\n\nNext Step\nReview the event details and prepare for the discovery conversation.`,
+      ui.ButtonSet.OK
+    );
   } catch (error) {
     ui.alert(
       'Rogers Holdings OS',

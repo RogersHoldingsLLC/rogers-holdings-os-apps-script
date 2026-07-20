@@ -213,7 +213,11 @@ function sendAuditPackage() {
     );
     refreshSalesOperatingSystem_();
 
-    ui.alert('Rogers Holdings OS', draftActivityType, ui.ButtonSet.OK);
+    ui.alert(
+      gmailDraftResult.created ? 'Email Draft Ready' : 'Email Draft Updated',
+      `${gmailDraftResult.created ? 'A new' : 'The existing'} Digital Business Assessment email draft is ready in Gmail.\n\nNext Step\nReview the message, verify the attached documents, and send it when ready.`,
+      ui.ButtonSet.OK
+    );
   } catch (error) {
     ui.alert(
       'Rogers Holdings OS',

@@ -616,7 +616,7 @@ function buildSystemHealthCheckHtml_(report) {
     const rowClass = String(item.status || '').toLowerCase();
     return `
       <tr>
-        <td><span class="pill ${rowClass}">${escapeHtml_(item.status)}</span></td>
+        <td><span class="pill ${rowClass}">${escapeHtml_(getOperatorHealthStatus_(item.status))}</span></td>
         <td>${escapeHtml_(getOperatorHealthCheckName_(item.check))}</td>
         <td>${escapeHtml_(item.detail)}</td>
         <td>${escapeHtml_(item.suggestedFix)}</td>
@@ -719,7 +719,7 @@ function buildSystemHealthCheckHtml_(report) {
           }
           .pill {
             display: inline-block;
-            min-width: 62px;
+            min-width: 112px;
             padding: 4px 8px;
             border-radius: 999px;
             color: #111111;
@@ -741,30 +741,30 @@ function buildSystemHealthCheckHtml_(report) {
       </head>
       <body>
         <div class="header">
-          <div class="eyebrow">Rogers Holdings OS</div>
+          <div class="eyebrow">Business Optimization Platform</div>
           <h1>System Health Check</h1>
-          <div class="timestamp">Generated: ${escapeHtml_(formatDisplayDate_(report.generatedAt))}</div>
+          <div class="timestamp">Operational readiness report &nbsp;•&nbsp; Generated ${escapeHtml_(formatDisplayDate_(report.generatedAt))}</div>
         </div>
 
         <div class="summary">
           <div class="metric overall">
-            <span>Status</span>
-            <strong class="${statusClass}">${escapeHtml_(report.status)}</strong>
+            <span>Overall Readiness</span>
+            <strong class="${statusClass}">${escapeHtml_(getOperatorHealthStatus_(report.status))}</strong>
           </div>
           <div class="metric">
-            <span>Pass</span>
+            <span>Operational</span>
             <strong>${report.summary.pass}</strong>
           </div>
           <div class="metric">
-            <span>Warnings</span>
+            <span>Configuration Needed</span>
             <strong>${report.summary.warning}</strong>
           </div>
           <div class="metric">
-            <span>Fails</span>
+            <span>Action Required</span>
             <strong>${report.summary.fail}</strong>
           </div>
           <div class="metric">
-            <span>Issues</span>
+            <span>Open Items</span>
             <strong>${report.summary.totalIssues}</strong>
           </div>
         </div>
@@ -772,10 +772,10 @@ function buildSystemHealthCheckHtml_(report) {
         <table>
           <thead>
             <tr>
-              <th>Status</th>
-              <th>Check</th>
-              <th>Issues Found</th>
-              <th>Suggested Fix</th>
+              <th>Readiness</th>
+              <th>Area</th>
+              <th>Details</th>
+              <th>Recommended Action</th>
             </tr>
           </thead>
           <tbody>${issueRows}</tbody>
@@ -783,6 +783,15 @@ function buildSystemHealthCheckHtml_(report) {
       </body>
     </html>
   `;
+}
+
+function getOperatorHealthStatus_(status) {
+  const labels = {
+    Pass: 'Operational',
+    Warning: 'Configuration Needed',
+    Fail: 'Action Required'
+  };
+  return labels[String(status || '')] || String(status || 'Unknown');
 }
 
 function getOperatorHealthCheckName_(technicalName) {

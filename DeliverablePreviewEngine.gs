@@ -100,7 +100,7 @@ function renderPreviewList_(items) {
     return String(item || '').trim();
   });
   if (!values.length) {
-    return '<p class="muted">No details available yet.</p>';
+    return '<p class="muted">Details will appear here when they are available.</p>';
   }
   return '<ul>' + values.map(function(item) {
     return `<li>${escapeHtml_(item)}</li>`;

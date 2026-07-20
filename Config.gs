@@ -16,6 +16,9 @@ var FOLLOW_UPS_SHEET = 'Follow-Ups';
 var PROJECTS_SHEET = 'Projects';
 var DAILY_FRICTION_LOG_SHEET = "Brian's Daily Friction Log";
 var PRODUCT_FEEDBACK_SHEET = 'Product Feedback';
+var PRODUCT_NAME = 'Business Optimization Platform';
+var PRODUCT_VERSION = '1.0.0-rc';
+var PRODUCT_BUILD = '2026.07.20-rc';
 
 var PRODUCT_FEEDBACK_COLUMNS = [
   'Feedback ID',

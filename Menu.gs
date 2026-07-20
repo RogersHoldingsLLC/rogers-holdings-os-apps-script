@@ -55,7 +55,9 @@ function onOpen(e) {
     .addItem('Refresh Projects', 'refreshProjects');
 
   const productMenu = ui.createMenu('Product')
-    .addItem('Open Product Feedback', 'openProductFeedback');
+    .addItem('Open Product Feedback', 'openProductFeedback')
+    .addSeparator()
+    .addItem('About Business Optimization Platform', 'showProductAbout');
 
   const systemMenu = ui.createMenu('System')
     .addItem('Refresh Executive Dashboard', 'refreshExecutiveDashboard')
@@ -66,7 +68,7 @@ function onOpen(e) {
     .addItem('Reset Test Data', 'resetTestData')
     .addItem('Reset Demo Data', 'resetDemoData');
 
-  const rogersMenu = ui.createMenu('Rogers Holdings OS')
+  const rogersMenu = ui.createMenu('Business Optimization Platform')
     .addSubMenu(navigateMenu)
     .addSubMenu(salesMenu)
     .addSubMenu(pipelineMenu)
@@ -95,6 +97,44 @@ function onOpen(e) {
   rogersMenu.addToUi();
 
   refreshSalesOperatingSystem_();
+}
+
+function showProductAbout() {
+  const properties = PropertiesService.getScriptProperties();
+  const deploymentTarget = String(properties.getProperty('DEPLOYMENT_TARGET') || properties.getProperty('ROGERS_OS_DEPLOYMENT_TARGET') || 'Not configured').trim();
+  const gitCommit = String(properties.getProperty('GIT_COMMIT') || properties.getProperty('ROGERS_OS_GIT_COMMIT') || 'Not available').trim();
+  const html = HtmlService.createHtmlOutput(`
+    <!doctype html>
+    <html>
+      <head>
+        <base target="_top">
+        <style>
+          body { box-sizing: border-box; margin: 0; padding: 26px; background: #111; color: #f7f3ea; font-family: Arial, Helvetica, sans-serif; }
+          .eyebrow { color: #d8ad4d; font-size: 11px; font-weight: 700; letter-spacing: 1.6px; text-transform: uppercase; }
+          h1 { margin: 7px 0 8px; color: #fff; font-size: 24px; line-height: 1.2; }
+          .subtitle { margin: 0 0 22px; color: #cfc6b6; font-size: 13px; }
+          dl { display: grid; grid-template-columns: 145px 1fr; margin: 0; border-top: 1px solid rgba(184, 135, 40, .45); }
+          dt, dd { margin: 0; padding: 11px 0; border-bottom: 1px solid rgba(255, 255, 255, .08); font-size: 13px; }
+          dt { color: #d8ad4d; font-weight: 700; }
+          dd { color: #fff; overflow-wrap: anywhere; }
+          .footer { margin-top: 18px; color: #9f978a; font-size: 11px; }
+        </style>
+      </head>
+      <body>
+        <div class="eyebrow">Rogers Holdings LLC</div>
+        <h1>${escapeHtml_(PRODUCT_NAME)}</h1>
+        <p class="subtitle">Release candidate information — not yet approved for production</p>
+        <dl>
+          <dt>Version</dt><dd>${escapeHtml_(PRODUCT_VERSION)}</dd>
+          <dt>Build</dt><dd>${escapeHtml_(PRODUCT_BUILD)}</dd>
+          <dt>Deployment Target</dt><dd>${escapeHtml_(deploymentTarget)}</dd>
+          <dt>Git Commit</dt><dd>${escapeHtml_(gitCommit)}</dd>
+        </dl>
+        <div class="footer">Deployment metadata appears when provided through Apps Script properties.</div>
+      </body>
+    </html>
+  `).setWidth(520).setHeight(390);
+  SpreadsheetApp.getUi().showModalDialog(html, 'About');
 }
 
 function testRogersMenuIndexing() {
