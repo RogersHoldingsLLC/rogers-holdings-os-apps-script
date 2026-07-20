@@ -1,6 +1,39 @@
 # Business Optimization Platform V1.0 Acceptance Test Execution Log
 
-Use with `BUSINESS_OPTIMIZATION_PLATFORM_ACCEPTANCE_TEST_PLAN.md`. This log is intentionally blank. Duplicate test rows when a scenario requires multiple stages, services, browsers, or retries.
+Candidate: `1.0.0-rc`
+
+Build: `2026.07.20-rc`
+
+Target release: `1.0.0`
+
+Product: Business Optimization Platform
+
+Release date: `TBD — after final acceptance and production approval`
+
+Release state: release candidate; not production-ready or released
+
+## Latest RC evidence summary
+
+This summary records only evidence available in the repository or reproduced locally against the current candidate. `Pass — Local` is not a substitute for the live Google Workspace acceptance tests required below. Items without durable live evidence remain `Not Run — Live`; they must not be interpreted as passes.
+
+| Item | Result | Date | Evidence | Notes |
+| --- | --- | --- | --- | --- |
+| Health Check | Not Run — Live | 2026-07-14 | `HealthCheck.gs`; `npm run validate` | Source parsing and Health Check dependencies validated locally. No saved report from the release workbook or production operator account was found. |
+| Activity Feed | Pass — Local deterministic scope; Not Run — Live | 2026-07-14 | `npm run test:lifecycle`; `npm run test:audit-rendering`; `PROJECT_MEMORY.md` | Tests cover keyed lifecycle evidence and assessment/Gmail wording. Live row placement, timestamps, retry behavior, and dashboard agreement remain unverified. |
+| Website Audit | Pass — Local deterministic scope; Not Run — Live acquisition | 2026-07-14 | `npm run test:audit-rendering` | Acquisition validation, missing-endpoint behavior, strict provenance, and local-rendering eligibility passed. No Website Audit Tool endpoint execution evidence was found. |
+| Digital Business Assessment | Pass — Local deterministic scope; Not Run — Live PDF | 2026-07-14 | `npm run test:audit-rendering` | Eligibility, local rendering path, evidence preservation, and artifact reconciliation passed deterministically. Live PDF generation and visual approval remain required. |
+| Improvement Plan | Pass — Local source/reconciliation scope; Not Run — Live PDF | 2026-07-14 | `npm run validate`; `npm run test:audit-rendering`; `CHANGELOG.md` | Proposal artifact reconciliation and lifecycle isolation are covered by the RC implementation/tests. No final live PDF or customer-facing visual approval was found. |
+| Full Prospect Package | Pass — Local deterministic scope; Not Run — Live end-to-end | 2026-07-14 | `npm run test:audit-rendering` | Verified-data gate, package retry, Gmail draft reuse, and artifact behavior passed deterministically. No end-to-end Apps Script execution evidence was found. |
+| Gmail reconciliation | Pass — Local deterministic scope; Not Run — Live | 2026-07-14 | `npm run test:audit-rendering` | First creation, exact-match update, ambiguity rejection, attachment failure, and folder-link fallback cases passed. Gmail authorization and real draft behavior remain unverified. |
+| Drive reconciliation | Pass — Local deterministic artifact scope; Not Run — Live | 2026-07-14 | `npm run test:audit-rendering`; `PROJECT_MEMORY.md` | Canonical/legacy audit-report cleanup and package artifact deduplication are covered. Real Drive permissions, folders, ownership, and file conversion remain unverified. |
+| Deployment pipeline | Pass — Local | 2026-07-20 | `npm test` — 9 deployment safety tests passed | Target selection, missing/invalid target rejection, dirty-tree rejection, exact confirmation, and config restoration passed. No deployment was performed. |
+| Validation suite | Pass — Local | 2026-07-20 | `git diff --check`; `npm run validate`; `npm run test:lifecycle`; `npm run test:audit-rendering`; `npm test` | Candidate `1.0.0-rc`, build `2026.07.20-rc`: validation passed for 23 authoritative Apps Script files; lifecycle, audit-rendering, and deployment-safety suites passed. |
+
+## Current release-gate disposition
+
+**Not ready for final sign-off.** Local RC checks pass, but the live acceptance sections in this log remain incomplete. Final approval requires execution in a disposable copy of the production workbook, evidence links/IDs, named reviewers, and completed sign-off.
+
+Use with `BUSINESS_OPTIMIZATION_PLATFORM_ACCEPTANCE_TEST_PLAN.md`. The local RC evidence summary above is populated; the live execution fields below remain open. Duplicate test rows when a scenario requires multiple stages, services, browsers, or retries.
 
 ## Execution metadata
 

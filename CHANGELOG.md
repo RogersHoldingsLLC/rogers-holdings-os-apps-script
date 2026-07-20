@@ -1,10 +1,17 @@
 # Changelog
 
-All notable Rogers Holdings OS changes are tracked here.
+All notable Business Optimization Platform changes are tracked here. Historical entries retain legacy technical names where they describe the product at that time.
 
-## [1.0.0-rc] - 2026-07-10
+## [1.0.0-rc] - Unreleased
+
+Build `2026.07.20-rc`. This is a release candidate, not production-ready or released. Final live acceptance, release sign-off, and production approval remain required.
 
 ### Fixed
+
+- Polished release-candidate menus, completion dialogs, empty states, and Health Check presentation without changing workflow or validation behavior.
+- Added a lightweight About dialog for product version, build, deployment target, and optional Git commit information.
+
+- Unified Activity Feed header resolution across Health Check, assessment/full-package logging, lifecycle logging, and existing readers/writers; row-4 headers are preserved and ambiguous duplicate header rows now fail safely without writes.
 
 - Made Apps Script deployment target selection explicit: acceptance and production now have separate deploy/status commands, visible Script IDs, exact confirmations, and no default target.
 - Added production deployment gates for the full release test set, clean working tree, approved branch, backup, and guaranteed restoration of the acceptance `.clasp.json` after either push success or failure.
@@ -59,10 +66,10 @@ All notable Rogers Holdings OS changes are tracked here.
 
 ### Validation
 
-- `npm run status` passed.
+- `npm run status:acceptance` and `npm run status:production` passed.
 - `npm run validate` passed for 23 authoritative Apps Script files.
 
-## [1.0.0-rc] - 2026-06-25
+## [1.0.0-rc.0] - 2026-06-25
 
 ### Added
 

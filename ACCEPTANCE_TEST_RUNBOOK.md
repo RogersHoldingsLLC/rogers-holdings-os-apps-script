@@ -1,9 +1,17 @@
 # Business Optimization Platform V1.0 Acceptance Test Runbook
 
+Candidate: `1.0.0-rc`
+
+Build: `2026.07.20-rc`
+
+Target release: `1.0.0`
+
 Operator: Brian Rogers  
 Environment: disposable copy of the production Google Sheet only  
 Companion documents: `BUSINESS_OPTIMIZATION_PLATFORM_ACCEPTANCE_TEST_PLAN.md` and `ACCEPTANCE_TEST_EXECUTION_LOG.md`  
 Production deployment authorized: no
+
+Release state: release candidate; not production-ready or released
 
 Follow this runbook from top to bottom. Do not skip ahead. Enter every result and evidence link in the execution log before starting the next test. If a release-blocking failure occurs, capture evidence, stop the affected phase, restore permissions/protections, and do not improvise a repair.
 

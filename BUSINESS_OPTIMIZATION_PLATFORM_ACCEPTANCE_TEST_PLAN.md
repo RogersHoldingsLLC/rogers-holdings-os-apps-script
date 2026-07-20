@@ -1,10 +1,20 @@
 # Business Optimization Platform V1.0 Acceptance Test Plan
 
-Document owner: Rogers Holdings LLC  
-Release: `1.0.0-rc`  
+Document owner: Rogers Holdings LLC
+
+Candidate: `1.0.0-rc`
+
+Build: `2026.07.20-rc`
+
+Target release: `1.0.0`
+
+Release date: `TBD — after final acceptance and production approval`
+
 Test environment: disposable copy of the production Google Sheet  
 Production data permitted: no  
 Production deployment authorized by this document: no
+
+Release state: release candidate; not production-ready or released
 
 This is the official V1.0 live acceptance checklist. Record execution in `ACCEPTANCE_TEST_EXECUTION_LOG.md`. A test passes only when the observable workbook, Google Workspace side effects, durable operation evidence, and captured evidence all agree. Never infer success from a toast or modal alone.
 
@@ -26,8 +36,8 @@ This is the official V1.0 live acceptance checklist. Record execution in `ACCEPT
 | ID | Test | Expected result | Evidence |
 | --- | --- | --- | --- |
 | ENV-01 | Confirm the workbook is a disposable copy of production | Workbook structure, formulas, protections, filters, validations, named ranges, and formatting match production; title clearly says TEST/DISPOSABLE | Workbook URL and copy timestamp |
-| ENV-02 | Confirm bound Apps Script source | Candidate source matches the locally validated uncommitted release candidate; no production deployment is performed | Script project ID, source fingerprint, reviewer note |
-| ENV-03 | Reload workbook and run `onOpen` | Grouped Rogers Holdings OS menu appears with Navigate, Sales Workflow, Pipeline, Workspaces, Follow-Ups, Clients & Projects, and System targets | Menu screenshot |
+| ENV-02 | Confirm bound Apps Script source | Candidate source matches the exact locally validated candidate commit and source fingerprint; no production deployment is performed | Script project ID, source fingerprint, reviewer note |
+| ENV-03 | Reload workbook and run `onOpen` | Grouped Business Optimization Platform menu appears with Navigate, Sales Workflow, Pipeline, Workspaces, Follow-Ups, Clients & Projects, and System targets | Menu screenshot |
 | ENV-04 | Run System Health Check | Required Sheets, Gmail, Calendar/Drive/PDF dependencies, configuration, Clients, Projects, Follow-Ups, Client Workspace, and dashboard checks have no unexplained failure | Health Check screenshot/export |
 | ENV-05 | Verify timezone | Workbook, Apps Script, Calendar, and tester expectations use the documented timezone; displayed and stored times agree | Settings screenshots |
 | ENV-06 | Verify reconciliation columns | Lifecycle Operation Key/State/Details/Confirmed At and Calendar Operation Key/Event ID/State exist without structural damage | Header screenshot and structural comparison |
@@ -75,7 +85,7 @@ Required services:
 6. Create a dedicated Drive test root and tester Calendar.
 7. Empty tester Gmail drafts and Calendar search results for the synthetic company names.
 8. Capture baseline row counts for Master Prospect Tracker, Clients, Projects, Follow-Ups, and Activity Feed.
-9. Run the local gates against the exact candidate: `git diff --check`, `npm run status`, `npm run validate`, and `npm run test:lifecycle`.
+9. Run the local gates against the exact candidate: `git diff --check`, `npm run status:acceptance`, `npm run status:production`, `npm run validate`, `npm run test:lifecycle`, `npm run test:audit-rendering`, and `npm test`.
 10. Run System Health Check and capture the baseline dashboard.
 
 ## 1.4 Required sample data
@@ -397,9 +407,11 @@ No production deployment may proceed until every required row below has a result
 | □ | Test | Result | Evidence | Reviewer | Date |
 | --- | --- | --- | --- | --- | --- |
 | □ | Exact candidate passed `git diff --check` |  |  |  |  |
-| □ | Exact candidate passed `npm run status` |  |  |  |  |
+| □ | Exact candidate passed `npm run status:acceptance` and `npm run status:production` |  |  |  |  |
 | □ | Exact candidate passed `npm run validate` |  |  |  |  |
 | □ | Exact candidate passed `npm run test:lifecycle` |  |  |  |  |
+| □ | Exact candidate passed `npm run test:audit-rendering` |  |  |  |  |
+| □ | Exact candidate passed `npm test` deployment safety suite |  |  |  |  |
 | □ | Disposable workbook identity and production isolation verified |  |  |  |  |
 | □ | System Health Check passed with no unexplained failure |  |  |  |  |
 | □ | All forward lifecycle transitions passed |  |  |  |  |

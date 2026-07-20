@@ -1,10 +1,10 @@
 # Project Memory
 
-This document preserves the current operating knowledge for future Rogers Holdings OS development.
+This document preserves the current operating knowledge for future Business Optimization Platform development. Legacy technical names remain where changing them would affect established behavior.
 
 ## Current Status
 
-Rogers Holdings OS is a Version 1.0 release candidate as of 2026-06-25.
+The Business Optimization Platform is at Version `1.0.0-rc` (build `2026.07.20-rc`). It is a release candidate, not production-ready or released. The target `1.0.0` release remains pending final live acceptance, final release sign-off, and production approval.
 
 Feature development is frozen for V1.0. Current work should focus on release acceptance, bug fixes, documentation, and production readiness.
 
@@ -36,17 +36,29 @@ All Gmail-producing workflows use one exact-match reconciliation rule within the
 
 Root `.gs` files are authoritative:
 
+- `AuditEngine.gs`
+- `BusinessInterpretationEngine.gs`
+- `CalendarEngine.gs`
 - `Code.gs`
 - `Config.gs`
-- `Menu.gs`
-- `SheetHelpers.gs`
-- `AuditEngine.gs`
-- `PdfEngine.gs`
-- `GmailEngine.gs`
-- `CalendarEngine.gs`
-- `DriveEngine.gs`
+- `ContactInformationInspector.gs`
+- `DeliverablePreviewEngine.gs`
 - `DemoData.gs`
+- `DigitalPresenceAssessmentEngine.gs`
+- `DriveEngine.gs`
+- `GmailEngine.gs`
 - `HealthCheck.gs`
+- `HomepageInspector.gs`
+- `InspectionEngine.gs`
+- `InspectionIntelligenceEngine.gs`
+- `InspectionOrchestrator.gs`
+- `InspectionPlayground.gs`
+- `InspectionRulesRegistry.gs`
+- `Menu.gs`
+- `PdfEngine.gs`
+- `SheetHelpers.gs`
+- `VisualEvidenceEngine.gs`
+- `WebsiteFetchEngine.gs`
 
 Root `.js` files are non-authoritative duplicates and must not be edited as source.
 
@@ -58,6 +70,7 @@ Root `.js` files are non-authoritative duplicates and must not be edited as sour
 - Preserve workbook structure unless explicitly requested.
 - Prefer helper reuse over duplicate workflow logic.
 - Treat Activity Feed as the system log.
+- Resolve the Activity Feed through the shared strict header resolver. Its valid header remains on row 4; all readers, writers, lifecycle logging, and Health Check use that same row, and duplicate valid header rows fail safely rather than creating or shifting data.
 - Treat Health Check as the operational readiness gate.
 - Treat Executive Dashboard as the command center.
 
@@ -154,7 +167,7 @@ Acceptance uses `.clasp.json` and requires `DEPLOY ACCEPTANCE`. Production uses 
 
 ## Brand Standards
 
-Rogers Holdings OS should feel:
+Business Optimization Platform should feel:
 
 - Professional
 - Executive
@@ -168,3 +181,5 @@ Avoid customer-facing language that sounds internal, robotic, or prospecting-ori
 V1 operator surfaces use consistent `Follow-Up` terminology, canonical workflow labels, concise recovery guidance, and business-friendly Health Check names. Technical exception detail remains available in logs and the underlying Health Check report rather than being exposed as raw operator copy.
 
 Production UI polish also requires that developer-only audit controls remain behind developer mode, duplicate menu commands are not displayed, and preview dialogs do not present editing or saving controls unless those controls persist changes.
+
+The Version 1.0 operator menu uses the Business Optimization Platform product name. The Product submenu includes a lightweight About dialog with release constants and optional deployment metadata supplied through Apps Script properties; no deployment metadata service or new infrastructure is required.
