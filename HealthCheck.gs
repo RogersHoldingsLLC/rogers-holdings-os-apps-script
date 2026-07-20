@@ -556,6 +556,14 @@ function addDuplicateHealthItems_(report, fieldName, lookup) {
 }
 
 function getHealthHeaderTable_(sheet) {
+  if (sheet.getName() === ACTIVITY_FEED_SHEET) {
+    return resolveActivityFeedHeaderTable_(sheet, [
+      'Date',
+      'Company',
+      'Activity Type',
+      'Activity Notes'
+    ]);
+  }
   const headerRow = findBestHeaderRow_(sheet);
   const lastColumn = Math.max(sheet.getLastColumn(), 1);
   const values = sheet.getRange(headerRow, 1, 1, lastColumn).getDisplayValues()[0];

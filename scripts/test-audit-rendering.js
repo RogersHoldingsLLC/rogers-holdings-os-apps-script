@@ -16,8 +16,11 @@ const context = vm.createContext({
   }
 });
 vm.runInContext(fs.readFileSync(path.join(root, 'Config.gs'), 'utf8'), context, { filename: 'Config.gs' });
+vm.runInContext(fs.readFileSync(path.join(root, 'SheetHelpers.gs'), 'utf8'), context, { filename: 'SheetHelpers.gs' });
 vm.runInContext(fs.readFileSync(path.join(root, 'AuditEngine.gs'), 'utf8'), context, { filename: 'AuditEngine.gs' });
 vm.runInContext(fs.readFileSync(path.join(root, 'GmailEngine.gs'), 'utf8'), context, { filename: 'GmailEngine.gs' });
+vm.runInContext(fs.readFileSync(path.join(root, 'HealthCheck.gs'), 'utf8'), context, { filename: 'HealthCheck.gs' });
+const realLogPipelineActivity = context.logPipelineActivity_;
 
 const verified = {
   company: 'Acceptance Test Co',
@@ -87,6 +90,65 @@ assert.ok(outreachFileActivity, 'assessment generation logs the Drive text draft
 assert.match(outreachFileActivity.notes, /Outreach Email Draft\.txt/);
 assert.strictEqual(packageActivities.some((activity) => /Gmail Draft Created/.test(activity.type)), false, 'assessment generation does not claim a Gmail draft');
 assert.strictEqual(unexpectedGmailDraftCalls, 0, 'assessment generation does not call Gmail');
+
+function makeActivityFeed(rows) {
+  const values = rows.map((row) => row.slice());
+  const writes = [];
+  return {
+    values,
+    writes,
+    getName: () => 'Activity Feed',
+    getMaxRows: () => Math.max(values.length, 10),
+    getLastColumn: () => Math.max(...values.map((row) => row.length), 1),
+    getLastRow: () => values.reduce((last, row, index) => row.some((value) => value !== '') ? index + 1 : last, 0),
+    getRange(row, column, rowCount, columnCount) {
+      return {
+        getDisplayValues() {
+          return Array.from({ length: rowCount }, (_, rowOffset) =>
+            Array.from({ length: columnCount }, (_, columnOffset) =>
+              String((values[row - 1 + rowOffset] || [])[column - 1 + columnOffset] || '')
+            )
+          );
+        },
+        setValues(nextRows) {
+          nextRows.forEach((nextRow, rowOffset) => {
+            values[row - 1 + rowOffset] = nextRow.slice();
+            writes.push({ row: row + rowOffset, values: nextRow.slice() });
+          });
+        }
+      };
+    }
+  };
+}
+
+const activityHeaders = ['Date', 'Company', 'Activity Type', 'Activity Notes', 'Next Action', 'Follow-Up Date'];
+const activitySheet = makeActivityFeed([
+  ['Activity Feed'],
+  [],
+  [],
+  activityHeaders,
+  ['2026-07-13', 'Existing Co', 'Existing Activity', 'Preserve me', '', '']
+]);
+const activitySs = { getSheetByName: (name) => name === 'Activity Feed' ? activitySheet : null };
+assert.strictEqual(context.getActivityFeedHeaderTable_(activitySheet).headerRow, 4, 'row-4 Activity Feed header is recognized');
+assert.strictEqual(context.getHealthHeaderTable_(activitySheet).headerRow, 4, 'Health Check and workflow logging resolve the same row');
+context.logPipelineActivity_ = realLogPipelineActivity;
+context.generateAuditPackageForContext_({ sheet: {}, ss: activitySs, selectedRow: 2 }, verified);
+context.logFullPackageActivity_(activitySs, 'Package Co', 'Full Prospect Package Complete', 'Package activity');
+assert.strictEqual(activitySheet.writes.length, 4, 'assessment and full package activities append');
+assert.deepStrictEqual(activitySheet.writes.map((write) => write.row), [6, 7, 8, 9], 'activities append below existing data without shifting it');
+assert.strictEqual(activitySheet.values[3].join('|'), activityHeaders.join('|'), 'row-4 headers are unchanged');
+assert.strictEqual(activitySheet.values[4][3], 'Preserve me', 'existing Activity Feed data is unchanged');
+assert.strictEqual(activitySheet.values.filter((row) => row.join('|') === activityHeaders.join('|')).length, 1, 'no duplicate header is created');
+assert.strictEqual(
+  context.getHeaderTable_(makeActivityFeed([['Activity Feed'], [], [], ['Activity Type']]), ['Activity Type']).headerRow,
+  4,
+  'Activity Feed resolution honors the caller-required header set'
+);
+const missingActivitySheet = makeActivityFeed([['Activity Feed'], [], [], ['Date', 'Company', 'Activity Type']]);
+assert.throws(() => context.getActivityFeedHeaderTable_(missingActivitySheet), /Activity Notes/, 'genuinely missing headers fail clearly');
+const duplicateActivitySheet = makeActivityFeed([activityHeaders, [], [], activityHeaders]);
+assert.throws(() => context.getActivityFeedHeaderTable_(duplicateActivitySheet), /Ambiguous Activity Feed header rows found: 1, 4/, 'duplicate valid header rows fail safely');
 
 function makeDraft(to, subject, body, options) {
   return {

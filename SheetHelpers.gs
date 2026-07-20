@@ -4308,7 +4308,62 @@ function logPipelineActivity_(ss, company, activityType, activityNotes) {
   sheet.getRange(targetRow, 1, 1, table.lastColumn).setValues([rowValues]);
 }
 
+function resolveActivityFeedHeaderTable_(sheet, requiredHeaders) {
+  const headersToResolve = requiredHeaders && requiredHeaders.length
+    ? requiredHeaders
+    : ['Date', 'Company', 'Activity Type', 'Activity Notes'];
+  const maxRowsToScan = Math.min(10, sheet.getMaxRows());
+  const lastColumn = Math.max(sheet.getLastColumn(), 1);
+  const rows = sheet.getRange(1, 1, maxRowsToScan, lastColumn).getDisplayValues();
+  const matches = [];
+
+  rows.forEach(function(values, rowIndex) {
+    const headers = {};
+    values.forEach(function(value, colIndex) {
+      const header = String(value || '').trim();
+      if (header && !headers[header]) {
+        headers[header] = colIndex + 1;
+      }
+    });
+    if (headersToResolve.every(function(header) { return !!headers[header]; })) {
+      matches.push({ headerRow: rowIndex + 1, headers: headers, lastColumn: lastColumn });
+    }
+  });
+
+  if (matches.length > 1) {
+    throw new Error(`Ambiguous Activity Feed header rows found: ${matches.map(function(table) { return table.headerRow; }).join(', ')}. Keep one valid header row before continuing.`);
+  }
+  if (matches.length === 1) {
+    return matches[0];
+  }
+
+  const headerRow = findBestHeaderRow_(sheet);
+  const headers = {};
+  rows[headerRow - 1].forEach(function(value, colIndex) {
+    const header = String(value || '').trim();
+    if (header && !headers[header]) {
+      headers[header] = colIndex + 1;
+    }
+  });
+  return { headerRow: headerRow, headers: headers, lastColumn: lastColumn };
+}
+
+function getActivityFeedHeaderTable_(sheet, requiredHeaders) {
+  const headersToRequire = requiredHeaders && requiredHeaders.length
+    ? requiredHeaders
+    : ['Date', 'Company', 'Activity Type', 'Activity Notes'];
+  const table = resolveActivityFeedHeaderTable_(sheet, headersToRequire);
+  const missing = headersToRequire.filter(function(header) { return !table.headers[header]; });
+  if (missing.length) {
+    throw new Error(`Required headers not found on sheet "${sheet.getName()}": ${missing.join(', ')}`);
+  }
+  return table;
+}
+
 function getHeaderTable_(sheet, requiredHeaders) {
+  if (sheet.getName() === ACTIVITY_FEED_SHEET) {
+    return getActivityFeedHeaderTable_(sheet, requiredHeaders);
+  }
   const maxRowsToScan = Math.min(10, sheet.getMaxRows());
   const maxColumns = sheet.getLastColumn();
   const rows = sheet.getRange(1, 1, maxRowsToScan, maxColumns).getDisplayValues();
