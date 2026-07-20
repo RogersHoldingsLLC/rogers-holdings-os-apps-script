@@ -1,6 +1,6 @@
 # Project Memory
 
-This document preserves the current operating knowledge for future Business Optimization Platform development. Legacy technical names remain where changing them would affect established behavior.
+This document preserves the current operating knowledge for future Business Optimization Platform development.
 
 ## Current Status
 
@@ -11,6 +11,17 @@ Feature development is frozen for V1.0. Current work should focus on release acc
 ## Architecture
 
 The system runs in Google Apps Script attached to a Google Sheet.
+
+Product hierarchy:
+
+```text
+Business Snapshot
+-> creates a prospect or assessment input
+-> Business Optimization Platform
+-> manages consulting, proposals, projects, clients, and follow-up
+```
+
+Rogers Holdings LLC is the company. Headquarters is its separate internal command center. Business Optimization Platform is the client delivery platform. Website Audit Tool API is the shared audit-acquisition service used by Business Snapshot and Business Optimization Platform.
 
 Primary services:
 
@@ -166,6 +177,13 @@ Acceptance uses `.clasp.json` and requires `DEPLOY ACCEPTANCE`. Production uses 
 - Do not mark a feature complete until local validation and required live Google Sheets tests pass.
 
 ## Brand Standards
+
+The customer-facing signature is:
+
+```text
+Business Optimization Platform
+by Rogers Holdings LLC
+```
 
 Business Optimization Platform should feel:
 

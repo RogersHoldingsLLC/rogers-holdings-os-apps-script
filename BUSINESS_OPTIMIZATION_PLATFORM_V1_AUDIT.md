@@ -1,7 +1,7 @@
 # Business Optimization Platform V1.0 Product Audit
 
 **Audit date:** 2026-07-10  
-**Repository:** Business Optimization Platform (legacy repository name: Rogers Holdings OS)  
+**Repository:** Business Optimization Platform
 **Audited version:** `1.0.0-rc` documentation baseline, with post-release-candidate inspection modules present  
 **Audit type:** Read-only product, workflow, code, validation, and release-readiness review
 
@@ -140,7 +140,7 @@ The menu exposes similarly named conversion actions (`Convert Prospect To Client
 
 ### M1 — Product identity and version metadata are inconsistent
 
-The repository instructions define the product as Business Optimization Platform, while customer and technical surfaces still use Rogers Holdings OS. `package.json` reports `1.0.0`, while `VERSION.md` reports `1.0.0-rc` and the release is not accepted.
+The repository instructions define the product as Business Optimization Platform, while customer and technical surfaces still use Business Optimization Platform. `package.json` reports `1.0.0`, while `VERSION.md` reports `1.0.0-rc` and the release is not accepted.
 
 **Recommendation:** Keep the legacy technical name until an intentional migration is approved, but use one clear customer-facing product name and align machine-readable version metadata with the actual release state.
 

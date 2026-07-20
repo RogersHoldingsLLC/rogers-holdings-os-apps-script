@@ -1,12 +1,16 @@
 # Changelog
 
-All notable Business Optimization Platform changes are tracked here. Historical entries retain legacy technical names where they describe the product at that time.
+All notable Business Optimization Platform changes are tracked here.
 
 ## [1.0.0-rc] - Unreleased
 
 Build `2026.07.20-rc`. This is a release candidate, not production-ready or released. Final live acceptance, release sign-off, and production approval remain required.
 
 ### Fixed
+
+- Completed the repository-wide product naming cleanup for Business Optimization Platform by Rogers Holdings LLC, including source comments, operator surfaces, reports, Health Check copy, Gmail copy, deployment output, backups, package metadata, acceptance documentation, and legacy-named documentation paths.
+- Documented the product hierarchy: Business Snapshot supplies prospect or assessment input to Business Optimization Platform, while Website Audit Tool API powers audit acquisition for both systems and Headquarters remains the separate internal command center.
+- Preserved existing API contract fields, Google resource identifiers, URLs, Script Properties, deployment targets, and runtime integrations.
 
 - Polished release-candidate menus, completion dialogs, empty states, and Health Check presentation without changing workflow or validation behavior.
 - Added a lightweight About dialog for product version, build, deployment target, and optional Git commit information.
@@ -96,7 +100,7 @@ Build `2026.07.20-rc`. This is a release candidate, not production-ready or rele
 - Local validation, status, backup, and deployment scripts.
 - Root `.gs` authoritative source policy.
 - Rogers Holdings black/gold visual polish.
-- Grouped Rogers Holdings OS menu.
+- Grouped Business Optimization Platform menu.
 
 ### Changed
 
@@ -110,7 +114,7 @@ Build `2026.07.20-rc`. This is a release candidate, not production-ready or rele
 - Split the original monolithic Apps Script into responsibility-based `.gs` files.
 - Restored Apps Script indexing after modular split by using Apps Script-safe globals.
 - Updated dashboard layouts and metrics to include clients, follow-ups, and projects.
-- Reorganized the Rogers Holdings OS menu into logical submenus.
+- Reorganized the Business Optimization Platform menu into logical submenus.
 
 ### Fixed
 
@@ -136,7 +140,7 @@ Build `2026.07.20-rc`. This is a release candidate, not production-ready or rele
 
 ### Added
 
-- Initial Rogers Holdings OS architecture and roadmap planning.
+- Initial Business Optimization Platform architecture and roadmap planning.
 - Google Workspace operating system direction.
 - Website Audit Tool integration path.
 - Early prospect, proposal, Gmail, dashboard, client, and project automation.

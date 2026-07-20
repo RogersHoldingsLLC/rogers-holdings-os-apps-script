@@ -1,13 +1,13 @@
 # Roadmap
 
-Rogers Holdings OS Version 1.0 is feature-frozen. Future work should not begin until V1.0 receives a live Google Sheets release approval.
+Business Optimization Platform Version 1.0 is feature-frozen. Future work should not begin until V1.0 receives a live Google Sheets release approval.
 
 ## Version 1.0 Release Criteria
 
 Required before final release:
 
 - Deploy current `.gs` source to the production Apps Script project.
-- Reload the Google Sheet and confirm the grouped Rogers Holdings OS menu appears.
+- Reload the Google Sheet and confirm the grouped Business Optimization Platform menu appears.
 - Run System Health Check with no unexpected failures.
 - Run one complete smoke test:
   - Add or select a prospect.
@@ -53,7 +53,7 @@ Only after V1.0 release:
 - Add lightweight client reporting views.
 - Add more robust Drive folder indexing for large client folders.
 - Create onboarding docs for small business client deployments.
-- Create a reusable installation checklist for future Rogers Holdings OS clients.
+- Create a reusable installation checklist for future Business Optimization Platform clients.
 
 ## Version 2.0 Possibilities
 

@@ -33,7 +33,7 @@ function copyDirectoryIfExists(directory, targetDir) {
 }
 
 function main() {
-  const targetDir = path.join(backupRoot, `rogers-os-local-${timestamp()}`);
+  const targetDir = path.join(backupRoot, `business-optimization-platform-local-${timestamp()}`);
   fs.mkdirSync(targetDir, { recursive: true });
 
   fs.readdirSync(projectRoot)

@@ -1,5 +1,5 @@
 /**
- * Rogers Holdings OS - CalendarEngine.
+ * Business Optimization Platform - CalendarEngine.
  * Split from the stable Code.gs monolith without changing function names or behavior.
  */
 
@@ -19,7 +19,7 @@ function createDiscoveryCall() {
 
   if (missing.length) {
     ui.alert(
-      'Rogers Holdings OS',
+      'Business Optimization Platform',
       'Add the missing fields before creating a discovery call: ' + missing.join(', '),
       ui.ButtonSet.OK
     );
@@ -29,7 +29,7 @@ function createDiscoveryCall() {
   const status = normalizePipelineStage_(prospect.status) || String(prospect.status || '').trim();
   if (status === 'Client' || status === 'Lost' || status === 'Won') {
     ui.alert(
-      'Rogers Holdings OS',
+      'Business Optimization Platform',
       'Discovery meetings cannot be scheduled for prospects marked Client or Lost.',
       ui.ButtonSet.OK
     );
@@ -37,7 +37,7 @@ function createDiscoveryCall() {
   }
   const transitionValidation = validateProspectStageTransition_(status || 'Lead Found', 'Discovery Meeting Scheduled');
   if (!transitionValidation.allowed) {
-    ui.alert('Rogers Holdings OS', transitionValidation.message, ui.ButtonSet.OK);
+    ui.alert('Business Optimization Platform', transitionValidation.message, ui.ButtonSet.OK);
     return;
   }
   if (transitionValidation.idempotent) {
@@ -47,16 +47,16 @@ function createDiscoveryCall() {
     const existingState = getDiscoveryCalendarOperationState_(context);
     if (existingState.state !== 'Event Verified' || !existingState.eventId) {
       markLifecycleReconciliationRequired_(context.sheet, existingHeaders, context.selectedRow, 'Discovery Meeting Scheduled is confirmed, but the Calendar event ID is not verified. No new invitation was sent.');
-      ui.alert('Rogers Holdings OS', 'Discovery Meeting Scheduled is already confirmed, but the Calendar event is not verified. Reconciliation is required; no duplicate invitation was sent.', ui.ButtonSet.OK);
+      ui.alert('Business Optimization Platform', 'Discovery Meeting Scheduled is already confirmed, but the Calendar event is not verified. Reconciliation is required; no duplicate invitation was sent.', ui.ButtonSet.OK);
       return;
     }
     applyConfirmedProspectTransition_(context, 'Discovery Meeting Scheduled', 'Discovery Meeting Scheduled', 'Existing Calendar event and lifecycle effects reconciled.');
-    ui.alert('Rogers Holdings OS', 'Discovery Meeting Scheduled was already confirmed. The existing event and downstream lifecycle effects were checked; no duplicate event was created.', ui.ButtonSet.OK);
+    ui.alert('Business Optimization Platform', 'Discovery Meeting Scheduled was already confirmed. The existing event and downstream lifecycle effects were checked; no duplicate event was created.', ui.ButtonSet.OK);
     return;
   }
 
   const datePrompt = ui.prompt(
-    'Rogers Holdings OS',
+    'Business Optimization Platform',
     'Enter discovery call date as YYYY-MM-DD.',
     ui.ButtonSet.OK_CANCEL
   );
@@ -65,7 +65,7 @@ function createDiscoveryCall() {
   }
 
   const timePrompt = ui.prompt(
-    'Rogers Holdings OS',
+    'Business Optimization Platform',
     'Enter discovery call time as HH:MM AM/PM or 24-hour HH:MM.',
     ui.ButtonSet.OK_CANCEL
   );
@@ -74,7 +74,7 @@ function createDiscoveryCall() {
   }
 
   const durationPrompt = ui.prompt(
-    'Rogers Holdings OS',
+    'Business Optimization Platform',
     'Enter duration in minutes. Leave blank for 30.',
     ui.ButtonSet.OK_CANCEL
   );
@@ -85,11 +85,11 @@ function createDiscoveryCall() {
   const startDate = parseDiscoveryDateTime_(datePrompt.getResponseText(), timePrompt.getResponseText());
   const durationMinutes = parseDiscoveryDurationMinutes_(durationPrompt.getResponseText());
   if (!startDate) {
-    ui.alert('Rogers Holdings OS', 'Enter a valid date and time, then run Create Discovery Call again.', ui.ButtonSet.OK);
+    ui.alert('Business Optimization Platform', 'Enter a valid date and time, then run Create Discovery Call again.', ui.ButtonSet.OK);
     return;
   }
   if (!durationMinutes) {
-    ui.alert('Rogers Holdings OS', 'Enter a valid duration in minutes, then run Create Discovery Call again.', ui.ButtonSet.OK);
+    ui.alert('Business Optimization Platform', 'Enter a valid duration in minutes, then run Create Discovery Call again.', ui.ButtonSet.OK);
     return;
   }
 
@@ -153,7 +153,7 @@ function createDiscoveryCall() {
     );
   } catch (error) {
     ui.alert(
-      'Rogers Holdings OS',
+      'Business Optimization Platform',
       error && error.message ? error.message : String(error),
       ui.ButtonSet.OK
     );

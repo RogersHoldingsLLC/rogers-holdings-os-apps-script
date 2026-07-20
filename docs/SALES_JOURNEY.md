@@ -1,6 +1,6 @@
-# Rogers Holdings OS Sales Journey
+# Business Optimization Platform Sales Journey
 
-Rogers Holdings OS uses three customer-facing deliverables with distinct roles in the sales process.
+Business Optimization Platform uses three customer-facing deliverables with distinct roles in the sales process.
 
 ## 1. Executive Snapshot
 
@@ -98,7 +98,7 @@ Important:
 
 ## Standard Consulting Workflow
 
-Rogers Holdings OS now aligns every prospect-facing action around one consulting process:
+Business Optimization Platform now aligns every prospect-facing action around one consulting process:
 
 1. Lead Found
 2. Executive Snapshot Sent

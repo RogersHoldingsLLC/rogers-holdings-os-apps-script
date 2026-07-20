@@ -1,5 +1,5 @@
 /**
- * Rogers Holdings OS - Client Deliverable Preview System.
+ * Business Optimization Platform - Client Deliverable Preview System.
  * Provides preview-first modals for customer-facing deliverables without changing generation logic.
  */
 

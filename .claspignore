@@ -1,4 +1,4 @@
-# Rogers Holdings OS deploys authoritative Apps Script source from root .gs files only.
+# Business Optimization Platform deploys authoritative Apps Script source from root .gs files only.
 
 *.js
 **/*.js

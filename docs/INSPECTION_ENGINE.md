@@ -1,4 +1,4 @@
-# Rogers Holdings OS Inspection Engine
+# Business Optimization Platform Inspection Engine
 
 Date: 2026-06-28
 
@@ -701,7 +701,7 @@ The inspector should not produce generic findings when exact evidence exists. If
 Inspection Playground test path:
 
 1. Enable Developer Mode in Settings.
-2. Open `Rogers Holdings OS > Development > Inspection Playground`.
+2. Open `Business Optimization Platform > Development > Inspection Playground`.
 3. Enter a Website URL.
 4. Select `Homepage`.
 5. Paste homepage or first-screen text into Optional Page Text.
@@ -814,4 +814,4 @@ Recommended next inspectors:
 - Do not let PDF rendering own inspection/capture responsibilities.
 - Do not let AI modules write directly into PDF HTML.
 - Keep inspection objects plain and serializable.
-- Preserve existing Rogers Holdings OS workflows during incremental adoption.
+- Preserve existing Business Optimization Platform workflows during incremental adoption.

@@ -1,5 +1,5 @@
 /**
- * Rogers Holdings OS - GmailEngine.
+ * Business Optimization Platform - GmailEngine.
  * Split from the stable Code.gs monolith without changing function names or behavior.
  */
 
@@ -74,7 +74,7 @@ function sendAuditPackage() {
 
   if (missing.length) {
     ui.alert(
-      'Rogers Holdings OS',
+      'Business Optimization Platform',
       'Add the missing fields before sending the audit package: ' + missing.join(', '),
       ui.ButtonSet.OK
     );
@@ -83,7 +83,7 @@ function sendAuditPackage() {
 
   if (!isAuditPackageGenerated_(context.values, context.table.headers)) {
     ui.alert(
-      'Rogers Holdings OS',
+      'Business Optimization Platform',
       'Generate the audit package first, then run Send Audit Package again.',
       ui.ButtonSet.OK
     );
@@ -169,10 +169,10 @@ function sendAuditPackage() {
     );
     refreshSalesOperatingSystem_();
 
-    ui.alert('Rogers Holdings OS', 'Audit Package Gmail Draft Created', ui.ButtonSet.OK);
+    ui.alert('Business Optimization Platform', 'Audit Package Gmail Draft Created', ui.ButtonSet.OK);
   } catch (error) {
     ui.alert(
-      'Rogers Holdings OS',
+      'Business Optimization Platform',
       error && error.message ? error.message : String(error),
       ui.ButtonSet.OK
     );
@@ -287,7 +287,7 @@ function createOutreachGmailDraft() {
 
   if (!sheet || sheet.getName() !== MASTER_PROSPECT_SHEET) {
     ui.alert(
-      'Rogers Holdings OS',
+      'Business Optimization Platform',
       'Select a prospect row on the Master Prospect Tracker sheet first.',
       ui.ButtonSet.OK
     );
@@ -301,7 +301,7 @@ function createOutreachGmailDraft() {
 
   if (selectedRow <= table.headerRow) {
     ui.alert(
-      'Rogers Holdings OS',
+      'Business Optimization Platform',
       'Select a data row below the Master Prospect Tracker header row.',
       ui.ButtonSet.OK
     );
@@ -326,7 +326,7 @@ function createOutreachGmailDraft() {
 
   if (missing.length) {
     ui.alert(
-      'Rogers Holdings OS',
+      'Business Optimization Platform',
       'Add the missing required field before creating a Gmail draft: ' + missing.join(', '),
       ui.ButtonSet.OK
     );
@@ -342,7 +342,7 @@ function createOutreachGmailDraft() {
   } catch (error) {
     if (!recipient) {
       ui.alert(
-        'Rogers Holdings OS',
+        'Business Optimization Platform',
         'Add an email address, then run Create Outreach Gmail Draft again.',
         ui.ButtonSet.OK
       );
@@ -360,7 +360,7 @@ function createOutreachGmailDraft() {
     ? 'Gmail draft created.'
     : 'Gmail draft created.';
 
-  ui.alert('Rogers Holdings OS', message, ui.ButtonSet.OK);
+  ui.alert('Business Optimization Platform', message, ui.ButtonSet.OK);
 }
 
 function requiredProspectFieldsMissing_(prospect, fieldPairs) {

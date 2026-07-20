@@ -1,5 +1,5 @@
 /**
- * Rogers Holdings OS - DriveEngine.
+ * Business Optimization Platform - DriveEngine.
  * Split from the stable Code.gs monolith without changing function names or behavior.
  */
 
@@ -13,7 +13,7 @@ function convertToClient() {
   if (status === 'Project Started' || status === 'Client') {
     return completeClientOnboarding();
   }
-  SpreadsheetApp.getUi().alert('Rogers Holdings OS', `Cannot convert from ${status}. Confirm the preceding lifecycle events first.`, SpreadsheetApp.getUi().ButtonSet.OK);
+  SpreadsheetApp.getUi().alert('Business Optimization Platform', `Cannot convert from ${status}. Confirm the preceding lifecycle events first.`, SpreadsheetApp.getUi().ButtonSet.OK);
 }
 
 function recordImprovementPlanAccepted() {
@@ -31,7 +31,7 @@ function completeProspectClientOperation_(targetStage, title, activityType, acti
   const validation = validateProspectStageTransition_(current, targetStage);
   const ui = SpreadsheetApp.getUi();
   if (!validation.allowed) {
-    ui.alert('Rogers Holdings OS', validation.message, ui.ButtonSet.OK);
+    ui.alert('Business Optimization Platform', validation.message, ui.ButtonSet.OK);
     return null;
   }
   if (!validation.idempotent && ui.alert(title, `Confirm this completed event for ${context.prospect.company}?`, ui.ButtonSet.YES_NO) !== ui.Button.YES) return null;
@@ -39,7 +39,7 @@ function completeProspectClientOperation_(targetStage, title, activityType, acti
   try {
     lock.waitLock(30000);
     const result = convertWonProspectToClient_(context, { targetStage: targetStage, activityType: activityType, activityNotes: activityNotes, lockHeld: true });
-    ui.alert('Rogers Holdings OS', validation.idempotent
+    ui.alert('Business Optimization Platform', validation.idempotent
       ? `${targetStage} was already confirmed. Client, project, Follow-Up, activity, and workspace state were reconciled.\n\nClient ID: ${result.clientId}`
       : `${targetStage} confirmed.\n\nClient ID: ${result.clientId}`, ui.ButtonSet.OK);
     return result;
@@ -55,7 +55,7 @@ function completeProspectClientOperation_(targetStage, title, activityType, acti
       console.error(markerError);
     }
     const currentAfterFailure = normalizePipelineStage_(context.sheet.getRange(context.selectedRow, context.table.headers.Status).getValue()) || String(context.sheet.getRange(context.selectedRow, context.table.headers.Status).getValue() || '').trim();
-    ui.alert('Rogers Holdings OS', `The Drive operation could not be completed. Current CRM Status: ${currentAfterFailure || '(blank)'}. Confirm Drive access, review Lifecycle Operation State and Details, then retry the same action.`, ui.ButtonSet.OK);
+    ui.alert('Business Optimization Platform', `The Drive operation could not be completed. Current CRM Status: ${currentAfterFailure || '(blank)'}. Confirm Drive access, review Lifecycle Operation State and Details, then retry the same action.`, ui.ButtonSet.OK);
     return null;
   } finally {
     lock.releaseLock();
@@ -175,7 +175,7 @@ function buildProjectScopeText_(prospect) {
     '- Confirm client goals and priority business outcomes.',
     '- Review audit findings and recommended improvements.',
     '- Define deliverables, timeline, and approval process.',
-    '- Track next actions through Rogers Holdings OS.',
+    '- Track next actions through Business Optimization Platform.',
     '',
     'Source Audit',
     `Website: ${prospect.website || ''}`,
@@ -199,7 +199,7 @@ function buildOnboardingChecklistText_(prospect) {
     '[ ] Confirm project scope',
     '[ ] Schedule kickoff/discovery meeting',
     '[ ] Define first milestone',
-    '[ ] Update Rogers Holdings OS next action'
+    '[ ] Update Business Optimization Platform next action'
   ].join('\n');
 }
 
@@ -258,14 +258,14 @@ function upsertAuditPackageTextFile_(folder, fileName, contents, mimeType, recon
   const existingFile = existingFiles.length ? existingFiles[0] : null;
   if (existingFile) {
     existingFile.setContent(contents);
-    existingFile.setDescription(`Updated by Rogers Holdings OS on ${new Date().toISOString()}`);
+    existingFile.setDescription(`Updated by Business Optimization Platform on ${new Date().toISOString()}`);
     trashAuditPackageFiles_(existingFiles.slice(1));
     recordAuditPackageReconciliation_(reconciliationResults, fileName, 'updated', existingFiles.length - 1, 0);
     return existingFile;
   }
 
   const file = folder.createFile(fileName, contents, mimeType);
-  file.setDescription(`Created by Rogers Holdings OS on ${new Date().toISOString()}`);
+  file.setDescription(`Created by Business Optimization Platform on ${new Date().toISOString()}`);
   recordAuditPackageReconciliation_(reconciliationResults, fileName, 'created', 0, 0);
   return file;
 }
@@ -275,7 +275,7 @@ function upsertAuditPackageBlobFile_(folder, fileName, blob, reconciliationResul
   trashAuditPackageFiles_(existingFiles);
 
   const file = folder.createFile(blob.setName(fileName));
-  file.setDescription(`${existingFiles.length ? 'Replaced' : 'Created'} by Rogers Holdings OS on ${new Date().toISOString()}`);
+  file.setDescription(`${existingFiles.length ? 'Replaced' : 'Created'} by Business Optimization Platform on ${new Date().toISOString()}`);
   recordAuditPackageReconciliation_(
     reconciliationResults,
     fileName,
@@ -294,7 +294,7 @@ function reconcileAuditReportFile_(folder, blob, reconciliationResults) {
   trashAuditPackageFiles_(canonicalFiles.concat(legacyFiles));
 
   const file = folder.createFile(blob.setName(canonicalFileName));
-  file.setDescription(`${canonicalFiles.length || legacyFiles.length ? 'Replaced' : 'Created'} by Rogers Holdings OS on ${new Date().toISOString()}`);
+  file.setDescription(`${canonicalFiles.length || legacyFiles.length ? 'Replaced' : 'Created'} by Business Optimization Platform on ${new Date().toISOString()}`);
   if (reconciliationResults) {
     reconciliationResults.push({
       fileName: canonicalFileName,

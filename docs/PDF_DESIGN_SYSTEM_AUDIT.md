@@ -1,4 +1,4 @@
-# Rogers Holdings OS PDF Design System Audit
+# Business Optimization Platform PDF Design System Audit
 
 Date: 2026-06-27
 

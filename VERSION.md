@@ -10,6 +10,8 @@ Product: Business Optimization Platform
 
 Owner: Rogers Holdings LLC
 
+Customer-facing brand: `Business Optimization Platform by Rogers Holdings LLC`
+
 Target release: `1.0.0` after final acceptance and production approval
 
 ## Release State

@@ -1,5 +1,5 @@
 /**
- * Rogers Holdings OS - BusinessInterpretationEngine.
+ * Business Optimization Platform - BusinessInterpretationEngine.
  * Converts structured findings into executive-level consulting language.
  *
  * This module runs in parallel. It does not replace existing PDF, audit,

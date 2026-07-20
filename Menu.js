@@ -1,11 +1,11 @@
 /**
- * Rogers Holdings OS - Menu.
+ * Business Optimization Platform - Menu.
  * Split from the stable Code.gs monolith without changing function names or behavior.
  */
 
 function onOpen(e) {
   SpreadsheetApp.getUi()
-    .createMenu('Rogers Holdings OS')
+    .createMenu('Business Optimization Platform')
     .addItem('Create Outreach Gmail Draft', 'createOutreachGmailDraft')
     .addItem('Generate Proposal', 'generateProposal')
     .addItem('Open Prospect Workspace', 'openProspectWorkspace')
@@ -34,7 +34,7 @@ function onOpen(e) {
 }
 
 function testRogersMenuIndexing() {
-  Logger.log('Rogers Holdings OS indexing OK');
+  Logger.log('Business Optimization Platform indexing OK');
 }
 
 function restoreRogersHoldingsMenu() {

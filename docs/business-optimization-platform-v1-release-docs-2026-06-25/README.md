@@ -1,6 +1,6 @@
-# Rogers Holdings OS
+# Business Optimization Platform
 
-Rogers Holdings OS is a Google Workspace-based business operating system for Rogers Holdings LLC. It runs primarily on Google Sheets, Google Apps Script, Gmail, Google Calendar, Google Drive, and GitHub-backed local development.
+Business Optimization Platform is a Google Workspace-based business operating system for Rogers Holdings LLC. It runs primarily on Google Sheets, Google Apps Script, Gmail, Google Calendar, Google Drive, and GitHub-backed local development.
 
 The system is designed to manage the complete small-business lifecycle:
 
@@ -48,7 +48,7 @@ The scripts create or verify required operational sheets when workflows run.
 
 ## Menu Structure
 
-The `Rogers Holdings OS` menu is organized into:
+The `Business Optimization Platform` menu is organized into:
 
 - `Navigate`
 - `Sales Workflow`
@@ -122,7 +122,7 @@ npm run backup
 Backups are written to:
 
 ```text
-backups/rogers-os-local-<timestamp>/
+backups/business-optimization-platform-local-<timestamp>/
 ```
 
 ### Deploy
@@ -166,7 +166,7 @@ Health Check reports missing configuration and service access issues.
 Run from:
 
 ```text
-Rogers Holdings OS -> System -> System Health Check
+Business Optimization Platform -> System -> System Health Check
 ```
 
 It verifies required sheets, headers, duplicate prospects, Gmail, Drive, PDF dependencies, configuration, Client Workspace, Follow-Ups, Projects, and Dashboard integration.

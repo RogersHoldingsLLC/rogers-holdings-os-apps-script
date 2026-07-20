@@ -2,9 +2,7 @@
 
 ## Identity
 
-This repository contains the Business Optimization Platform, formerly called Rogers Holdings OS.
-
-The legacy folder and repository names may remain until an intentional migration is approved.
+This repository contains the Business Optimization Platform, the client delivery platform of Rogers Holdings LLC.
 
 ## Mission
 

@@ -1,5 +1,5 @@
 /**
- * Rogers Holdings OS - HealthCheck.
+ * Business Optimization Platform - HealthCheck.
  * Split from the stable Code.gs monolith without changing function names or behavior.
  */
 
@@ -106,7 +106,7 @@ function buildSystemHealthReport_() {
   addRuntimeDependencyHealthChecks_(report);
   finalizeSystemHealthReport_(report);
   storeSystemHealthStatus_(report);
-  Logger.log('Rogers Holdings OS System Health Check: ' + JSON.stringify(report));
+  Logger.log('Business Optimization Platform System Health Check: ' + JSON.stringify(report));
 
   return report;
 }
@@ -182,7 +182,7 @@ function addDrivePermissionHealthCheck_(report) {
     DriveApp.getRootFolder().getName();
     addHealthItem_(report, 'Pass', 'Drive permissions available', 'DriveApp can access Drive.', 'No action needed.');
   } catch (error) {
-    addHealthItem_(report, 'Fail', 'Drive permissions unavailable', error && error.message ? error.message : String(error), 'Authorize Drive access for Rogers Holdings OS.');
+    addHealthItem_(report, 'Fail', 'Drive permissions unavailable', error && error.message ? error.message : String(error), 'Authorize Drive access for Business Optimization Platform.');
   }
 }
 
@@ -190,7 +190,7 @@ function addGmailPermissionHealthCheck_(report) {
   let draft = null;
   try {
     const recipient = Session.getActiveUser().getEmail() || getRogersContactInfo_().email;
-    draft = GmailApp.createDraft(recipient, 'Rogers Holdings OS Permission Check', 'Temporary draft created by System Health Check.');
+    draft = GmailApp.createDraft(recipient, 'Business Optimization Platform Permission Check', 'Temporary draft created by System Health Check.');
     trashTemporaryGmailDraft_(draft);
     addHealthItem_(report, 'Pass', 'Gmail permissions available', 'GmailApp can create and remove a temporary draft.', 'No action needed.');
   } catch (error) {
@@ -609,7 +609,7 @@ function buildSystemHealthCheckHtml_(report) {
       </head>
       <body>
         <div class="header">
-          <div class="eyebrow">Rogers Holdings OS</div>
+          <div class="eyebrow">Business Optimization Platform</div>
           <h1>System Health Check</h1>
           <div class="timestamp">Generated: ${escapeHtml_(formatDisplayDate_(report.generatedAt))}</div>
         </div>

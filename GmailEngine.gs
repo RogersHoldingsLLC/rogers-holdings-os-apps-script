@@ -1,5 +1,5 @@
 /**
- * Rogers Holdings OS - GmailEngine.
+ * Business Optimization Platform - GmailEngine.
  * Split from the stable Code.gs monolith without changing function names or behavior.
  */
 
@@ -143,7 +143,7 @@ function sendAuditPackage() {
 
   if (missing.length) {
     ui.alert(
-      'Rogers Holdings OS',
+      'Business Optimization Platform',
       'Add the missing fields before sending the Digital Business Assessment: ' + missing.join(', '),
       ui.ButtonSet.OK
     );
@@ -152,7 +152,7 @@ function sendAuditPackage() {
 
   if (!isAuditPackageGenerated_(context.values, context.table.headers)) {
     ui.alert(
-      'Rogers Holdings OS',
+      'Business Optimization Platform',
       'Generate the Digital Business Assessment first, then run Send Audit Package again.',
       ui.ButtonSet.OK
     );
@@ -220,7 +220,7 @@ function sendAuditPackage() {
     );
   } catch (error) {
     ui.alert(
-      'Rogers Holdings OS',
+      'Business Optimization Platform',
       error && error.message ? error.message : String(error),
       ui.ButtonSet.OK
     );
@@ -339,7 +339,7 @@ function createOutreachGmailDraft() {
 
   if (!sheet || sheet.getName() !== MASTER_PROSPECT_SHEET) {
     ui.alert(
-      'Rogers Holdings OS',
+      'Business Optimization Platform',
       'Select a prospect row on the Master Prospect Tracker sheet first.',
       ui.ButtonSet.OK
     );
@@ -353,7 +353,7 @@ function createOutreachGmailDraft() {
 
   if (selectedRow <= table.headerRow) {
     ui.alert(
-      'Rogers Holdings OS',
+      'Business Optimization Platform',
       'Select a data row below the Master Prospect Tracker header row.',
       ui.ButtonSet.OK
     );
@@ -378,7 +378,7 @@ function createOutreachGmailDraft() {
 
   if (missing.length) {
     ui.alert(
-      'Rogers Holdings OS',
+      'Business Optimization Platform',
       'Add the missing required field before creating a Gmail draft: ' + missing.join(', '),
       ui.ButtonSet.OK
     );
@@ -395,7 +395,7 @@ function createOutreachGmailDraft() {
   } catch (error) {
     if (!recipient) {
       ui.alert(
-        'Rogers Holdings OS',
+        'Business Optimization Platform',
         'Add an email address, then run Create Outreach Gmail Draft again.',
         ui.ButtonSet.OK
       );
@@ -412,7 +412,7 @@ function createOutreachGmailDraft() {
   if (typeof showOutreachEmailPreview_ === 'function') {
     showOutreachEmailPreview_(prospect, drafts, recipient);
   } else {
-    ui.alert('Rogers Holdings OS', 'Gmail draft created.', ui.ButtonSet.OK);
+    ui.alert('Business Optimization Platform', 'Gmail draft created.', ui.ButtonSet.OK);
   }
 }
 

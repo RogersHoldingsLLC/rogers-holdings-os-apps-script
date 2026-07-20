@@ -1,5 +1,5 @@
 /**
- * Rogers Holdings OS - DigitalPresenceAssessmentEngine.
+ * Business Optimization Platform - DigitalPresenceAssessmentEngine.
  * Shared client-facing assessment language for PDFs, previews, and outreach.
  */
 

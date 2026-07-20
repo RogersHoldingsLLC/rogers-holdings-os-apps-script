@@ -1,5 +1,5 @@
 /**
- * Rogers Holdings OS - Visual Evidence Engine.
+ * Business Optimization Platform - Visual Evidence Engine.
  * Phase 1 creates the shared image-evidence model used by future screenshot and annotation modules.
  */
 

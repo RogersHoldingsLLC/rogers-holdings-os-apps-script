@@ -1,12 +1,12 @@
 /**
- * Rogers Holdings OS - DemoData.
+ * Business Optimization Platform - DemoData.
  * Split from the stable Code.gs monolith without changing function names or behavior.
  */
 
 function resetDemoData() {
   const ui = SpreadsheetApp.getUi();
   const confirm = ui.alert(
-    'Rogers Holdings OS',
+    'Business Optimization Platform',
     'This will clear demo/test data from Master Prospect Tracker, Activity Feed, Clients, and generated demo folders. Continue?',
     ui.ButtonSet.OK_CANCEL
   );
@@ -65,7 +65,7 @@ function resetDemoData() {
   refreshSalesOperatingSystem_();
 
   ui.alert(
-    'Rogers Holdings OS',
+    'Business Optimization Platform',
     [
       'Reset Demo Data complete.',
       '',

@@ -1,10 +1,10 @@
 /**
- * Rogers Holdings OS - Config.
+ * Business Optimization Platform - Config.
  * Split from the stable Code.gs monolith without changing function names or behavior.
  */
 
 /**
- * Rogers Holdings OS prospect automation menu.
+ * Business Optimization Platform prospect automation menu.
  */
 
 var MASTER_PROSPECT_SHEET = 'Master Prospect Tracker';
@@ -294,7 +294,7 @@ var DEMO_COMPANY_NAMES = [
   'Heritage Lawn Care'
 ];
 
-var ROGERS_OS_THEME = {
+var BUSINESS_OPTIMIZATION_PLATFORM_THEME = {
   black: '#111111',
   charcoal: '#1c1c1c',
   gold: '#b88728',

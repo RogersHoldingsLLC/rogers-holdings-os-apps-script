@@ -1,5 +1,5 @@
 /**
- * Rogers Holdings OS - HomepageInspector.
+ * Business Optimization Platform - HomepageInspector.
  * Isolated inspector for first impression, homepage clarity, and above-the-fold
  * customer understanding. This does not change existing production workflows.
  */

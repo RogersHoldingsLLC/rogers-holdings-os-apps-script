@@ -1,5 +1,5 @@
 /**
- * Rogers Holdings OS - Menu.
+ * Business Optimization Platform - Menu.
  * Split from the stable Code.gs monolith without changing function names or behavior.
  */
 
@@ -138,7 +138,7 @@ function showProductAbout() {
 }
 
 function testRogersMenuIndexing() {
-  Logger.log('Rogers Holdings OS indexing OK');
+  Logger.log('Business Optimization Platform indexing OK');
 }
 
 function restoreRogersHoldingsMenu() {
@@ -241,7 +241,7 @@ function restoreManualStatusCell_(statusCell, priorStatus) {
 
 function notifyLifecycleOperator_(message) {
   try {
-    SpreadsheetApp.getUi().alert('Rogers Holdings OS', message, SpreadsheetApp.getUi().ButtonSet.OK);
+    SpreadsheetApp.getUi().alert('Business Optimization Platform', message, SpreadsheetApp.getUi().ButtonSet.OK);
   } catch (error) {
     console.warn('Lifecycle operator notification unavailable: ' + message);
   }

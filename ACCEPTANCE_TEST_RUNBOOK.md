@@ -79,7 +79,7 @@ For each test capture the prospect row including lifecycle/Calendar marker colum
 
 - Select a test prospect by clicking any cell in its row on `Master Prospect Tracker` before using a menu action.
 - “Confirm” means click `Yes` in the confirmation dialog. “Dismiss” means click `OK` after reading and screenshotting the result.
-- After every state-changing action: wait for completion, screenshot the row, select `Rogers Holdings OS → System → Refresh Executive Dashboard`, then inspect Activity Feed and Follow-Ups using `Rogers Holdings OS → Navigate`.
+- After every state-changing action: wait for completion, screenshot the row, select `Business Optimization Platform → System → Refresh Executive Dashboard`, then inspect Activity Feed and Follow-Ups using `Business Optimization Platform → Navigate`.
 - Workbook expectation (WB): exact Status/Next Action/markers/timestamps stated; no unrelated row mutation.
 - Gmail expectation (GM): no Gmail change unless explicitly stated.
 - Calendar expectation (CAL): no Calendar change unless explicitly stated.
@@ -95,8 +95,8 @@ For each test capture the prospect row including lifecycle/Calendar marker colum
 | --- | --- | --- | --- | --- |
 | ENV-01 | Prove isolation; 10 min | In Drive open production workbook → `File → Make a copy`; name it `DISPOSABLE V1.0 ACCEPTANCE - YYYY-MM-DD`; open the copy; copy its URL to the log. | WB structure visually matches production and title says DISPOSABLE. GM/CAL/DRV no side effects except workbook copy. DSH matches copied baseline. | Capture both workbook titles/IDs and copy timestamp. Fail if IDs match or real production is open. Recovery: close all tabs and make a new copy. |
 | ENV-02 | Identify candidate; 10 min | In disposable workbook click `Extensions → Apps Script`; record project ID. Compare bound `.gs` files/version fingerprint with the candidate recorded by engineering; do not save or deploy. | WB unchanged; services unchanged. | Screenshot project ID and reviewer comparison. Fail on mismatch. Recovery: stop; engineering must provide the correct disposable candidate. |
-| ENV-03 | Verify menu/indexing; 5 min | Reload the workbook. Wait for load. Click `Rogers Holdings OS` and expand each submenu without selecting an action. | WB menu shows Navigate, Sales Workflow, Pipeline, Workspaces, Follow-Ups, Clients & Projects, Product, System. | Capture open menu. Fail if missing/broken. Recovery: reload once; if still absent stop. |
-| ENV-04 | Health gate; 10 min | `Rogers Holdings OS → System → System Health Check`; authorize requested scopes; click `Allow`; wait; click `OK` after capture. | WB health results have no unexplained failure. GM/CAL/DRV permissions resolve. DSH remains usable. | Capture full result and authorization scopes. Fail on unexplained red/error. Recovery: correct only environment configuration, rerun once. |
+| ENV-03 | Verify menu/indexing; 5 min | Reload the workbook. Wait for load. Click `Business Optimization Platform` and expand each submenu without selecting an action. | WB menu shows Navigate, Sales Workflow, Pipeline, Workspaces, Follow-Ups, Clients & Projects, Product, System. | Capture open menu. Fail if missing/broken. Recovery: reload once; if still absent stop. |
+| ENV-04 | Health gate; 10 min | `Business Optimization Platform → System → System Health Check`; authorize requested scopes; click `Allow`; wait; click `OK` after capture. | WB health results have no unexplained failure. GM/CAL/DRV permissions resolve. DSH remains usable. | Capture full result and authorization scopes. Fail on unexplained red/error. Recovery: correct only environment configuration, rerun once. |
 | ENV-05 | Verify timezones; 10 min | Workbook `File → Settings` record timezone. Apps Script `Project Settings` record timezone. Google Calendar `Settings → General → Time zone` record timezone. | All intended test times resolve consistently; no workbook change. | Three screenshots. Fail if different without documented conversion. Recovery: align disposable settings, then restart baseline. |
 | ENV-06 | Verify schema; 15 min | Open Master Prospect Tracker; locate `Lifecycle Operation Key`, `Lifecycle Operation State`, `Lifecycle Operation Details`, `Lifecycle Confirmed At`, `Calendar Operation Key`, `Calendar Event ID`, `Calendar Operation State`. Check filters/protections/formulas around them. | Headers exist once; no overwritten formula/protection/filter. | Wide header screenshot and production-copy comparison. Fail on duplicates/damage. Recovery: stop; do not rearrange schema. |
 
@@ -229,7 +229,7 @@ Run PDF-01–05 once for each: Executive Snapshot, Audit Report, Proposal, Disco
 
 # Phase 8 — Dashboard
 
-For every DSH test: first `Rogers Holdings OS → System → Refresh Executive Dashboard`, then `Navigate → Open Executive Dashboard`; manually count source sheets and record the calculation.
+For every DSH test: first `Business Optimization Platform → System → Refresh Executive Dashboard`, then `Navigate → Open Executive Dashboard`; manually count source sheets and record the calculation.
 
 | ID | Purpose / time | Exact verification | Expected / evidence / recovery |
 | --- | --- | --- | --- |
@@ -303,7 +303,7 @@ Estimated time: 45 minutes.
 
 1. Confirm every test ID in the execution log has `Pass`, `Fail`, `Blocked`, or `Not Run` and evidence.
 2. Re-run locally against the exact candidate: `git diff --check`, `npm run status`, `npm run validate`, `npm run test:lifecycle`. Paste outputs into evidence.
-3. In the disposable workbook run `Rogers Holdings OS → System → System Health Check`, capture, then `Refresh Executive Dashboard`, capture.
+3. In the disposable workbook run `Business Optimization Platform → System → System Health Check`, capture, then `Refresh Executive Dashboard`, capture.
 4. Reconcile Gmail Drafts/Sent, Calendar events/invitations, Drive folders/files, Clients, Projects, Follow-Ups, Activity Feed, and lifecycle markers. Record duplicate counts.
 5. Complete every Final Release Gate row in the official plan and execution log with result, evidence, reviewer, and date.
 6. Any false lifecycle advancement, external duplicate, adjacent-cell corruption, unexplained data loss, missing reconciliation marker, real-recipient exposure, or unresolved `Fail`/`Blocked` means `Not Ready`.

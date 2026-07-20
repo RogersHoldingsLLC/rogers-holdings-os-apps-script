@@ -1,5 +1,5 @@
 /**
- * Rogers Holdings OS - SheetHelpers.
+ * Business Optimization Platform - SheetHelpers.
  * Split from the stable Code.gs monolith without changing function names or behavior.
  */
 
@@ -44,7 +44,7 @@ function resetTestData() {
   const ui = SpreadsheetApp.getUi();
   const response = ui.alert(
     'Reset Test Data',
-    'This will delete test, prospect, client, Follow-Up, project, and activity data but preserve Rogers Holdings OS structure. Continue?',
+    'This will delete test, prospect, client, Follow-Up, project, and activity data but preserve Business Optimization Platform structure. Continue?',
     ui.ButtonSet.YES_NO
   );
 
@@ -71,7 +71,7 @@ function resetTestData() {
   if (ss.getSheetByName(ACTIVITY_FEED_SHEET)) {
     logPipelineActivity_(
       ss,
-      'Rogers Holdings OS',
+      'Business Optimization Platform',
       'System Reset',
       'Reset Test Data cleared operational records while preserving workbook structure.'
     );
@@ -93,7 +93,7 @@ function resetTestData() {
     .join('\n');
 
   ui.alert(
-    'Rogers Holdings OS',
+    'Business Optimization Platform',
     `Reset Test Data complete.\n\nRows cleared: ${clearedRows}\n${summary}`,
     ui.ButtonSet.OK
   );
@@ -104,7 +104,7 @@ function repairInvalidDropdownValues() {
   const ui = SpreadsheetApp.getUi();
   const sheet = ss.getSheetByName(MASTER_PROSPECT_SHEET);
   if (!sheet) {
-    ui.alert('Rogers Holdings OS', 'Master Prospect Tracker not found.', ui.ButtonSet.OK);
+    ui.alert('Business Optimization Platform', 'Master Prospect Tracker not found.', ui.ButtonSet.OK);
     return;
   }
 
@@ -113,7 +113,7 @@ function repairInvalidDropdownValues() {
   if (result.changedCells > 0) {
     logPipelineActivity_(
       ss,
-      'Rogers Holdings OS',
+      'Business Optimization Platform',
       'Dropdown Values Repaired',
       `Repaired ${result.changedCells} invalid dropdown value(s) across ${result.changedRows} prospect row(s).`
     );
@@ -121,7 +121,7 @@ function repairInvalidDropdownValues() {
   refreshExecutiveDashboard();
 
   ui.alert(
-    'Rogers Holdings OS',
+    'Business Optimization Platform',
     `Dropdown repair complete.\n\nCells repaired: ${result.changedCells}\nRows affected: ${result.changedRows}`,
     ui.ButtonSet.OK
   );
@@ -131,7 +131,7 @@ function auditLegacyLifecycleValues() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(MASTER_PROSPECT_SHEET);
   if (!sheet) {
-    SpreadsheetApp.getUi().alert('Rogers Holdings OS', 'Master Prospect Tracker not found.', SpreadsheetApp.getUi().ButtonSet.OK);
+    SpreadsheetApp.getUi().alert('Business Optimization Platform', 'Master Prospect Tracker not found.', SpreadsheetApp.getUi().ButtonSet.OK);
     return [];
   }
   const table = getHeaderTable_(sheet, ['Company', 'Status']);
@@ -144,7 +144,7 @@ function auditLegacyLifecycleValues() {
     '<p>This report is read-only. Artifact labels are not converted into confirmed customer events.</p>' +
     '<table style="border-collapse:collapse;width:100%"><tr><th>Row</th><th>Company</th><th>Field</th><th>Unrecognized value</th></tr>' + rows + '</table></div>'
   ).setWidth(720).setHeight(520);
-  SpreadsheetApp.getUi().showModalDialog(html, 'Rogers Holdings OS');
+  SpreadsheetApp.getUi().showModalDialog(html, 'Business Optimization Platform');
   return findings;
 }
 
@@ -418,48 +418,48 @@ function buildEmptyClientWorkspaceModel_() {
 }
 
 function openExecutiveDashboard() {
-  openRogersOsSheet_('Executive Dashboard', true);
+  openBusinessOptimizationPlatformSheet_('Executive Dashboard', true);
 }
 
 function openMasterProspectTracker() {
-  openRogersOsSheet_(MASTER_PROSPECT_SHEET, true);
+  openBusinessOptimizationPlatformSheet_(MASTER_PROSPECT_SHEET, true);
 }
 
 function openClientsSheet() {
   getOrCreateClientsSheet_(SpreadsheetApp.getActiveSpreadsheet());
-  openRogersOsSheet_(CLIENTS_SHEET, true);
+  openBusinessOptimizationPlatformSheet_(CLIENTS_SHEET, true);
 }
 
 function openFollowUpsSheet() {
   getOrCreateFollowUpsSheet_(SpreadsheetApp.getActiveSpreadsheet());
-  openRogersOsSheet_(FOLLOW_UPS_SHEET, true);
+  openBusinessOptimizationPlatformSheet_(FOLLOW_UPS_SHEET, true);
 }
 
 function openProjectsSheet() {
   getOrCreateProjectsSheet_(SpreadsheetApp.getActiveSpreadsheet());
-  openRogersOsSheet_(PROJECTS_SHEET, true);
+  openBusinessOptimizationPlatformSheet_(PROJECTS_SHEET, true);
 }
 
 function openActivityFeedSheet() {
-  openRogersOsSheet_(ACTIVITY_FEED_SHEET, true);
+  openBusinessOptimizationPlatformSheet_(ACTIVITY_FEED_SHEET, true);
 }
 
 function openDailyFrictionLog() {
   getOrCreateDailyFrictionLogSheet_(SpreadsheetApp.getActiveSpreadsheet());
-  openRogersOsSheet_(DAILY_FRICTION_LOG_SHEET, true);
+  openBusinessOptimizationPlatformSheet_(DAILY_FRICTION_LOG_SHEET, true);
 }
 
 function openProductFeedback() {
   getOrCreateProductFeedbackSheet_(SpreadsheetApp.getActiveSpreadsheet());
-  openRogersOsSheet_(PRODUCT_FEEDBACK_SHEET, true);
+  openBusinessOptimizationPlatformSheet_(PRODUCT_FEEDBACK_SHEET, true);
 }
 
-function openRogersOsSheet_(sheetName, showAlert) {
+function openBusinessOptimizationPlatformSheet_(sheetName, showAlert) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(sheetName);
   if (!sheet) {
     if (showAlert) {
-      SpreadsheetApp.getUi().alert('Rogers Holdings OS', `Sheet not found: ${sheetName}`, SpreadsheetApp.getUi().ButtonSet.OK);
+      SpreadsheetApp.getUi().alert('Business Optimization Platform', `Sheet not found: ${sheetName}`, SpreadsheetApp.getUi().ButtonSet.OK);
     }
     return;
   }
@@ -486,7 +486,7 @@ function createFollowUp() {
 
   const dueDate = parseDateInputOrToday_(duePrompt.getResponseText());
   if (!dueDate) {
-    ui.alert('Rogers Holdings OS', 'Enter a valid due date, then run Create Follow-Up again.', ui.ButtonSet.OK);
+    ui.alert('Business Optimization Platform', 'Enter a valid due date, then run Create Follow-Up again.', ui.ButtonSet.OK);
     return;
   }
 
@@ -506,7 +506,7 @@ function createFollowUp() {
 
   logPipelineActivity_(context.ss, context.company, result.created ? 'Follow-Up Created' : 'Follow-Up Updated', `${result.followUpType} due ${formatDisplayDate_(dueDate)}.`);
   refreshSalesOperatingSystem_();
-  ui.alert('Rogers Holdings OS', result.created ? 'Follow-Up created.' : 'Existing open Follow-Up updated.', ui.ButtonSet.OK);
+  ui.alert('Business Optimization Platform', result.created ? 'Follow-Up created.' : 'Existing open Follow-Up updated.', ui.ButtonSet.OK);
 }
 
 function completeFollowUp() {
@@ -595,11 +595,11 @@ function ensureFollowUpColumns_(sheet) {
   });
 
   sheet.getRange(headerRow, 1, 1, lastColumn)
-    .setBackground(ROGERS_OS_THEME.black)
-    .setFontColor(ROGERS_OS_THEME.gold)
+    .setBackground(BUSINESS_OPTIMIZATION_PLATFORM_THEME.black)
+    .setFontColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.gold)
     .setFontWeight('bold');
   sheet.setFrozenRows(headerRow);
-  sheet.setTabColor(ROGERS_OS_THEME.gold);
+  sheet.setTabColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.gold);
 
   return {
     headerRow: headerRow,
@@ -850,11 +850,11 @@ function formatFollowUpsSheet_(sheet, headers) {
   const lastColumn = Math.max(sheet.getLastColumn(), FOLLOW_UP_COLUMNS.length);
   sheet.setHiddenGridlines(true);
   safeSetFrozenRows_(sheet, headerRow);
-  sheet.setTabColor(ROGERS_OS_THEME.gold);
+  sheet.setTabColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.gold);
   applyOperatingSystemSheetChrome_(sheet, 'FOLLOW-UPS', headerRow, lastColumn);
   sheet.getRange(headerRow, 1, 1, lastColumn)
-    .setBackground(ROGERS_OS_THEME.black)
-    .setFontColor(ROGERS_OS_THEME.gold)
+    .setBackground(BUSINESS_OPTIMIZATION_PLATFORM_THEME.black)
+    .setFontColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.gold)
     .setFontWeight('bold')
     .setHorizontalAlignment('center');
   if (headers['Due Date']) {
@@ -1011,7 +1011,7 @@ function createProject() {
   });
   logPipelineActivity_(context.ss, context.client.company, result.created ? 'Project Created' : 'Project Updated', result.created ? 'Project created from selected client.' : 'Existing project updated from selected client.');
   refreshSalesOperatingSystem_();
-  SpreadsheetApp.getUi().alert('Rogers Holdings OS', result.created ? 'Project created.' : 'Existing project updated.', SpreadsheetApp.getUi().ButtonSet.OK);
+  SpreadsheetApp.getUi().alert('Business Optimization Platform', result.created ? 'Project created.' : 'Existing project updated.', SpreadsheetApp.getUi().ButtonSet.OK);
 }
 
 function updateProjectStatus() {
@@ -1032,7 +1032,7 @@ function updateProjectStatus() {
 
   const status = normalizeProjectStatus_(prompt.getResponseText());
   if (!status) {
-    ui.alert('Rogers Holdings OS', 'Enter a valid project status, then run Update Project Status again.', ui.ButtonSet.OK);
+    ui.alert('Business Optimization Platform', 'Enter a valid project status, then run Update Project Status again.', ui.ButtonSet.OK);
     return;
   }
 
@@ -1042,7 +1042,7 @@ function updateProjectStatus() {
     logPipelineActivity_(context.ss, context.company, 'Deliverable Completed', getProjectDeliverableActivityNotes_(context.values, context.headers));
   }
   refreshSalesOperatingSystem_();
-  ui.alert('Rogers Holdings OS', `Project status updated to ${status}.`, ui.ButtonSet.OK);
+  ui.alert('Business Optimization Platform', `Project status updated to ${status}.`, ui.ButtonSet.OK);
 }
 
 function completeProject() {
@@ -1110,12 +1110,12 @@ function ensureProjectColumns_(sheet) {
   });
 
   sheet.getRange(headerRow, 1, 1, lastColumn)
-    .setBackground(ROGERS_OS_THEME.black)
-    .setFontColor(ROGERS_OS_THEME.gold)
+    .setBackground(BUSINESS_OPTIMIZATION_PLATFORM_THEME.black)
+    .setFontColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.gold)
     .setFontWeight('bold')
     .setHorizontalAlignment('center');
   sheet.setFrozenRows(headerRow);
-  sheet.setTabColor(ROGERS_OS_THEME.charcoal);
+  sheet.setTabColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.charcoal);
 
   return {
     headerRow: headerRow,
@@ -1305,7 +1305,7 @@ function getSelectedProjectSourceContext_(showAlert) {
   const sheet = ss.getActiveSheet();
   if (!sheet || sheet.getName() !== CLIENTS_SHEET) {
     if (showAlert) {
-      ui.alert('Rogers Holdings OS', 'Select a client row on the Clients sheet before creating a project.', ui.ButtonSet.OK);
+      ui.alert('Business Optimization Platform', 'Select a client row on the Clients sheet before creating a project.', ui.ButtonSet.OK);
     }
     return null;
   }
@@ -1314,7 +1314,7 @@ function getSelectedProjectSourceContext_(showAlert) {
   const rowNumber = sheet.getActiveRange() ? sheet.getActiveRange().getRow() : 0;
   if (rowNumber <= table.headerRow) {
     if (showAlert) {
-      ui.alert('Rogers Holdings OS', 'Select a client data row below the header.', ui.ButtonSet.OK);
+      ui.alert('Business Optimization Platform', 'Select a client data row below the header.', ui.ButtonSet.OK);
     }
     return null;
   }
@@ -1323,7 +1323,7 @@ function getSelectedProjectSourceContext_(showAlert) {
   const client = buildProjectClientModel_(values, table.headers);
   if (!client.company) {
     if (showAlert) {
-      ui.alert('Rogers Holdings OS', 'The selected client row is missing Company.', ui.ButtonSet.OK);
+      ui.alert('Business Optimization Platform', 'The selected client row is missing Company.', ui.ButtonSet.OK);
     }
     return null;
   }
@@ -1340,7 +1340,7 @@ function getSelectedProjectContext_(showAlert) {
   const sheet = ss.getActiveSheet();
   if (!sheet || sheet.getName() !== PROJECTS_SHEET) {
     if (showAlert) {
-      ui.alert('Rogers Holdings OS', 'Select a project row on the Projects sheet.', ui.ButtonSet.OK);
+      ui.alert('Business Optimization Platform', 'Select a project row on the Projects sheet.', ui.ButtonSet.OK);
     }
     return null;
   }
@@ -1349,7 +1349,7 @@ function getSelectedProjectContext_(showAlert) {
   const rowNumber = sheet.getActiveRange() ? sheet.getActiveRange().getRow() : 0;
   if (rowNumber <= table.headerRow) {
     if (showAlert) {
-      ui.alert('Rogers Holdings OS', 'Select a project data row below the header.', ui.ButtonSet.OK);
+      ui.alert('Business Optimization Platform', 'Select a project data row below the header.', ui.ButtonSet.OK);
     }
     return null;
   }
@@ -1491,11 +1491,11 @@ function formatProjectsSheet_(sheet, headers) {
   const lastColumn = Math.max(sheet.getLastColumn(), PROJECT_COLUMNS.length);
   sheet.setHiddenGridlines(true);
   safeSetFrozenRows_(sheet, headerRow);
-  sheet.setTabColor(ROGERS_OS_THEME.charcoal);
+  sheet.setTabColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.charcoal);
   applyOperatingSystemSheetChrome_(sheet, 'PROJECTS', headerRow, lastColumn);
   sheet.getRange(headerRow, 1, 1, lastColumn)
-    .setBackground(ROGERS_OS_THEME.black)
-    .setFontColor(ROGERS_OS_THEME.gold)
+    .setBackground(BUSINESS_OPTIMIZATION_PLATFORM_THEME.black)
+    .setFontColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.gold)
     .setFontWeight('bold')
     .setHorizontalAlignment('center');
   setColumnWidthIfHeader_(sheet, headers, 'Project ID', 160);
@@ -1706,7 +1706,7 @@ function runNextAction() {
     refreshNextActionDashboards_();
 
     ui.alert(
-      'Rogers Holdings OS',
+      'Business Optimization Platform',
       `Next Action complete for ${company}.\n\n${completedAction}`,
       ui.ButtonSet.OK
     );
@@ -1719,7 +1719,7 @@ function runNextAction() {
       console.warn('Next Action failure could not be logged: ' + (logError && logError.message ? logError.message : String(logError)));
     }
 
-    ui.alert('Rogers Holdings OS', `Run Next Action failed.\n\n${message}`, ui.ButtonSet.OK);
+    ui.alert('Business Optimization Platform', `Run Next Action failed.\n\n${message}`, ui.ButtonSet.OK);
   }
 }
 
@@ -1729,27 +1729,27 @@ function getSelectedProspectContextOrAlert_(requiredHeaders) {
   const sheet = ss.getActiveSheet();
 
   if (!sheet || sheet.getName() !== MASTER_PROSPECT_SHEET) {
-    ui.alert('Rogers Holdings OS', 'Run Next Action from a selected row on Master Prospect Tracker.', ui.ButtonSet.OK);
+    ui.alert('Business Optimization Platform', 'Run Next Action from a selected row on Master Prospect Tracker.', ui.ButtonSet.OK);
     return null;
   }
 
   const activeRange = sheet.getActiveRange();
   if (!activeRange) {
-    ui.alert('Rogers Holdings OS', 'Select one prospect row before running Next Action.', ui.ButtonSet.OK);
+    ui.alert('Business Optimization Platform', 'Select one prospect row before running Next Action.', ui.ButtonSet.OK);
     return null;
   }
 
   const table = getHeaderTable_(sheet, requiredHeaders || ['Company', 'Status']);
   const selectedRow = activeRange.getRow();
   if (selectedRow <= table.headerRow) {
-    ui.alert('Rogers Holdings OS', 'Select a prospect data row below the header row.', ui.ButtonSet.OK);
+    ui.alert('Business Optimization Platform', 'Select a prospect data row below the header row.', ui.ButtonSet.OK);
     return null;
   }
 
   const values = sheet.getRange(selectedRow, 1, 1, table.lastColumn).getValues()[0];
   const company = String(getValueByHeader_(values, table.headers, 'Company') || '').trim();
   if (!company) {
-    ui.alert('Rogers Holdings OS', 'The selected prospect row is blank or missing Company.', ui.ButtonSet.OK);
+    ui.alert('Business Optimization Platform', 'The selected prospect row is blank or missing Company.', ui.ButtonSet.OK);
     return null;
   }
 
@@ -1809,7 +1809,7 @@ function promptReviewGmailDraft_(context) {
     '</div>'
   ).setWidth(420).setHeight(260);
 
-  SpreadsheetApp.getUi().showModalDialog(html, 'Rogers Holdings OS');
+  SpreadsheetApp.getUi().showModalDialog(html, 'Business Optimization Platform');
   logPipelineActivity_(context.ss, company, 'Gmail Draft Review Prompted', 'Prompted user to review and send the Gmail draft.');
   return 'Opened a Gmail Draft review prompt.';
 }
@@ -2172,14 +2172,14 @@ function confirmSelectedProspectTransition_(requestedStage, title, activityType,
   const validation = validateProspectStageTransition_(current, requestedStage);
   const ui = SpreadsheetApp.getUi();
   if (!validation.allowed) {
-    ui.alert('Rogers Holdings OS', validation.message, ui.ButtonSet.OK);
+    ui.alert('Business Optimization Platform', validation.message, ui.ButtonSet.OK);
     return null;
   }
   const marker = getLifecycleOperationState_(context);
   if (!validation.idempotent && ui.alert(title, `Confirm the real-world event for ${context.prospect.company}?`, ui.ButtonSet.YES_NO) !== ui.Button.YES) return null;
   applyConfirmedProspectTransition_(context, requestedStage, activityType, activityNotes);
   refreshSalesOperatingSystem_();
-  ui.alert('Rogers Holdings OS', validation.idempotent
+  ui.alert('Business Optimization Platform', validation.idempotent
     ? `${requestedStage} was already confirmed. Reconciliation was checked${marker.state === 'Complete' ? '; no repair was needed.' : ' and incomplete downstream work was repaired.'}`
     : `CRM Status updated to ${requestedStage}.`, ui.ButtonSet.OK);
   return context;
@@ -2207,7 +2207,7 @@ function reactivateNurturedProspect() {
   const current = normalizePipelineStage_(getValueByHeader_(context.values, context.table.headers, 'Status'));
   const ui = SpreadsheetApp.getUi();
   if (current !== 'Nurture') {
-    ui.alert('Rogers Holdings OS', 'Only a Nurture prospect can be explicitly reactivated.', ui.ButtonSet.OK);
+    ui.alert('Business Optimization Platform', 'Only a Nurture prospect can be explicitly reactivated.', ui.ButtonSet.OK);
     return null;
   }
   if (ui.alert('Reactivate Nurtured Prospect', `Confirm ${context.prospect.company} should re-enter the active lifecycle at Lead Found?`, ui.ButtonSet.YES_NO) !== ui.Button.YES) return null;
@@ -2217,7 +2217,7 @@ function reactivateNurturedProspect() {
 }
 
 function advanceProspectStage() {
-  SpreadsheetApp.getUi().alert('Rogers Holdings OS', 'Automatic stage advancement is disabled. Use the explicit confirmation action for the real-world event that occurred.', SpreadsheetApp.getUi().ButtonSet.OK);
+  SpreadsheetApp.getUi().alert('Business Optimization Platform', 'Automatic stage advancement is disabled. Use the explicit confirmation action for the real-world event that occurred.', SpreadsheetApp.getUi().ButtonSet.OK);
 }
 
 function markProspectWon() {
@@ -2248,7 +2248,7 @@ function updateSelectedProspectFollowUpStage_(status, activityType, activityNote
   logPipelineActivity_(context.ss, context.prospect.company, activityType, activityNotes);
   refreshSalesOperatingSystem_();
 
-  SpreadsheetApp.getUi().alert('Rogers Holdings OS', successMessage + '.', SpreadsheetApp.getUi().ButtonSet.OK);
+  SpreadsheetApp.getUi().alert('Business Optimization Platform', successMessage + '.', SpreadsheetApp.getUi().ButtonSet.OK);
 }
 
 function normalizeDropdownValue_(value) {
@@ -2597,7 +2597,7 @@ function refreshClientWorkspace() {
     logOpen: false
   });
 
-  SpreadsheetApp.getUi().alert('Rogers Holdings OS', 'Client Workspace refreshed.', SpreadsheetApp.getUi().ButtonSet.OK);
+  SpreadsheetApp.getUi().alert('Business Optimization Platform', 'Client Workspace refreshed.', SpreadsheetApp.getUi().ButtonSet.OK);
 }
 
 function getOrCreateClientWorkspaceSheet_(ss) {
@@ -2646,7 +2646,7 @@ function getActiveClientWorkspaceContext_(showAlert) {
 
   if (!clientRow) {
     if (showAlert) {
-      ui.alert('Rogers Holdings OS', 'Select a client row on the Clients sheet, or select a prospect that has already been converted to a client.', ui.ButtonSet.OK);
+      ui.alert('Business Optimization Platform', 'Select a client row on the Clients sheet, or select a prospect that has already been converted to a client.', ui.ButtonSet.OK);
     }
     return null;
   }
@@ -2766,14 +2766,14 @@ function renderClientWorkspace_(sheet, model) {
   ensureExecutiveDashboardSize_(sheet, 70, 10);
   sheet.getRange(1, 1, 70, 10).breakApart().clearContent().clearFormat();
   sheet.setHiddenGridlines(true);
-  sheet.setTabColor(ROGERS_OS_THEME.black);
+  sheet.setTabColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.black);
   safeSetFrozenRows_(sheet, 3);
 
-  const black = ROGERS_OS_THEME.black;
-  const gold = ROGERS_OS_THEME.gold;
-  const white = ROGERS_OS_THEME.white;
-  const neutral = ROGERS_OS_THEME.softNeutral;
-  const border = ROGERS_OS_THEME.border;
+  const black = BUSINESS_OPTIMIZATION_PLATFORM_THEME.black;
+  const gold = BUSINESS_OPTIMIZATION_PLATFORM_THEME.gold;
+  const white = BUSINESS_OPTIMIZATION_PLATFORM_THEME.white;
+  const neutral = BUSINESS_OPTIMIZATION_PLATFORM_THEME.softNeutral;
+  const border = BUSINESS_OPTIMIZATION_PLATFORM_THEME.border;
 
   sheet.setColumnWidths(1, 10, 135);
   sheet.setColumnWidth(1, 150);
@@ -2790,7 +2790,7 @@ function renderClientWorkspace_(sheet, model) {
   sheet.setRowHeight(1, 42);
   sheet.setRowHeight(2, 34);
 
-  sheet.getRange(1, 1, 1, 10).merge().setValue('ROGERS HOLDINGS OS | CLIENT WORKSPACE')
+  sheet.getRange(1, 1, 1, 10).merge().setValue('BUSINESS OPTIMIZATION PLATFORM | CLIENT WORKSPACE')
     .setBackground(black)
     .setFontColor(gold)
     .setFontWeight('bold')
@@ -2831,10 +2831,10 @@ function renderClientWorkspace_(sheet, model) {
   writeClientWorkspaceSection_(sheet, 13, 7, 3, 'Documents', clientDocumentRows_(model));
   writeClientWorkspaceSection_(sheet, 22, 1, 9, 'Project Delivery', clientProjectRows_(model.projects));
   writeClientWorkspaceSection_(sheet, 28, 1, 3, 'Quick Actions', [
-    ['Open Client Workspace', 'Use Rogers Holdings OS > Open Client Workspace'],
-    ['Refresh Client Workspace', 'Use Rogers Holdings OS > Refresh Client Workspace'],
-    ['Open Projects', 'Use Rogers Holdings OS > Open Projects'],
-    ['Next Action', 'Use Rogers Holdings OS > Run Next Action']
+    ['Open Client Workspace', 'Use Business Optimization Platform > Open Client Workspace'],
+    ['Refresh Client Workspace', 'Use Business Optimization Platform > Refresh Client Workspace'],
+    ['Open Projects', 'Use Business Optimization Platform > Open Projects'],
+    ['Next Action', 'Use Business Optimization Platform > Run Next Action']
   ]);
   writeClientWorkspaceSection_(sheet, 28, 5, 5, 'Next Steps', [
     ['Next Follow-Up', clientNextFollowUpSummary_(model.followUps)],
@@ -2859,8 +2859,8 @@ function renderClientWorkspace_(sheet, model) {
 function writeClientWorkspaceSection_(sheet, startRow, startColumn, valueColumnSpan, title, rows) {
   const width = valueColumnSpan + 1;
   sheet.getRange(startRow, startColumn, 1, width).merge().setValue(title)
-    .setBackground(ROGERS_OS_THEME.charcoal)
-    .setFontColor(ROGERS_OS_THEME.gold)
+    .setBackground(BUSINESS_OPTIMIZATION_PLATFORM_THEME.charcoal)
+    .setFontColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.gold)
     .setFontWeight('bold')
     .setFontSize(11)
     .setHorizontalAlignment('center')
@@ -2876,11 +2876,11 @@ function writeClientWorkspaceSection_(sheet, startRow, startColumn, valueColumnS
   sheet.getRange(startRow + 1, startColumn, output.length, 2).setValues(output);
   sheet.getRange(startRow + 1, startColumn, output.length, 1)
     .setFontWeight('bold')
-    .setFontColor(ROGERS_OS_THEME.muted)
+    .setFontColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.muted)
     .setHorizontalAlignment('right')
     .setVerticalAlignment('middle');
   sheet.getRange(startRow + 1, startColumn + 1, output.length, Math.max(valueColumnSpan, 1))
-    .setBackground(ROGERS_OS_THEME.softNeutral)
+    .setBackground(BUSINESS_OPTIMIZATION_PLATFORM_THEME.softNeutral)
     .setHorizontalAlignment('left')
     .setVerticalAlignment('middle');
 }
@@ -3106,7 +3106,7 @@ function buildBulkProspectImportHtml_() {
       <body>
         <div class="wrap">
           <div class="brand">
-            <span>Rogers Holdings OS</span>
+            <span>Business Optimization Platform</span>
             <h1>Bulk Prospect Import</h1>
           </div>
 
@@ -3546,7 +3546,7 @@ function buildProspectWorkspaceHtml_(workspace) {
       <body>
         <div class="wrap">
           <div class="brand">
-            <span>Rogers Holdings OS</span>
+            <span>Business Optimization Platform</span>
             <h1>${escapeHtml_(prospect.company)}</h1>
           </div>
 
@@ -3948,7 +3948,7 @@ function formatProductFeedbackSheet_(sheet, headers) {
   const lastColumn = Math.max(sheet.getLastColumn(), PRODUCT_FEEDBACK_COLUMNS.length);
 
   runSheetFormattingStep_(sheet, 'Product Feedback tab color', function() {
-    sheet.setTabColor(ROGERS_OS_THEME.charcoal);
+    sheet.setTabColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.charcoal);
   });
   safeSetFrozenRows_(sheet, headerRow);
   runSheetFormattingStep_(sheet, 'Product Feedback gridlines', function() {
@@ -4015,7 +4015,7 @@ function formatDailyFrictionLogSheet_(sheet, headers) {
   const lastColumn = Math.max(sheet.getLastColumn(), DAILY_FRICTION_LOG_COLUMNS.length);
 
   runSheetFormattingStep_(sheet, 'Daily Friction Log tab color', function() {
-    sheet.setTabColor(ROGERS_OS_THEME.gold);
+    sheet.setTabColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.gold);
   });
   safeSetFrozenRows_(sheet, headerRow);
   runSheetFormattingStep_(sheet, 'Daily Friction Log gridlines', function() {
@@ -4117,7 +4117,7 @@ function getSelectedProspectContext_(requiredHeaders) {
   const sheet = ss.getActiveSheet();
 
   if (!sheet || sheet.getName() !== MASTER_PROSPECT_SHEET) {
-    ui.alert('Rogers Holdings OS', 'Select a prospect row on the Master Prospect Tracker sheet first.', ui.ButtonSet.OK);
+    ui.alert('Business Optimization Platform', 'Select a prospect row on the Master Prospect Tracker sheet first.', ui.ButtonSet.OK);
     return null;
   }
 
@@ -4125,7 +4125,7 @@ function getSelectedProspectContext_(requiredHeaders) {
   const table = getHeaderTable_(sheet, requiredHeaders || ['Company']);
 
   if (selectedRow <= table.headerRow) {
-    ui.alert('Rogers Holdings OS', 'Select a data row below the Master Prospect Tracker header row.', ui.ButtonSet.OK);
+    ui.alert('Business Optimization Platform', 'Select a data row below the Master Prospect Tracker header row.', ui.ButtonSet.OK);
     return null;
   }
 
@@ -4136,7 +4136,7 @@ function getSelectedProspectContext_(requiredHeaders) {
   };
 
   if (!prospect.company) {
-    ui.alert('Rogers Holdings OS', 'The selected row does not have a Company value.', ui.ButtonSet.OK);
+    ui.alert('Business Optimization Platform', 'The selected row does not have a Company value.', ui.ButtonSet.OK);
     return null;
   }
 
@@ -4156,7 +4156,7 @@ function getSelectedFollowUpSourceContext_(showAlert) {
   const sheet = ss.getActiveSheet();
   if (!sheet) {
     if (showAlert) {
-      ui.alert('Rogers Holdings OS', 'Select a prospect or client row before creating a Follow-Up.', ui.ButtonSet.OK);
+      ui.alert('Business Optimization Platform', 'Select a prospect or client row before creating a Follow-Up.', ui.ButtonSet.OK);
     }
     return null;
   }
@@ -4185,7 +4185,7 @@ function getSelectedFollowUpSourceContext_(showAlert) {
     const selectedRow = sheet.getActiveRange() ? sheet.getActiveRange().getRow() : 0;
     if (selectedRow <= table.headerRow) {
       if (showAlert) {
-        ui.alert('Rogers Holdings OS', 'Select a client data row below the Clients header row.', ui.ButtonSet.OK);
+        ui.alert('Business Optimization Platform', 'Select a client data row below the Clients header row.', ui.ButtonSet.OK);
       }
       return null;
     }
@@ -4197,7 +4197,7 @@ function getSelectedFollowUpSourceContext_(showAlert) {
     ]);
     if (!company) {
       if (showAlert) {
-        ui.alert('Rogers Holdings OS', 'The selected client row is missing Company.', ui.ButtonSet.OK);
+        ui.alert('Business Optimization Platform', 'The selected client row is missing Company.', ui.ButtonSet.OK);
       }
       return null;
     }
@@ -4216,7 +4216,7 @@ function getSelectedFollowUpSourceContext_(showAlert) {
   }
 
   if (showAlert) {
-    ui.alert('Rogers Holdings OS', 'Select a row on Master Prospect Tracker or Clients before creating a Follow-Up.', ui.ButtonSet.OK);
+    ui.alert('Business Optimization Platform', 'Select a row on Master Prospect Tracker or Clients before creating a Follow-Up.', ui.ButtonSet.OK);
   }
   return null;
 }
@@ -4647,7 +4647,7 @@ function prepareExecutiveDashboardSheet_(sheet) {
     .clearNote();
   sheet.setHiddenGridlines(true);
   safeSetFrozenRows_(sheet, 2);
-  sheet.setTabColor(ROGERS_OS_THEME.black);
+  sheet.setTabColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.black);
   sheet.setColumnWidths(1, 12, 125);
   sheet.setColumnWidth(1, 170);
   sheet.setColumnWidth(2, 120);
@@ -4696,7 +4696,7 @@ function updateDashboardKPIs_(data) {
     averageCompletionTime: 0
   };
   const rows = [
-    ['ROGERS HOLDINGS OS', '', '', '', '', '', '', '', '', '', '', ''],
+    ['BUSINESS OPTIMIZATION PLATFORM', '', '', '', '', '', '', '', '', '', '', ''],
     ['EXECUTIVE DASHBOARD', '', '', '', '', '', '', '', '', 'Last Refresh', data.generatedAt, ''],
     ['Total Prospects', '', '', 'Leads Found', '', '', 'Executive Snapshot Sent', '', '', 'Improvement Plan Sent', '', ''],
     [data.totalProspects, '', '', data.statusCounts['Lead Found'] || 0, '', '', data.statusCounts['Executive Snapshot Sent'] || 0, '', '', data.statusCounts['Improvement Plan Sent'] || 0, '', ''],
@@ -4766,7 +4766,7 @@ function updateRecentActivity_(data) {
   sheet.getRange(16, 5, Math.max(rows.length - 2, 1), 1).setNumberFormat('yyyy-mm-dd hh:mm');
   if (!data.activities.length) {
     sheet.getRange(16, 5, 1, 4)
-      .setFontColor(ROGERS_OS_THEME.muted)
+      .setFontColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.muted)
       .setFontStyle('italic')
       .setHorizontalAlignment('center');
   }
@@ -4813,7 +4813,7 @@ function updateFollowUpQueue_(data) {
   sheet.getRange(36, 7, Math.max(rows.length - 2, 1), 1).setNumberFormat('yyyy-mm-dd');
   if (!queue.length) {
     sheet.getRange(36, 1, 1, 7)
-      .setFontColor(ROGERS_OS_THEME.muted)
+      .setFontColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.muted)
       .setFontStyle('italic')
       .setHorizontalAlignment('center');
   }
@@ -4903,7 +4903,7 @@ function updateTopOpportunities_(data) {
   sheet.getRange(36, 12, Math.max(rows.length - 2, 1), 1).setNumberFormat('yyyy-mm-dd');
   if (!opportunities.length) {
     sheet.getRange(36, 8, 1, 5)
-      .setFontColor(ROGERS_OS_THEME.muted)
+      .setFontColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.muted)
       .setFontStyle('italic')
       .setHorizontalAlignment('center');
   }
@@ -4950,7 +4950,7 @@ function handleExecutiveDashboardQuickActionSelection_(e) {
     return;
   }
 
-  SpreadsheetApp.getActiveSpreadsheet().toast('Running dashboard action...', 'Rogers Holdings OS', 3);
+  SpreadsheetApp.getActiveSpreadsheet().toast('Running dashboard action...', 'Business Optimization Platform', 3);
   action();
 }
 
@@ -4978,12 +4978,12 @@ function updateSystemStatus_(data) {
 }
 
 function applyExecutiveDashboardBranding_(sheet) {
-  const black = ROGERS_OS_THEME.black;
-  const gold = ROGERS_OS_THEME.gold;
-  const white = ROGERS_OS_THEME.white;
-  const neutral = ROGERS_OS_THEME.softNeutral;
-  const text = ROGERS_OS_THEME.text;
-  const border = ROGERS_OS_THEME.border;
+  const black = BUSINESS_OPTIMIZATION_PLATFORM_THEME.black;
+  const gold = BUSINESS_OPTIMIZATION_PLATFORM_THEME.gold;
+  const white = BUSINESS_OPTIMIZATION_PLATFORM_THEME.white;
+  const neutral = BUSINESS_OPTIMIZATION_PLATFORM_THEME.softNeutral;
+  const text = BUSINESS_OPTIMIZATION_PLATFORM_THEME.text;
+  const border = BUSINESS_OPTIMIZATION_PLATFORM_THEME.border;
 
   sheet.getRange(1, 1, 80, 12)
     .setFontFamily('Arial')
@@ -5100,7 +5100,7 @@ function applyExecutiveDashboardBranding_(sheet) {
   ].forEach(function(rangeSpec) {
     sheet.getRange(rangeSpec[0], rangeSpec[1], rangeSpec[2], rangeSpec[3])
       .setFontWeight('bold')
-      .setBackground(ROGERS_OS_THEME.softGold)
+      .setBackground(BUSINESS_OPTIMIZATION_PLATFORM_THEME.softGold)
       .setHorizontalAlignment('center')
       .setBorder(true, true, true, true, false, false, border, SpreadsheetApp.BorderStyle.SOLID);
   });
@@ -5200,7 +5200,7 @@ function applyPipelineStatusConditionalFormatting_() {
     return SpreadsheetApp.newConditionalFormatRule()
       .whenTextEqualTo(stage)
       .setBackground(PIPELINE_STAGE_COLORS[stage])
-      .setFontColor(ROGERS_OS_THEME.text)
+      .setFontColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.text)
       .setBold(true)
       .setRanges([range])
       .build();
@@ -5323,7 +5323,7 @@ function formatExecutiveDashboardSheet_(sheet) {
   }
 
   runSheetFormattingStep_(sheet, 'Executive tab color', function() {
-    sheet.setTabColor(ROGERS_OS_THEME.black);
+    sheet.setTabColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.black);
   });
   safeSetFrozenRows_(sheet, 2);
   runSheetFormattingStep_(sheet, 'Executive gridlines', function() {
@@ -5332,13 +5332,13 @@ function formatExecutiveDashboardSheet_(sheet) {
   runSheetFormattingStep_(sheet, 'Executive base font', function() {
     sheet.getRange(1, 1, Math.max(sheet.getMaxRows(), 1), Math.max(sheet.getMaxColumns(), 1))
       .setFontFamily('Arial')
-      .setFontColor(ROGERS_OS_THEME.text)
+      .setFontColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.text)
       .setVerticalAlignment('middle');
   });
   runSheetFormattingStep_(sheet, 'Executive banner styling', function() {
     sheet.getRange(1, 1, 1, Math.max(sheet.getMaxColumns(), 1))
-      .setBackground(ROGERS_OS_THEME.black)
-      .setFontColor(ROGERS_OS_THEME.gold)
+      .setBackground(BUSINESS_OPTIMIZATION_PLATFORM_THEME.black)
+      .setFontColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.gold)
       .setFontWeight('bold')
       .setFontSize(14);
   });
@@ -5381,7 +5381,7 @@ function formatDashboardMetricsSheet_(sheet) {
   const lastColumn = Math.max(sheet.getLastColumn(), 3);
 
   runSheetFormattingStep_(sheet, 'Dashboard Metrics tab color', function() {
-    sheet.setTabColor(ROGERS_OS_THEME.gold);
+    sheet.setTabColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.gold);
   });
   safeSetFrozenRows_(sheet, table.headerRow);
   runSheetFormattingStep_(sheet, 'Dashboard Metrics gridlines', function() {
@@ -5422,7 +5422,7 @@ function formatMasterProspectTrackerSheet_(sheet) {
   const lastColumn = Math.max(sheet.getLastColumn(), table.lastColumn);
 
   runSheetFormattingStep_(sheet, 'Master Prospect tab color', function() {
-    sheet.setTabColor(ROGERS_OS_THEME.gold);
+    sheet.setTabColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.gold);
   });
   safeSetFrozenRows_(sheet, table.headerRow);
   safeSetFrozenColumns_(sheet, Math.min(table.headers.Website || 5, 5));
@@ -5583,7 +5583,7 @@ function formatSettingsSheet_(sheet) {
   const lastColumn = Math.max(sheet.getLastColumn(), table.lastColumn);
 
   runSheetFormattingStep_(sheet, 'Settings tab color', function() {
-    sheet.setTabColor(ROGERS_OS_THEME.charcoal);
+    sheet.setTabColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.charcoal);
   });
   safeSetFrozenRows_(sheet, table.headerRow);
   runSheetFormattingStep_(sheet, 'Settings gridlines', function() {
@@ -5615,15 +5615,15 @@ function formatSettingsSheet_(sheet) {
 function formatTableHeader_(sheet, headerRow, lastColumn) {
   runSheetFormattingStep_(sheet, 'Table header styling', function() {
     sheet.getRange(headerRow, 1, 1, lastColumn)
-      .setBackground(ROGERS_OS_THEME.black)
-      .setFontColor(ROGERS_OS_THEME.gold)
+      .setBackground(BUSINESS_OPTIMIZATION_PLATFORM_THEME.black)
+      .setFontColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.gold)
       .setFontFamily('Arial')
       .setFontSize(10)
       .setFontWeight('bold')
       .setHorizontalAlignment('center')
       .setVerticalAlignment('middle')
       .setWrap(true)
-      .setBorder(true, true, true, true, true, true, ROGERS_OS_THEME.gold, SpreadsheetApp.BorderStyle.SOLID);
+      .setBorder(true, true, true, true, true, true, BUSINESS_OPTIMIZATION_PLATFORM_THEME.gold, SpreadsheetApp.BorderStyle.SOLID);
   });
   runSheetFormattingStep_(sheet, 'Table header row height', function() {
     sheet.setRowHeight(headerRow, 38);
@@ -5635,23 +5635,23 @@ function applyOperatingSystemSheetChrome_(sheet, title, headerRow, lastColumn) {
     sheet.setHiddenGridlines(true);
     sheet.getRange(1, 1, Math.max(sheet.getMaxRows(), 1), Math.max(sheet.getMaxColumns(), 1))
       .setFontFamily('Arial')
-      .setFontColor(ROGERS_OS_THEME.text)
+      .setFontColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.text)
       .setVerticalAlignment('middle');
 
     if (headerRow > 1 && lastColumn > 1) {
       sheet.getRange(1, 1, 1, lastColumn).breakApart().merge()
         .setValue(title)
-        .setBackground(ROGERS_OS_THEME.black)
-        .setFontColor(ROGERS_OS_THEME.gold)
+        .setBackground(BUSINESS_OPTIMIZATION_PLATFORM_THEME.black)
+        .setFontColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.gold)
         .setFontWeight('bold')
         .setFontSize(16)
         .setHorizontalAlignment('center')
         .setVerticalAlignment('middle')
-        .setBorder(true, true, true, true, false, false, ROGERS_OS_THEME.gold, SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
+        .setBorder(true, true, true, true, false, false, BUSINESS_OPTIMIZATION_PLATFORM_THEME.gold, SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
       sheet.setRowHeight(1, 42);
       if (headerRow > 2) {
         sheet.getRange(2, 1, headerRow - 2, lastColumn)
-          .setBackground(ROGERS_OS_THEME.white)
+          .setBackground(BUSINESS_OPTIMIZATION_PLATFORM_THEME.white)
           .setBorder(false, false, true, false, false, false, '#eee6d5', SpreadsheetApp.BorderStyle.SOLID);
       }
     }
@@ -5671,7 +5671,7 @@ function applyOperatingSystemTableSurface_(sheet, headerRow, lastRow, lastColumn
       .setWrap(false)
       .setBorder(true, false, true, false, false, false, '#eee6d5', SpreadsheetApp.BorderStyle.SOLID);
     sheet.getRange(headerRow, 1, Math.max(lastRow - headerRow + 1, 1), lastColumn)
-      .setBorder(true, true, true, true, false, false, ROGERS_OS_THEME.border, SpreadsheetApp.BorderStyle.SOLID);
+      .setBorder(true, true, true, true, false, false, BUSINESS_OPTIMIZATION_PLATFORM_THEME.border, SpreadsheetApp.BorderStyle.SOLID);
   });
 }
 
@@ -5683,7 +5683,7 @@ function applyAlternatingRows_(sheet, startRow, lastRow, lastColumn) {
   const rowCount = lastRow - startRow + 1;
   const backgrounds = [];
   for (let index = 0; index < rowCount; index += 1) {
-    const color = index % 2 === 0 ? ROGERS_OS_THEME.white : ROGERS_OS_THEME.softNeutral;
+    const color = index % 2 === 0 ? BUSINESS_OPTIMIZATION_PLATFORM_THEME.white : BUSINESS_OPTIMIZATION_PLATFORM_THEME.softNeutral;
     backgrounds.push(new Array(lastColumn).fill(color));
   }
   runSheetFormattingStep_(sheet, 'Alternating row backgrounds', function() {
@@ -5702,10 +5702,10 @@ function applyVisualComfortBody_(sheet, startRow, lastRow, lastColumn, options) 
     sheet.getRange(startRow, 1, rowCount, lastColumn)
       .setFontFamily('Arial')
       .setFontSize(settings.fontSize || 10)
-      .setFontColor(ROGERS_OS_THEME.text)
+      .setFontColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.text)
       .setVerticalAlignment(settings.verticalAlignment || 'middle')
       .setWrap(settings.wrap === true)
-      .setBorder(true, false, true, false, false, false, ROGERS_OS_THEME.border, SpreadsheetApp.BorderStyle.SOLID);
+      .setBorder(true, false, true, false, false, false, BUSINESS_OPTIMIZATION_PLATFORM_THEME.border, SpreadsheetApp.BorderStyle.SOLID);
   });
 
   if (settings.rowHeight) {
@@ -5727,11 +5727,11 @@ function applySectionHeaderStyle_(sheet, startColumn, columnCount) {
     if (value && value === value.toUpperCase() && value.length > 3) {
       runSheetFormattingStep_(sheet, 'Section header styling', function() {
         sheet.getRange(index + 1, startColumn, 1, columnCount)
-          .setBackground(ROGERS_OS_THEME.black)
-          .setFontColor(ROGERS_OS_THEME.gold)
+          .setBackground(BUSINESS_OPTIMIZATION_PLATFORM_THEME.black)
+          .setFontColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.gold)
           .setFontWeight('bold')
           .setFontSize(11)
-          .setBorder(true, true, true, true, false, false, ROGERS_OS_THEME.gold, SpreadsheetApp.BorderStyle.SOLID);
+          .setBorder(true, true, true, true, false, false, BUSINESS_OPTIMIZATION_PLATFORM_THEME.gold, SpreadsheetApp.BorderStyle.SOLID);
       });
     }
   });
@@ -5746,8 +5746,8 @@ function applyMetricCardStyle_(sheet, startRow, rowCount, startColumn, columnCou
   const safeRowCount = Math.min(rowCount, maxRows - startRow + 1);
   runSheetFormattingStep_(sheet, 'Metric card styling', function() {
     sheet.getRange(startRow, startColumn, safeRowCount, columnCount)
-      .setBackground(ROGERS_OS_THEME.softNeutral)
-      .setBorder(true, true, true, true, true, true, ROGERS_OS_THEME.border, SpreadsheetApp.BorderStyle.SOLID)
+      .setBackground(BUSINESS_OPTIMIZATION_PLATFORM_THEME.softNeutral)
+      .setBorder(true, true, true, true, true, true, BUSINESS_OPTIMIZATION_PLATFORM_THEME.border, SpreadsheetApp.BorderStyle.SOLID)
       .setFontFamily('Arial')
       .setVerticalAlignment('middle');
   });

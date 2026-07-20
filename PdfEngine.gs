@@ -1,5 +1,5 @@
 /**
- * Rogers Holdings OS - PdfEngine.
+ * Business Optimization Platform - PdfEngine.
  * Split from the stable Code.gs monolith without changing function names or behavior.
  */
 
@@ -2884,7 +2884,7 @@ function generateProposal() {
 
   if (!sheet || sheet.getName() !== MASTER_PROSPECT_SHEET) {
     ui.alert(
-      'Rogers Holdings OS',
+      'Business Optimization Platform',
       'Select a prospect row on the Master Prospect Tracker sheet first.',
       ui.ButtonSet.OK
     );
@@ -2902,7 +2902,7 @@ function generateProposal() {
 
   if (selectedRow <= table.headerRow) {
     ui.alert(
-      'Rogers Holdings OS',
+      'Business Optimization Platform',
       'Select a data row below the Master Prospect Tracker header row.',
       ui.ButtonSet.OK
     );
@@ -2922,7 +2922,7 @@ function generateProposal() {
 
   if (!prospect.company) {
     ui.alert(
-      'Rogers Holdings OS',
+      'Business Optimization Platform',
       'The selected row does not have a Company value.',
       ui.ButtonSet.OK
     );

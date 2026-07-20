@@ -1,6 +1,6 @@
 # Changelog
 
-All notable Rogers Holdings OS changes are tracked here.
+All notable Business Optimization Platform changes are tracked here.
 
 ## [1.0.0-rc] - 2026-06-25
 
@@ -29,7 +29,7 @@ All notable Rogers Holdings OS changes are tracked here.
 - Local validation, status, backup, and deployment scripts.
 - Root `.gs` authoritative source policy.
 - Rogers Holdings black/gold visual polish.
-- Grouped Rogers Holdings OS menu.
+- Grouped Business Optimization Platform menu.
 
 ### Changed
 
@@ -43,7 +43,7 @@ All notable Rogers Holdings OS changes are tracked here.
 - Split the original monolithic Apps Script into responsibility-based `.gs` files.
 - Restored Apps Script indexing after modular split by using Apps Script-safe globals.
 - Updated dashboard layouts and metrics to include clients, follow-ups, and projects.
-- Reorganized the Rogers Holdings OS menu into logical submenus.
+- Reorganized the Business Optimization Platform menu into logical submenus.
 
 ### Fixed
 
@@ -69,7 +69,7 @@ All notable Rogers Holdings OS changes are tracked here.
 
 ### Added
 
-- Initial Rogers Holdings OS architecture and roadmap planning.
+- Initial Business Optimization Platform architecture and roadmap planning.
 - Google Workspace operating system direction.
 - Website Audit Tool integration path.
 - Early prospect, proposal, Gmail, dashboard, client, and project automation.

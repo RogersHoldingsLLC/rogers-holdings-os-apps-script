@@ -1,5 +1,5 @@
 /**
- * Rogers Holdings OS - InspectionRulesRegistry.
+ * Business Optimization Platform - InspectionRulesRegistry.
  * Central source of truth for inspection rule metadata.
  *
  * This registry does not execute detection logic. Inspectors keep their current

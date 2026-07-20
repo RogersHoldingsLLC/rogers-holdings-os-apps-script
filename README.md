@@ -1,6 +1,20 @@
 # Business Optimization Platform
 
-Business Optimization Platform, formerly called Rogers Holdings OS, is a Google Workspace-based business operating system for Rogers Holdings LLC. Legacy repository and technical names remain in place until an intentional migration is approved.
+**Business Optimization Platform**<br>
+**by Rogers Holdings LLC**
+
+The Business Optimization Platform is the client delivery platform for the Rogers Holdings LLC consulting lifecycle. It runs on Google Sheets and Google Apps Script with Gmail, Google Calendar, Google Drive, and the shared Website Audit Tool API.
+
+## Product Architecture
+
+```text
+Business Snapshot
+-> creates a prospect or assessment input
+-> Business Optimization Platform
+-> manages consulting, proposals, projects, clients, and follow-up
+```
+
+The Website Audit Tool API powers audit acquisition for both Business Snapshot and Business Optimization Platform. Headquarters is the separate internal command center for Rogers Holdings LLC and is not part of this client delivery repository.
 
 The system is designed to manage the complete small-business lifecycle:
 
@@ -24,7 +38,7 @@ See:
 - `CHANGELOG.md`
 - `ROADMAP.md`
 - `PROJECT_MEMORY.md`
-- `docs/ROGERS_HOLDINGS_OS_V2_PRODUCT_SPEC.md`
+- `docs/BUSINESS_OPTIMIZATION_PLATFORM_V2_PRODUCT_SPEC.md`
 
 ## Release Candidate Baseline
 
@@ -33,7 +47,7 @@ The Version 1.0 release candidate includes:
 - CRM: Master Prospect Tracker, Clients, Client Workspace, Projects, Follow-Ups, Activity Feed
 - Sales workflow: Executive Snapshot, Digital Business Assessment, Improvement Plan, Gmail Draft Automation, Next Action Engine
 - Client delivery: Client conversion, project creation, project status/progress tracking, deliverable tracking
-- System: Executive Dashboard, Dashboard Metrics, Health Check, Reset Demo Data, Rogers Holdings navigation menu
+- System: Executive Dashboard, Dashboard Metrics, Health Check, Reset Demo Data, Business Optimization Platform navigation menu
 - Deliverables: Executive Snapshot PDF, branded Digital Business Assessment PDF, Improvement Plan PDF, Discovery Call Brief PDF, outreach draft content
 - Development: local `clasp` workflow, validation, backup, status checks, deployment script, duplicate function verification
 
@@ -148,7 +162,7 @@ npm run backup
 Backups are written to:
 
 ```text
-backups/rogers-os-local-<timestamp>/
+backups/business-optimization-platform-local-<timestamp>/
 ```
 
 ### Deploy
@@ -179,7 +193,7 @@ Do not deploy unless validation passes.
 - Reuse existing helpers.
 - Preserve menu items unless intentionally retired.
 - Preserve sheet structures unless a migration is explicitly requested.
-- Preserve Rogers Holdings branding.
+- Preserve the customer-facing standard: Business Optimization Platform by Rogers Holdings LLC.
 - Run `npm run validate` before any deployment.
 - Run `npm run backup` before significant changes.
 - Do not edit root `.js` duplicates as source of truth.
