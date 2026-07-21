@@ -8,6 +8,11 @@ Build `2026.07.20-rc`. This is a release candidate, not production-ready or rele
 
 ### Fixed
 
+- Restricted Reset Test Data and Reset Demo Data to Developer Mode in the System menu and added fail-closed runtime guards that block direct execution before destructive work when Developer Mode is disabled.
+- Added a non-mutating Developer Mode read path for menu construction and reset authorization; it reads only the existing Settings sheet and never creates or repairs workbook content.
+- Removed the unused anonymous web-app declaration from `appsscript.json`; no `doGet` or `doPost` handler exists in the authoritative Apps Script source.
+- Reduced production diagnostic logging so Website Audit Tool responses, prospect contact details, Drive URLs, and Drive file identifiers are not written to execution logs; retained privacy-safe status and count diagnostics.
+
 - Completed the repository-wide product naming cleanup for Business Optimization Platform by Rogers Holdings LLC, including source comments, operator surfaces, reports, Health Check copy, Gmail copy, deployment output, backups, package metadata, acceptance documentation, and legacy-named documentation paths.
 - Documented the product hierarchy: Business Snapshot supplies prospect or assessment input to Business Optimization Platform, while Website Audit Tool API powers audit acquisition for both systems and Headquarters remains the separate internal command center.
 - Preserved existing API contract fields, Google resource identifiers, URLs, Script Properties, deployment targets, and runtime integrations.
@@ -61,6 +66,7 @@ Build `2026.07.20-rc`. This is a release candidate, not production-ready or rele
 
 ### Tests
 
+- Added deterministic validation for anonymous web-app removal, developer-only reset menu visibility, direct-execution reset guards, and non-mutating Developer Mode reads.
 - Added deterministic deployment safety coverage for target rejection/selection, dirty-tree and confirmation rejection, configuration restoration after successful and failed pushes, and prevention of implicit production deployment.
 - Expanded deterministic Gmail coverage for first-run creation, exact-match reuse across all three public workflows, ambiguous attachment persistence, single folder-link fallback, multiple-match rejection, and success-evidence ordering.
 - Expanded deterministic audit rendering coverage for Audit Source validation repair, strict provenance eligibility, production field validation, narrative readiness, and Drive-file versus Gmail activity wording.

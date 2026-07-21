@@ -540,6 +540,20 @@ function isDeveloperModeEnabled_() {
   return isDeveloperModeTrueValue_(getDeveloperModeValue_(sheet));
 }
 
+function isDeveloperModeEnabledReadOnly_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss) {
+    return false;
+  }
+  const sheet = ss.getSheetByName('Settings');
+  if (!sheet) {
+    return false;
+  }
+  return isDeveloperModeTrueValue_(
+    findSystemDeveloperModeValue_(sheet) || findLegacyDeveloperModeValue_(sheet)
+  );
+}
+
 function ensureSystemSettingsSection_(ss) {
   if (!ss) {
     return null;

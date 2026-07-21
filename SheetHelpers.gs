@@ -42,6 +42,14 @@ function refreshSalesOperatingSystem_() {
 
 function resetTestData() {
   const ui = SpreadsheetApp.getUi();
+  if (!isDeveloperModeEnabledReadOnly_()) {
+    ui.alert(
+      'Business Optimization Platform',
+      'Reset Test Data is available only in Developer Mode.',
+      ui.ButtonSet.OK
+    );
+    return;
+  }
   const response = ui.alert(
     'Reset Test Data',
     'This will delete test, prospect, client, Follow-Up, project, and activity data but preserve Business Optimization Platform structure. Continue?',

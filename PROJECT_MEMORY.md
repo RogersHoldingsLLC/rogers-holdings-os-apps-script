@@ -43,6 +43,8 @@ Master Prospect Tracker startup repair ensures the required `Audit Source` heade
 
 All Gmail-producing workflows use one exact-match reconciliation rule within the current authenticated Gmail account: recipient email is trimmed and case-normalized, subject is trimmed and then matched exactly, one matching draft is refreshed, no match creates exactly one draft, and multiple matches fail safely without creating or updating another draft. Assessment attachment failures reconcile again before using the folder-link fallback so an ambiguously persisted attachment draft and a fallback draft cannot both be created. Activity Feed events distinguish Gmail drafts created from Gmail drafts updated and are written only after verified Gmail success.
 
+Production diagnostics must remain privacy-safe: log workflow state, counts, durations, and outcomes, but do not log prospect contact data, full Website Audit Tool response bodies, Drive URLs, or file identifiers by default.
+
 ## Authoritative Source
 
 Root `.gs` files are authoritative:
@@ -140,6 +142,8 @@ Menu and user-facing workflows include:
 
 Do not rename these without updating `Menu.gs` and validating menu targets.
 
+Destructive reset controls are restricted to Developer Mode. Menu construction uses `isDeveloperModeEnabledReadOnly_()`, which reads only an existing Settings sheet and returns false when the spreadsheet or sheet is unavailable. `resetTestData()` and `resetDemoData()` repeat that read-only check at runtime and return before confirmation or destructive work when Developer Mode is disabled, protecting direct Apps Script editor execution. The unused anonymous `webapp` manifest declaration was removed because the authoritative source has no `doGet` or `doPost` handler. `npm run validate` contains deterministic regression checks for these controls.
+
 ## Known Validation Baseline
 
 Recent local checks pass:
@@ -149,6 +153,7 @@ Recent local checks pass:
 - `npm run validate`
 - duplicate function verification
 - menu target verification
+- reset/menu/manifest security hardening checks
 
 Deployment has no default target. The disposable acceptance project and production project must be selected explicitly:
 
@@ -166,6 +171,7 @@ Acceptance uses `.clasp.json` and requires `DEPLOY ACCEPTANCE`. Production uses 
 - Root `.js` duplicate files are ignored by deployment but create validation noise.
 - PDF generation should eventually have visual regression fixtures.
 - Live Apps Script workflows still require manual smoke testing after deployment.
+- The security hardening patch still requires live disposable-workbook acceptance; it does not make the release production-ready by itself.
 
 ## Critical Guardrails
 

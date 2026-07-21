@@ -119,9 +119,7 @@ function runBulkAuditPipeline() {
       console.log('Bulk Audit Pipeline: processing prospect', {
         row: item.row,
         index: index + 1,
-        total: eligibleRows.length,
-        company: item.prospect.company,
-        website: item.prospect.website
+        total: eligibleRows.length
       });
       runBulkAuditPipelineForProspect_(ss, sheet, item);
       summary.successCount += 1;
@@ -352,10 +350,6 @@ function buildWebsiteAuditToolLaunchPayload_(prospect) {
 
 function logWebsiteAuditToolLaunchPayload_(payload) {
   console.log('Run Real Website Audit payload fields', {
-    company: payload.company,
-    website: payload.website,
-    city: payload.city,
-    state: payload.state,
     source: payload.source,
     requestedBy: payload.requestedBy,
     requestType: payload.requestType || '',
@@ -920,7 +914,6 @@ function logAuditPackageApiResponseDebug_(responseJson) {
   const reportText = report && report.reportText;
   const summary = responseJson && responseJson.summary;
 
-  console.log('Audit Package API full response JSON', responseJson);
   console.log('Audit Package API response diagnostics', {
     reportExists: !!report,
     reportTextExists: reportText !== null && reportText !== undefined && String(reportText).trim() !== '',

@@ -160,33 +160,15 @@ function sendAuditPackage() {
   }
 
   try {
-    console.log('Send Audit Package: selected prospect loaded', {
-      company: prospect.company,
-      website: prospect.website,
-      email: prospect.email
-    });
+    console.log('Send Audit Package: selected prospect loaded');
     const folder = getAuditPackageFolder_(prospect.company);
     if (!folder) {
       throw new Error('Digital Business Assessment folder was not found. Generate the Digital Business Assessment first.');
     }
-    console.log('Send Audit Package: folder found', {
-      folderName: folder.getName(),
-      folderUrl: folder.getUrl()
-    });
+    console.log('Send Audit Package: folder found');
 
     const packageFiles = getRequiredAuditPackageFiles_(folder, prospect);
-    console.log('Send Audit Package: audit report file found', {
-      fileName: packageFiles.auditReport.getName(),
-      fileId: packageFiles.auditReport.getId()
-    });
-    console.log('Send Audit Package: proposal PDF file found', {
-      fileName: packageFiles.proposalDraft.getName(),
-      fileId: packageFiles.proposalDraft.getId()
-    });
-    console.log('Send Audit Package: outreach email draft file found', {
-      fileName: packageFiles.outreachDraft.getName(),
-      fileId: packageFiles.outreachDraft.getId()
-    });
+    console.log('Send Audit Package: required files found');
     const subject = `Website Improvement Opportunities for ${prospect.company}`;
     const body = buildAuditPackageSendEmailBody_(prospect, folder);
     const attachments = [packageFiles.auditReport.getBlob(), packageFiles.proposalDraft.getBlob()];
@@ -291,9 +273,8 @@ function findNewestAuditPackageFile_(folder, matcher) {
   }
 
   console.log('Send Audit Package: file lookup completed', {
-    folderName: folder.getName(),
     checkedCount: checkedCount,
-    selectedFile: newestFile ? newestFile.getName() : ''
+    fileSelected: !!newestFile
   });
   return newestFile;
 }

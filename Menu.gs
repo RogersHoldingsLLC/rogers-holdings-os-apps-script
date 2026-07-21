@@ -5,6 +5,8 @@
 
 function onOpen(e) {
   const ui = SpreadsheetApp.getUi();
+  const developerModeEnabled = typeof isDeveloperModeEnabledReadOnly_ === 'function' &&
+    isDeveloperModeEnabledReadOnly_();
   const navigateMenu = ui.createMenu('Navigate')
     .addItem('Open Executive Dashboard', 'openExecutiveDashboard')
     .addItem('Open Master Prospect Tracker', 'openMasterProspectTracker')
@@ -64,9 +66,13 @@ function onOpen(e) {
     .addItem('Open Daily Friction Log', 'openDailyFrictionLog')
     .addItem('System Health Check', 'runSystemHealthCheck')
     .addItem('Audit Legacy Lifecycle Values', 'auditLegacyLifecycleValues')
-    .addItem('Repair Invalid Dropdown Values', 'repairInvalidDropdownValues')
-    .addItem('Reset Test Data', 'resetTestData')
-    .addItem('Reset Demo Data', 'resetDemoData');
+    .addItem('Repair Invalid Dropdown Values', 'repairInvalidDropdownValues');
+
+  if (developerModeEnabled) {
+    systemMenu
+      .addItem('Reset Test Data', 'resetTestData')
+      .addItem('Reset Demo Data', 'resetDemoData');
+  }
 
   const rogersMenu = ui.createMenu('Business Optimization Platform')
     .addSubMenu(navigateMenu)
@@ -78,7 +84,7 @@ function onOpen(e) {
     .addSubMenu(productMenu)
     .addSubMenu(systemMenu);
 
-  if (typeof isDeveloperModeEnabled_ === 'function' && isDeveloperModeEnabled_()) {
+  if (developerModeEnabled) {
     const developmentMenu = ui.createMenu('Development')
       .addItem('Inspection Playground', 'openInspectionPlayground')
       .addSeparator()

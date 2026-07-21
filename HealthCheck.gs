@@ -134,7 +134,10 @@ function buildSystemHealthReport_() {
   addRuntimeDependencyHealthChecks_(report);
   finalizeSystemHealthReport_(report);
   storeSystemHealthStatus_(report);
-  Logger.log('Business Optimization Platform System Health Check: ' + JSON.stringify(report));
+  Logger.log('Business Optimization Platform System Health Check: ' + JSON.stringify({
+    status: report.status,
+    summary: report.summary
+  }));
 
   return report;
 }

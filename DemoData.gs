@@ -5,6 +5,14 @@
 
 function resetDemoData() {
   const ui = SpreadsheetApp.getUi();
+  if (!isDeveloperModeEnabledReadOnly_()) {
+    ui.alert(
+      'Business Optimization Platform',
+      'Reset Demo Data is available only in Developer Mode.',
+      ui.ButtonSet.OK
+    );
+    return;
+  }
   const confirm = ui.alert(
     'Business Optimization Platform',
     'This will clear demo/test data from Master Prospect Tracker, Activity Feed, Clients, and generated demo folders. Continue?',
