@@ -4,6 +4,31 @@ const path = require('path');
 const vm = require('vm');
 
 const root = path.resolve(__dirname, '..');
+const pdfSource = fs.readFileSync(path.join(root, 'PdfEngine.gs'), 'utf8');
+const previewSource = fs.readFileSync(path.join(root, 'DeliverablePreviewEngine.gs'), 'utf8');
+const digitalPresenceSource = fs.readFileSync(path.join(root, 'DigitalPresenceAssessmentEngine.gs'), 'utf8');
+
+assert.doesNotMatch(pdfSource, /Business-Specific Consultation|Consultant review status:/, 'client PDF source contains no duplicate consultation section or internal review label');
+assert.doesNotMatch(previewSource, /Consultant Review|Needs Consultant Review|Insufficient Evidence|clientDeliveryAllowed|requiresReview/, 'client preview source contains no internal workflow status language');
+assert.match(pdfSource, /compact-divider \+ \.section[^}]*break-before: avoid/, 'major divider remains attached to its following section');
+assert.match(pdfSource, /section-content > :first-child[^}]*break-before: avoid/, 'section heading remains attached to its first content block');
+assert.match(pdfSource, /roadmap-card[^}]*page-break-inside: avoid/, 'roadmap cards remain intact across pages');
+assert.match(pdfSource, /Improvement Roadmap', priorityRoadmapHtml_\(prospect, safeReportFile\), \{ keepWithFirstBlock: true \}/, 'Improvement Roadmap requests an explicit kept section');
+assert.match(pdfSource, /'Timeline', projectRoadmapHtml_\(\), \{ keepWithFirstBlock: true, pageTopSafe: true \}/, 'Improvement Plan Timeline remains attached to its first item and clears the repeating page header');
+assert.match(pdfSource, /\.section\.page-top-safe, \.section \+ \.section\.page-top-safe \{ padding-top: calc\\?\(/, 'page-top-safe sections override adjacent-section spacing and clear the repeating header');
+assert.match(pdfSource, /opts\.pageTopSafe[\s\S]*sectionClasses\.push\('page-top-safe'\)/, 'section rendering applies page-top-safe only when requested');
+assert.match(pdfSource, /\.section\.force-page-break[^}]*page-break-before: always/, 'kept roadmap section starts on a clean PDF page');
+assert.match(pdfSource, /\.section\.keep-with-first-block > \.section-heading[^}]*page-break-after: avoid/, 'roadmap heading stays with its first content block');
+assert.doesNotMatch(pdfSource.slice(pdfSource.indexOf('function finalRecommendationHtml_'), pdfSource.indexOf('function buildRecommendedPackage_')), /align the first step around/, 'final recommendation does not repeat the action label');
+assert.match(pdfSource, /To confirm during discovery:/, 'preliminary classification priorities are explicitly labeled rather than presented as verified findings');
+assert.doesNotMatch(pdfSource.slice(pdfSource.indexOf('function trustChecklistHtml_'), pdfSource.indexOf('function buildCompetitivePositionSection_')), /!textIncludesAny_/, 'checklist does not convert unknown evidence into PASS');
+assert.match(digitalPresenceSource, /scoreAllowed === false/, 'score display has an explicit inspection-confidence safeguard');
+const auditPdfFunction = pdfSource.slice(pdfSource.indexOf('function buildAuditReportPdfBlob_'), pdfSource.indexOf('function buildProposalPdfBlob_'));
+assert.strictEqual((auditPdfFunction.match(/Executive Briefing/g) || []).length, 1, 'assessment renders one established executive briefing and no duplicate executive summary section');
+const proposalPdfFunction = pdfSource.slice(pdfSource.indexOf('function buildProposalPdfBlob_'), pdfSource.indexOf('function buildExecutiveSnapshotPdfBlob_'));
+assert.doesNotMatch(proposalPdfFunction, /getExecutiveBusinessIntelligenceForReport_|executiveBusinessIntelligence/i, 'Improvement Plan PDF preserves legacy content when assessment evidence is unavailable');
+const improvementPreviewFunction = previewSource.slice(previewSource.indexOf('function showImprovementPlanPreview_'), previewSource.indexOf('function showOutreachEmailPreview_'));
+assert.doesNotMatch(improvementPreviewFunction, /getExecutiveBusinessIntelligenceForReport_|executiveBusinessIntelligence|Insufficient Evidence/i, 'Improvement Plan preview never uses an insufficiency narrative');
 let aboutHtml = '';
 let aboutDialogTitle = '';
 const context = vm.createContext({

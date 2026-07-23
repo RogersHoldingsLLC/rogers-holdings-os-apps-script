@@ -9,24 +9,29 @@ function buildOutreachDrafts_(prospect) {
   const auditScore = prospect.auditScore === '' || prospect.auditScore === null || prospect.auditScore === undefined
     ? 'not scored'
     : String(prospect.auditScore);
-  const digitalPresence = getDigitalPresenceAssessment_(prospect.auditScore);
+  const reportFile = prospect.reportFile || {};
+  const confidence = getAssessmentConfidenceState_(prospect, reportFile);
+  const safeDigitalPresence = getDigitalPresenceAssessment_(prospect.auditScore, confidence);
+  const classification = getBusinessClassificationContext_(prospect, reportFile);
   const offerService = getClientFacingServiceName_(prospect.offerService || 'website and local visibility review', prospect.auditScore);
-  const findings = getSmartFindings_(prospect);
+  const findings = filterClientEligibleEvidence_(getSmartFindings_(prospect), prospect, reportFile, 'outreach');
   const websiteLine = website
-    ? `I reviewed ${website} from the perspective of a local customer deciding whether to trust and contact the business.`
-    : 'I reviewed your online presence from the perspective of a local customer deciding whether to trust and contact the business.';
+    ? `I reviewed ${website} from the perspective of ${classification.audiencePerspective}.`
+    : `I reviewed your online presence from the perspective of ${classification.audiencePerspective}.`;
   const findingsLine = findings.length
     ? 'A couple of opportunities stood out:\n' + findings.slice(0, 2).map(function(finding) {
       return '- ' + finding;
     }).join('\n')
     : '';
-  const subject = website ? `Website review for ${company}` : `Local visibility review for ${company}`;
-  const scoreValue = digitalPresence.score;
+  const subject = website ? `Website review for ${company}` : `Digital presence review for ${company}`;
+  const scoreValue = safeDigitalPresence.score;
   const opportunityFrame = scoreValue !== null && scoreValue >= 90
     ? 'The main opportunity looks more like refinement and growth than a major rebuild.'
-    : 'The main opportunity is practical improvement: clearer trust signals, visibility, and customer action.';
+    : `The main opportunity is practical improvement: ${classification.priorities.join(' ')}`;
   const auditLine = website
-    ? `The Digital Presence Score came back at ${digitalPresence.scoreText || auditScore}. ${digitalPresence.title}. ${opportunityFrame}`
+    ? (confidence.scoreAllowed
+      ? `The Digital Presence Score came back at ${safeDigitalPresence.scoreText || auditScore}. ${safeDigitalPresence.title}. ${opportunityFrame}`
+      : 'The review identified areas worth verifying together. I have not included a definitive score or severity claim because the available inspection evidence is incomplete.')
     : `The clearest starting point appears to be ${offerService}. The goal would be to improve visibility, credibility, and the path for customers to take action.`;
 
   const initialParts = [
@@ -45,7 +50,7 @@ function buildOutreachDrafts_(prospect) {
 
   const followUpParts = [
     `Hi ${company} team,`,
-    website ? 'I wanted to follow up on the website review note I sent over.' : 'I wanted to follow up on the local visibility review note I sent over.',
+    website ? 'I wanted to follow up on the website review note I sent over.' : 'I wanted to follow up on the digital presence review note I sent over.',
     `The practical next step still looks like ${offerService}.`,
     'If useful, I can share the Executive Snapshot and walk through the highest-impact opportunities in a short conversation.',
     'Best,',
@@ -280,23 +285,25 @@ function findNewestAuditPackageFile_(folder, matcher) {
 }
 
 function buildAuditPackageSendEmailBody_(prospect, folder, includeFolderLinkOnly) {
-  const findings = getSmartFindings_(prospect).slice(0, 3);
-  const digitalPresence = getDigitalPresenceAssessment_(prospect.auditScore);
+  const reportFile = prospect.reportFile || {};
+  const findings = filterClientEligibleEvidence_(getSmartFindings_(prospect), prospect, reportFile, 'outreach').slice(0, 3);
+  const scoreContext = getReportScoreContext_(prospect, reportFile);
+  const classification = getBusinessClassificationContext_(prospect, reportFile);
   const findingsText = findings.length
     ? findings.map(function(finding) {
       return '- ' + finding;
     }).join('\n')
-    : '- Improve visibility, credibility, and the path for customers to take action.';
+    : '- No findings are presented as verified yet; confirm the priority evidence during discovery.';
 
   const parts = [
     `Hi ${prospect.company} team,`,
     '',
     `My name is Brian Keith Rogers with Rogers Holdings LLC. I completed a website and digital presence review for ${prospect.website} and prepared the results in a practical, business-focused format.`,
     '',
-    'A few practical opportunities stood out:',
+    findings.length ? 'A few verified opportunities stood out:' : 'Current review state:',
     findingsText,
     '',
-    `The Digital Presence Score came back at ${digitalPresence.scoreText}. ${digitalPresence.title}. ${digitalPresence.subtitle} I attached the Digital Business Assessment and Improvement Plan so you can review the business impact, quick wins, recommended service package, and next steps.`,
+    `The Digital Presence Score is ${scoreContext.displayScore}. ${scoreContext.severityLabel}. ${scoreContext.safeFallbackLanguage} I attached the Digital Business Assessment and Improvement Plan so you can review the business context, preliminary priorities, recommended service package, and next steps for ${classification.audience}.`,
     includeFolderLinkOnly && folder ? `\nYou can review the Digital Business Assessment package here: ${folder.getUrl()}` : '',
     '',
     'If helpful, I would be glad to walk through the highest-impact improvements in a short conversation and answer any questions.',

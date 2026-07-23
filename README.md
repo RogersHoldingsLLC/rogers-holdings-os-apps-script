@@ -100,6 +100,7 @@ Root `.gs` files are the authoritative Apps Script source:
 - `DeliverablePreviewEngine.gs`
 - `DemoData.gs`
 - `DigitalPresenceAssessmentEngine.gs`
+- `ExecutiveBusinessIntelligenceEngine.gs`
 - `DriveEngine.gs`
 - `GmailEngine.gs`
 - `HealthCheck.gs`
@@ -226,6 +227,8 @@ Local release-candidate status as of 2026-07-20:
 - `npm run validate`: passing
 - `npm run test:lifecycle`: passing
 - `npm run test:audit-rendering`: passing
+- `npm run test:ebi`: deterministic business-profile, evidence, personalization, and review-gate coverage
+- `npm run acceptance:ebi`: regenerates the synthetic EBI comparison artifact under `test-output/`; it does not replace live acceptance
 - `npm test`: passing (deployment safety suite)
 - duplicate function verification: passing
 - menu target verification: passing

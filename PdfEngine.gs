@@ -4,19 +4,20 @@
  */
 
 function buildAuditReportPdfBlob_(prospect, reportFile) {
+  const safeReportFile = getClientSafeReportFile_(prospect, reportFile || {});
   // PDF V3 CHANGE: add executive impression, divider sequencing, and score display guardrails.
-  const reportText = getAuditReportTextFromReportFile_(reportFile);
-  const findings = getSmartFindings_(prospect);
-  const opportunities = buildAuditOpportunities_(prospect, findings, reportText, reportFile);
-  let consultingFindings = buildConsultingFindingCards_(prospect, opportunities, reportFile);
-  consultingFindings = enforcePdfFindingEvidenceQuality_(prospect, reportFile, consultingFindings);
-  const screenshotHtml = buildWebsiteScreenshotHtml_(prospect, reportFile);
-  const nextStep = buildRecommendedNextStep_(prospect);
+  const reportText = getAuditReportTextFromReportFile_(safeReportFile);
+  const findings = filterClientEligibleEvidence_([].concat(safeReportFile.findings || [], getSmartFindings_(prospect)), prospect, reportFile || {}, 'finding');
+  const opportunities = buildAuditOpportunities_(prospect, findings, reportText, safeReportFile);
+  let consultingFindings = buildConsultingFindingCards_(prospect, opportunities, safeReportFile);
+  consultingFindings = enforcePdfFindingEvidenceQuality_(prospect, safeReportFile, consultingFindings);
+  const screenshotHtml = buildWebsiteScreenshotHtml_(prospect, safeReportFile);
+  const nextStep = buildRecommendedNextStep_(prospect, safeReportFile);
   const estimatedImpact = estimateAuditImpact_(prospect, consultingFindings);
   const estimatedOpportunity = estimateAuditOpportunity_(prospect, consultingFindings);
-  const scoreDisplay = displayAuditScoreForPdf_(prospect, consultingFindings);
+  const scoreContext = getReportScoreContext_(prospect, reportFile);
   const recommendedPackage = buildRecommendedPackage_(prospect);
-  const visualEvidenceSource = getAuditEvidenceObject_(prospect, reportFile);
+  const visualEvidenceSource = getAuditEvidenceObject_(prospect, safeReportFile);
   const html = buildBrandedPdfHtml_({
     title: 'Digital Business Assessment',
     subtitle: prospect.company,
@@ -27,7 +28,7 @@ function buildAuditReportPdfBlob_(prospect, reportFile) {
         prospect,
         consultingFindings,
         reportText,
-        scoreDisplay,
+        scoreContext,
         nextStep,
         estimatedImpact,
         estimatedOpportunity
@@ -35,16 +36,16 @@ function buildAuditReportPdfBlob_(prospect, reportFile) {
       screenshotHtml,
       renderPdfCompactDivider_('WEBSITE REVIEW FINDINGS'),
       brandedPdfSectionHtml_('Key Findings', consultingFindingCardsHtml_(consultingFindings, visualEvidenceSource)),
-      proofOfFindingsSectionHtml_(prospect, reportFile, consultingFindings),
+      proofOfFindingsSectionHtml_(prospect, safeReportFile, consultingFindings),
       renderPdfCompactDivider_('IMPROVEMENT ROADMAP'),
-      brandedPdfSectionHtml_('Business Impact', businessImpactSectionHtml_(prospect, consultingFindings)),
-      brandedPdfSectionHtml_('Quick Wins', quickWinsSectionHtml_(prospect, consultingFindings)),
-      brandedPdfSectionHtml_('Improvement Roadmap', priorityRoadmapHtml_(prospect)),
-      brandedPdfSectionHtml_('Digital Trust Checklist', trustChecklistHtml_(prospect)),
+      brandedPdfSectionHtml_('Business Impact', businessImpactSectionHtml_(prospect, consultingFindings, safeReportFile)),
+      brandedPdfSectionHtml_('Quick Wins', quickWinsSectionHtml_(prospect, consultingFindings, safeReportFile)),
+      brandedPdfSectionHtml_('Improvement Roadmap', priorityRoadmapHtml_(prospect, safeReportFile), { keepWithFirstBlock: true }),
+      brandedPdfSectionHtml_('Digital Trust Checklist', trustChecklistHtml_(prospect, reportFile)),
       brandedPdfSectionHtml_('Recommended Service Package', recommendedServicePackageHtml_(recommendedPackage)),
       buildCompetitivePositionSection_(prospect),
       renderPdfCompactDivider_('RECOMMENDED NEXT STEPS'),
-      brandedPdfSectionHtml_('Recommended Next Step', finalRecommendationHtml_(prospect, nextStep, estimatedImpact))
+      brandedPdfSectionHtml_('Recommended Next Step', finalRecommendationHtml_(prospect, nextStep, estimatedImpact, safeReportFile))
     ].filter(Boolean).join('')
   });
   return htmlToPdfBlob_(html, 'Audit Report.pdf');
@@ -62,7 +63,7 @@ function buildProposalPdfBlob_(prospect, proposal) {
       brandedPdfSectionHtml_('What We Found', proposalFindingsSummaryHtml_(prospect)),
       brandedPdfSectionHtml_('Recommended Solution', proposalSolutionHtml_(prospect, recommendedPackage)),
       brandedPdfSectionHtml_('Deliverables', deliverableCardsHtml_(recommendedPackage.deliverables)),
-      brandedPdfSectionHtml_('Timeline', projectRoadmapHtml_()),
+      brandedPdfSectionHtml_('Timeline', projectRoadmapHtml_(), { keepWithFirstBlock: true, pageTopSafe: true }),
       brandedPdfSectionHtml_('Why Rogers Holdings', whyRogersHoldingsHtml_()),
       brandedPdfSectionHtml_('Investment', proposalInvestmentHtml_(recommendedPackage)),
       brandedPdfSectionHtml_('Next Steps', proposalNextStepsHtml_(prospect)),
@@ -174,7 +175,7 @@ function sanitizeCustomerPdfText_(value) {
     return '';
   }
 
-  const internalPattern = /\b(proposal sent|prospect|crm|pipeline|audit package|priority tier|tracked|internal|pursuit|implementation phase|converted after|lead status)\b/i;
+  const internalPattern = /\b(proposal sent|prospect|crm|pipeline|audit package|priority tier|tracked|internal|pursuit|implementation phase|converted after|lead status|requires consultant review|review required|insufficient evidence|internal review|pending review)\b/i;
   if (internalPattern.test(text)) {
     return '';
   }
@@ -210,16 +211,29 @@ function hasPerfectScoreWithFindings_(prospect, findings) {
   return score === 100 && !!(findings && findings.length);
 }
 
-function displayAuditScoreForPdf_(prospect, findings) {
-  return getDigitalPresenceAssessment_(prospect && prospect.auditScore).scoreText;
+function displayAuditScoreForPdf_(prospect, findings, reportFile) {
+  return getReportScoreContext_(prospect, reportFile || {}).displayScore;
 }
 
-function buildAuditExecutiveBriefingHtml_(prospect, findings, reportText, scoreDisplay, nextStep, estimatedImpact, estimatedOpportunity) {
-  const digitalPresence = getDigitalPresenceAssessment_(scoreDisplay);
-  const assessment = digitalPresence.title;
-  const strengths = buildBusinessStrengths_(prospect, findings);
-  const opportunities = buildTopBusinessOpportunities_(prospect, findings);
-  const narrative = buildConsultantNarrative_(prospect, findings, reportText, nextStep, estimatedImpact);
+function buildAuditExecutiveBriefingHtml_(prospect, findings, reportText, scoreContext, nextStep, estimatedImpact, estimatedOpportunity) {
+  const reportScore = scoreContext || getReportScoreContext_(prospect, {});
+  const verified = reportScore.scoreVerified === true;
+  let strengths = buildBusinessStrengths_(prospect, findings);
+  let opportunities = buildTopBusinessOpportunities_(prospect, findings);
+  const narrative = verified
+    ? buildConsultantNarrative_(prospect, findings, reportText, nextStep, estimatedImpact)
+    : 'Available evidence supports a preliminary business-focused review, but not verified findings, severity, or impact ratings. Confirm the business context and supporting evidence during discovery before recommending implementation work.';
+  const impactLabel = verified ? (estimatedImpact || 'Medium') : 'To be confirmed';
+  const opportunityLabel = verified ? (estimatedOpportunity || 'Moderate') : 'To be confirmed';
+  if (!verified) {
+    strengths = [
+      'The current prospect record identifies a professional-services context to confirm during discovery.',
+      'Business strengths and proof points should be verified before they are presented as established findings.'
+    ];
+    opportunities = opportunities.map(function(item) {
+      return 'To confirm during discovery: ' + item;
+    });
+  }
 
   return [
     '<div class="executive-brief">',
@@ -230,17 +244,17 @@ function buildAuditExecutiveBriefingHtml_(prospect, findings, reportText, scoreD
     '<div class="brief-grid">',
     '<div class="brief-primary">',
     '<h3>Overall Assessment</h3>',
-    `<p>${escapeHtml_(assessment)}</p>`,
-    `<p class="muted-copy">${escapeHtml_(digitalPresence.subtitle)}</p>`,
+    `<p>${escapeHtml_(reportScore.severityLabel)}</p>`,
+    `<p class="muted-copy">${escapeHtml_(reportScore.safeFallbackLanguage)}</p>`,
     '<div class="score-strip">',
-    `<span><strong>${escapeHtml_(digitalPresence.scoreText || scoreDisplay)}</strong><small>Digital Presence Score</small></span>`,
-    `<span><strong>${escapeHtml_(estimatedOpportunity)}</strong><small>Estimated Opportunity</small></span>`,
+    `<span><strong>${escapeHtml_(reportScore.displayScore)}</strong><small>Digital Presence Score</small></span>`,
+    `<span><strong>${escapeHtml_(opportunityLabel)}</strong><small>Estimated Opportunity</small></span>`,
     '</div>',
     '</div>',
     '<div class="brief-primary">',
     '<h3>Recommended First Step</h3>',
     `<p>${escapeHtml_(nextStep)}</p>`,
-    `<p class="muted-copy">Expected business impact: ${escapeHtml_(estimatedImpact || 'Medium')}. The first step should improve clarity, trust, and customer action before expanding into larger work.</p>`,
+    `<p class="muted-copy">Expected business impact: ${escapeHtml_(impactLabel)}. The first step should improve clarity, trust, and customer action before expanding into larger work.</p>`,
     '</div>',
     '</div>',
     twoColumnInsightHtml_('Business Strengths', strengths, 'Top Opportunities', opportunities),
@@ -253,6 +267,10 @@ function buildAuditExecutiveBriefingHtml_(prospect, findings, reportText, scoreD
 }
 
 function buildConsultantNarrative_(prospect, findings, reportText, nextStep, estimatedImpact) {
+  const intelligence = getExecutiveBusinessIntelligenceForReport_(prospect, { text: reportText, findings: findings });
+  if (intelligence.review.status !== 'Insufficient Evidence') {
+    return intelligence.narrative.executiveSummary;
+  }
   const template = getIndustryRecommendationTemplate_(prospect);
   const summary = buildCustomerFacingSummary_(prospect, reportText);
   const firstFinding = findings && findings.length ? findings[0] : null;
@@ -266,7 +284,11 @@ function buildConsultantNarrative_(prospect, findings, reportText, nextStep, est
 }
 
 function buildBusinessStrengths_(prospect, findings) {
-  const template = getIndustryRecommendationTemplate_(prospect);
+  const intelligence = getExecutiveBusinessIntelligenceForReport_(prospect, { findings: findings });
+  if (intelligence.analysis.strengths.length && intelligence.review.status !== 'Insufficient Evidence') {
+    return intelligence.analysis.strengths.slice(0, 3);
+  }
+  const classification = getBusinessClassificationContext_(prospect || {}, {});
   const strengths = [];
   const score = Number(prospect && prospect.auditScore);
 
@@ -276,10 +298,10 @@ function buildBusinessStrengths_(prospect, findings) {
     strengths.push('The business has clear services and market value that can be presented more effectively online.');
   }
 
-  strengths.push(`The strongest opportunities are practical, business-facing improvements for ${template.businessContext}.`);
+  strengths.push(`The strongest opportunities are practical improvements for ${classification.audience}.`);
 
   if (findings && findings.length) {
-    strengths.push('The review produced specific next steps instead of vague technical recommendations.');
+    strengths.push('The available business information provides a foundation for a focused discovery conversation.');
   } else {
     strengths.push('The recommended improvements can be prioritized without overcomplicating the website.');
   }
@@ -288,19 +310,23 @@ function buildBusinessStrengths_(prospect, findings) {
 }
 
 function buildTopBusinessOpportunities_(prospect, findings) {
-  const template = getIndustryRecommendationTemplate_(prospect);
+  const intelligence = getExecutiveBusinessIntelligenceForReport_(prospect, { findings: findings });
+  if (intelligence.opportunities.length) {
+    return intelligence.opportunities.map(function(item) { return item.recommendedAction; }).slice(0, 3);
+  }
+  const classification = getBusinessClassificationContext_(prospect || {}, {});
   const findingActions = (findings || []).map(function(finding) {
     return sanitizeCustomerPdfText_(finding.recommendedAction);
   }).filter(Boolean);
 
-  return (findingActions.length ? findingActions : template.opportunities).slice(0, 3);
+  return (findingActions.length ? findingActions : classification.priorities).slice(0, 3);
 }
 
 function buildExecutiveImpactBullets_(prospect, findings) {
-  const template = getIndustryRecommendationTemplate_(prospect);
+  const classification = getBusinessClassificationContext_(prospect || {}, {});
   return [
-    `Make it easier for customers to understand and trust ${template.businessContext}.`,
-    'Reduce friction between website visits and real inquiries.',
+    `Make it easier for ${classification.audience} to understand and trust the organization.`,
+    'Reduce friction between website visits and the appropriate inquiry or engagement action.',
     'Improve the path from recommendation to measurable business outcome.'
   ];
 }
@@ -398,11 +424,35 @@ function opportunityStatusClass_(opportunity) {
 }
 
 function buildAuditOpportunities_(prospect, findings, reportText, reportFile) {
+  const executiveIntelligence = getExecutiveBusinessIntelligenceForReport_(prospect, Object.assign({}, reportFile || {}, {
+    text: reportText,
+    findings: (reportFile && reportFile.findings) || findings
+  }));
+  if (executiveIntelligence.opportunities.length) {
+    return executiveIntelligence.opportunities.map(function(item) {
+      return {
+        category: item.impactArea,
+        observation: item.personalizedObservation,
+        executiveSummary: item.personalizedObservation,
+        whyThisMatters: item.businessReason,
+        businessImpact: item.businessReason,
+        customerImpact: item.businessReason,
+        recommendedAction: item.recommendedAction,
+        priority: item.priority,
+        impactLevel: item.expectedImpact,
+        estimatedEffort: item.effort
+      };
+    });
+  }
   const intelligenceFindings = typeof getInspectionIntelligenceFindingsForReport_ === 'function'
     ? getInspectionIntelligenceFindingsForReport_(prospect, reportFile || {})
     : [];
   if (intelligenceFindings.length) {
-    return intelligenceFindings.slice(0, 5);
+    return filterClientEligibleEvidence_(intelligenceFindings, prospect, reportFile || {}, 'recommendation').slice(0, 5);
+  }
+
+  if (!getReportScoreContext_(prospect, reportFile || {}).scoreVerified && !(findings || []).length) {
+    return [];
   }
 
   // PDF V4 CHANGE: high-scoring audits get optimization opportunities, not weak problem language.
@@ -418,11 +468,7 @@ function buildAuditOpportunities_(prospect, findings, reportText, reportFile) {
     return opportunities.slice(0, 5);
   }
 
-  return opportunities.concat([
-    'Clarify the customer path from landing on the site to contacting the business.',
-    'Strengthen trust signals so visitors feel confident before reaching out.',
-    'Improve local visibility cues around services, location, and next steps.'
-  ]).slice(0, 5);
+  return opportunities.concat(getBusinessClassificationContext_(prospect, reportFile || {}).priorities).slice(0, 5);
 }
 
 function isHighScoringAudit_(prospect) {
@@ -451,6 +497,18 @@ function buildGrowthOpportunityFindings_(prospect) {
       'Expand service area visibility.',
       'Add lane-specific landing pages.'
     ],
+    consulting: [
+      'Clarify capabilities and best-fit business needs.',
+      'Strengthen proof of expertise, outcomes, and delivery credibility.',
+      'Make the qualified consultation or discovery path explicit.',
+      'Connect each service to a clear decision-maker outcome.'
+    ],
+    nonprofit: [
+      'Clarify the mission, programs, and ways to participate.',
+      'Strengthen visible proof of community impact and stewardship.',
+      'Make volunteer, support, and contribution paths easy to understand.',
+      'Improve follow-up for participants and supporters.'
+    ],
     default: [
       'Improve local visibility for customers comparing nearby options.',
       'Increase qualified inquiries with a clearer request path.',
@@ -461,16 +519,16 @@ function buildGrowthOpportunityFindings_(prospect) {
   return templates[key] || templates.default;
 }
 
-function buildRecommendedNextStep_(prospect) {
+function buildRecommendedNextStep_(prospect, reportFile) {
   if (isNearPerfectAuditScore_(prospect)) {
     return 'Growth Opportunities';
   }
 
   const service = String(prospect.offerService || '').trim();
-  if (service) {
+  if (service && sanitizeCustomerPdfText_(service) && !/^website audit$/i.test(service)) {
     return `Start with ${service}`;
   }
-  return 'Schedule a short discovery conversation';
+  return getBusinessClassificationContext_(prospect || {}, reportFile || {}).firstStep;
 }
 
 function twoColumnInsightHtml_(leftTitle, leftItems, rightTitle, rightItems) {
@@ -552,6 +610,44 @@ function getIndustryRecommendationTemplate_(prospect) {
         growth: ['Track inquiry sources.', 'Simplify follow-up for quote requests.']
       }
     },
+    consulting: {
+      businessContext: 'a B2B business consulting and digital optimization firm',
+      opportunities: [
+        'Clarify the consulting capabilities and best-fit client needs.',
+        'Strengthen evidence of business outcomes and delivery credibility.',
+        'Make the path to a qualified discovery conversation explicit.'
+      ],
+      finalFocus: [
+        'Clearer professional-services positioning.',
+        'Stronger proof for business decision-makers.',
+        'A simpler path from interest to discovery.'
+      ],
+      roadmap: {
+        quickWins: ['Clarify the primary capabilities and ideal engagement.', 'Make the discovery path explicit on key pages.'],
+        trust: ['Surface verified case evidence, credentials, and delivery experience.', 'Explain the consulting approach in buyer-focused language.'],
+        lead: ['Qualify inquiries around business need, scope, and timing.', 'Connect each service to a clear business outcome.'],
+        growth: ['Track qualified discovery sources.', 'Improve follow-up around proposals and active opportunities.']
+      }
+    },
+    nonprofit: {
+      businessContext: 'a mission-driven organization',
+      opportunities: [
+        'Clarify the mission, programs, and ways to participate.',
+        'Strengthen visible proof of community impact and stewardship.',
+        'Make participation, support, volunteer, and contribution paths easy to understand.'
+      ],
+      finalFocus: [
+        'Clearer mission and program visibility.',
+        'Stronger trust for participants and supporters.',
+        'Simpler participation and contribution paths.'
+      ],
+      roadmap: {
+        quickWins: ['Clarify programs, events, and ways to participate.', 'Make visit, volunteer, support, and contribution paths easy to find.'],
+        trust: ['Surface verified community impact and stewardship evidence.', 'Explain leadership, safeguards, and program accountability clearly.'],
+        lead: ['Create clear participation, support, volunteer, and contribution paths.', 'Reduce friction for people seeking help or community connection.'],
+        growth: ['Track participation and support sources.', 'Improve follow-up for volunteers, members, donors, and community requests.']
+      }
+    },
     default: {
       businessContext: 'a local business',
       opportunities: [
@@ -593,6 +689,12 @@ function inferIndustryKey_(prospect) {
   }
   if (textIncludesAny_(text, ['logistics', 'freight', 'transport', 'trucking', 'shipper', 'carrier'])) {
     return 'logistics';
+  }
+  if (textIncludesAny_(text, ['business consulting', 'digital optimization', 'automation', 'ai-powered', 'google workspace', 'operational consulting', 'business optimization'])) {
+    return 'consulting';
+  }
+  if (textIncludesAny_(text, ['church', 'nonprofit', 'non-profit', 'ministry', 'charity', 'foundation'])) {
+    return 'nonprofit';
   }
 
   return 'default';
@@ -931,7 +1033,7 @@ function buildConsultingFindingCards_(prospect, opportunities, reportFile) {
     });
   });
 
-  return cards.length ? cards : defaultConsultingFindingCards_(prospect, reportFile);
+  return cards;
 }
 
 function inspectionIntelligenceImpactLevelForPdf_(finding) {
@@ -1493,6 +1595,9 @@ function annotationLabelForCategory_(category) {
 }
 
 function consultingFindingCardsHtml_(findings, visualEvidenceSource) {
+  if (!(findings || []).length) {
+    return renderPdfCardGroup_('<div class="summary-card preliminary-review"><h3>To Confirm During Discovery</h3><p>No client-facing findings are presented as verified because the available inspection evidence is incomplete. Confirm the business priorities and supporting evidence before recommending implementation work.</p></div>', { compact: true });
+  }
   const cardsHtml = (findings || []).map(function(finding) {
     const impactClass = impactStatusClass_(finding.impactLevel);
     const evidenceDetail = finding.evidence && finding.evidence.detail ? String(finding.evidence.detail) : '';
@@ -1553,32 +1658,35 @@ function impactStatusClass_(impactLevel) {
   return 'impact-low';
 }
 
-function priorityRoadmapHtml_(prospect) {
+function priorityRoadmapHtml_(prospect, reportFile) {
+  const classification = getBusinessClassificationContext_(prospect || {}, reportFile || {});
   const template = getIndustryRecommendationTemplate_(prospect);
   const roadmap = template.roadmap;
+  const preliminary = !getReportScoreContext_(prospect, reportFile || {}).scoreVerified;
+  const toConfirm = function(item) { return 'To confirm during discovery: ' + item; };
   const phases = [
     {
       phase: 'Phase 1',
       title: 'Quick Wins',
-      actions: roadmap.quickWins,
-      outcomes: 'More visitors understand what to do next.'
+      actions: preliminary ? [toConfirm(classification.firstStep)] : roadmap.quickWins,
+      outcomes: preliminary ? 'Priorities confirmed before implementation.' : 'More visitors understand what to do next.'
     },
     {
       phase: 'Phase 2',
       title: 'Trust & Credibility',
-      actions: roadmap.trust,
-      outcomes: 'Customers feel safer choosing the business.'
+      actions: preliminary ? [toConfirm(classification.priorities[1])] : roadmap.trust,
+      outcomes: preliminary ? 'Required credibility evidence identified and verified.' : `${classification.audience} have clearer reasons to trust the organization.`
     },
     {
       phase: 'Phase 3',
-      title: 'Lead Generation',
-      actions: roadmap.lead,
-      outcomes: 'More calls, form submissions, and qualified conversations.'
+      title: classification.type === 'nonprofit' ? 'Participation & Support' : 'Inquiry Path',
+      actions: preliminary ? [toConfirm(classification.priorities[2])] : roadmap.lead,
+      outcomes: preliminary ? 'The appropriate next-action path is confirmed.' : 'More qualified conversations or engagement actions.'
     },
     {
       phase: 'Phase 4',
       title: 'Automation & Growth',
-      actions: roadmap.growth,
+      actions: preliminary ? [toConfirm('Define the appropriate measurement and follow-up rhythm after priorities are verified.')] : roadmap.growth,
       outcomes: 'A cleaner rhythm for long-term growth.'
     }
   ];
@@ -1595,28 +1703,18 @@ function priorityRoadmapHtml_(prospect) {
   }).join('') + '</div>', { compact: true });
 }
 
-function trustChecklistHtml_(prospect) {
-  const text = [
-    prospect.notes,
-    prospect.summary,
-    prospect.auditOutcome
-  ].join(' ').toLowerCase();
-  const checks = [
-    ['Reviews Visible', !textIncludesAny_(text, ['missing review', 'reviews not visible', 'no reviews'])],
-    ['SSL Enabled', !textIncludesAny_(text, ['ssl missing', 'not secure', 'no https', 'missing ssl'])],
-    ['Mobile Friendly', !textIncludesAny_(text, ['not mobile', 'mobile issue', 'mobile friendly: no'])],
-    ['Contact Form', !textIncludesAny_(text, ['missing contact form', 'no contact form'])],
-    ['Google Business Profile', !textIncludesAny_(text, ['missing google business', 'gbp missing', 'no google business'])],
-    ['Clear Call To Action', !textIncludesAny_(text, ['missing call to action', 'missing cta', 'no call to action'])],
-    ['Service Area Coverage', !textIncludesAny_(text, ['missing service area', 'service area unclear'])]
-  ];
+function trustChecklistHtml_(prospect, reportFile) {
+  const contract = normalizeAssessmentEvidence_(prospect, reportFile || {});
+  const checks = Object.keys(contract.signals).map(function(key) { return contract.signals[key]; });
 
   return renderPdfCardGroup_('<div class="checklist-grid">' + checks.map(function(check) {
-    const passed = check[1];
+    const passed = check.status === 'PASS';
+    const failed = check.status === 'FAIL';
+    const notApplicable = check.status === 'NOT_APPLICABLE';
     return [
       `<div class="checklist-item ${passed ? 'check-pass' : 'check-improve'}">`,
-      `<span class="check-status">${passed ? 'Pass' : 'Improve'}</span>`,
-      `<span class="check-label">${escapeHtml_(check[0])}</span>`,
+      `<span class="check-status">${passed ? 'Pass' : (failed ? 'Improve' : (notApplicable ? 'Not Applicable' : 'Not Verified'))}</span>`,
+      `<span class="check-label">${escapeHtml_(check.label)}</span>`,
       '</div>'
     ].join('');
   }).join('') + '</div>', { compact: true });
@@ -1644,13 +1742,19 @@ function buildCompetitivePositionSection_(prospect) {
   ].join(''));
 }
 
-function finalRecommendationHtml_(prospect, nextStep, estimatedImpact) {
+function finalRecommendationHtml_(prospect, nextStep, estimatedImpact, reportFile) {
   const contact = getRogersContactInfo_();
-  const estimatedEffort = estimateAuditEffort_(prospect);
-  const template = getIndustryRecommendationTemplate_(prospect);
+  const scoreContext = getReportScoreContext_(prospect, reportFile || {});
+  const verified = scoreContext.scoreVerified === true;
+  const estimatedEffort = verified ? estimateAuditEffort_(prospect) : 'To be confirmed';
+  const impactLabel = verified ? (estimatedImpact || 'Medium') : 'To be confirmed';
+  const classification = getBusinessClassificationContext_(prospect || {}, {});
+  const priorities = verified
+    ? classification.priorities
+    : classification.priorities.map(function(item) { return 'To confirm during discovery: ' + item; });
   return [
     '<div class="conclusion-panel">',
-    '<h3>Recommended Next Step</h3>',
+    '<h3>Decision Framework</h3>',
     '<p>The next step should be simple: confirm the highest-impact improvement, define the first scope of work, and connect that work to a business result the owner can recognize.</p>',
     '<div class="next-step-flow">',
     '<div><strong>Finding</strong><span>Customer-facing friction or missed visibility.</span></div>',
@@ -1659,13 +1763,13 @@ function finalRecommendationHtml_(prospect, nextStep, estimatedImpact) {
     '<div><strong>Discovery Call</strong><span>Confirm scope, timing, and the first move.</span></div>',
     '</div>',
     '<p>Based on this review, the highest-return improvements are:</p>',
-    brandedPdfListHtml_(template.finalFocus),
+    brandedPdfListHtml_(priorities),
     '<div class="final-metrics">',
     `<div class="metric-card"><div class="metric-label">Estimated Effort</div><div class="metric-value">${escapeHtml_(estimatedEffort)}</div></div>`,
-    `<div class="metric-card"><div class="metric-label">Expected Impact</div><div class="metric-value">${escapeHtml_(estimatedImpact || 'Medium')}</div></div>`,
+    `<div class="metric-card"><div class="metric-label">Expected Impact</div><div class="metric-value">${escapeHtml_(impactLabel)}</div></div>`,
     '</div>',
     '<h3>Schedule a short discovery conversation.</h3>',
-    `<p>Use that conversation to confirm the next best improvement and align the first step around ${escapeHtml_(nextStep)}.</p>`,
+    '<p>Use that conversation to confirm the intended audience, verify the highest-priority evidence, define the desired business outcome, and agree on the first scoped improvement.</p>',
     '<div class="contact-card">',
     `<strong>${escapeHtml_(contact.name)}</strong><br>`,
     `${escapeHtml_(contact.company)}<br>`,
@@ -1680,20 +1784,37 @@ function buildRecommendedPackage_(prospect) {
   const service = getClientFacingServiceName_(prospect.offerService || 'Website Audit', prospect.auditScore);
   const investmentRange = recommendedInvestmentRangeForService_(service);
   const highScore = isNearPerfectAuditScore_(prospect);
+  const audience = getImprovementPlanBusinessContext_(prospect);
   return {
     name: highScore ? 'Growth & Optimization Review' : 'Digital Visibility & Conversion Improvement Package',
-    scope: 'A focused improvement engagement built around the highest-impact opportunities for customer trust, local visibility, and a clearer inquiry path.',
+    scope: `A focused improvement engagement built around the highest-impact opportunities for ${audience.scopeFocus}.`,
     timeline: '2-4 weeks',
     service: service,
     investmentRange: investmentRange,
     investment: 'Final investment confirmed after scope review.',
-    outcome: highScore ? 'Refine an already strong presence into clearer growth opportunities.' : 'Clearer customer action, local visibility, and trust signals.',
+    outcome: highScore ? 'Refine an already strong presence into clearer growth opportunities.' : audience.outcome,
     deliverables: [
       ['Strategy', 'Business goal alignment, improvement planning, and a clear action sequence.'],
       ['Website Improvements', 'Messaging, call-to-action, trust, and lead capture improvements.'],
-      ['Local Visibility', 'Service area, Google Business, and local discovery recommendations.'],
+      [audience.visibilityLabel, audience.visibilityDescription],
       ['Systems', 'Simple inquiry and follow-up workflow recommendations.']
     ]
+  };
+}
+
+function getImprovementPlanBusinessContext_(prospect) {
+  const classification = getBusinessClassificationContext_(prospect || {}, (prospect && prospect.reportFile) || {});
+  const local = classification.type === 'local-service';
+  const nonprofit = classification.type === 'nonprofit';
+  return {
+    type: classification.type,
+    audience: classification.audience,
+    scopeFocus: nonprofit ? 'participant clarity, mission trust, and a clearer engagement path' : (local ? 'customer trust, local visibility, and a clearer inquiry path' : 'buyer clarity, credibility, and a clearer qualified-inquiry path'),
+    outcome: nonprofit ? 'Clearer participation paths, stronger mission trust, and better engagement.' : (local ? 'Clearer customer action, local visibility, and trust signals.' : 'Clearer audience understanding, stronger credibility, and better qualified inquiries.'),
+    visibilityLabel: classification.visibilityLabel,
+    visibilityDescription: classification.visibilityDescription,
+    planDescription: nonprofit ? 'Best for organizations that need clearer participation paths, mission trust, and community visibility.' : (local ? 'Best for businesses that need stronger website conversion and local visibility.' : 'Best for firms and organizations that need stronger audience clarity, conversion, and market visibility.'),
+    visibilityAction: classification.priorities[1]
   };
 }
 
@@ -1702,14 +1823,16 @@ function buildExecutiveSnapshotPdfHtml_(prospect, reportFile) {
   const colors = design.colors;
   const assets = getRogersBrandPdfAssets_();
   const contact = getRogersContactInfo_();
-  const findings = getSmartFindings_(prospect);
-  const digitalPresence = getDigitalPresenceAssessment_(prospect.auditScore);
-  const assessment = digitalPresence.title;
+  const safeReportFile = getClientSafeReportFile_(prospect, reportFile || {});
+  const findings = filterClientEligibleEvidence_([].concat(safeReportFile.findings || [], getSmartFindings_(prospect)), prospect, reportFile || {}, 'finding');
+  const scoreContext = getReportScoreContext_(prospect, reportFile || {});
   const opportunities = buildExecutiveSnapshotOpportunities_(prospect, findings);
   const biggestOpportunity = buildExecutiveSnapshotBiggestOpportunity_(prospect, opportunities);
   const impact = buildExecutiveSnapshotBusinessImpact_(prospect);
   const firstStep = buildExecutiveSnapshotFirstStep_(prospect);
-  const evidenceHtml = buildExecutiveSnapshotEvidenceHtml_(prospect, reportFile);
+  const evidenceHtml = buildExecutiveSnapshotEvidenceHtml_(prospect, safeReportFile);
+  const executiveIntelligence = getExecutiveBusinessIntelligenceForReport_(prospect, safeReportFile);
+  const clientIntelligence = executiveBusinessClientContent_(executiveIntelligence);
   const logoHtml = assets.primaryLogo
     ? `<img src="${assets.primaryLogo}" style="height:48px;width:auto;display:block;" alt="Rogers Holdings LLC">`
     : '<div style="font-weight:700;text-transform:uppercase;letter-spacing:1.6px;">Rogers Holdings LLC</div>';
@@ -1794,13 +1917,13 @@ function buildExecutiveSnapshotPdfHtml_(prospect, reportFile) {
               <div class="snapshot-label">Prepared For</div>
               <h2>${escapeHtml_(prospect.company || 'Business')}</h2>
               <p>${escapeHtml_(prospect.website || '')}</p>
-              <p>We identified practical opportunities that may help customers find, trust, and contact the business more easily.</p>
+              <p>${escapeHtml_(clientIntelligence.consultantOpeningLetter || 'We identified practical opportunities that may help customers find, trust, and contact the business more easily.')}</p>
             </div>
             <div class="score-card">
-              <div class="score-value">${escapeHtml_(digitalPresence.scoreText || 'Not scored')}</div>
+              <div class="score-value">${escapeHtml_(scoreContext.displayScore)}</div>
               <div class="score-label">Digital Presence Score</div>
-              <div class="assessment">${escapeHtml_(assessment)}</div>
-              <p style="color:#f4ead7;font-size:10.5px;line-height:1.35;margin:8px 0 0;">${escapeHtml_(digitalPresence.subtitle)}</p>
+              <div class="assessment">${escapeHtml_(scoreContext.severityLabel)}</div>
+              <p style="color:#f4ead7;font-size:10.5px;line-height:1.35;margin:8px 0 0;">${escapeHtml_(scoreContext.safeFallbackLanguage)}</p>
             </div>
           </div>
 
@@ -1843,13 +1966,16 @@ function buildExecutiveSnapshotPdfHtml_(prospect, reportFile) {
 }
 
 function buildExecutiveSnapshotOpportunities_(prospect, findings) {
-  const template = getIndustryRecommendationTemplate_(prospect);
-  const source = (findings && findings.length ? findings : template.opportunities || []).filter(Boolean);
-  const fallback = [
-    'Make the first customer action easier to find.',
-    'Strengthen trust signals before the customer decides to call.',
-    'Clarify service area and local visibility signals.'
-  ];
+  const intelligence = getExecutiveBusinessIntelligenceForReport_(prospect, { findings: findings });
+  if (executiveBusinessClientContent_(intelligence).available && intelligence.opportunities.length) {
+    return intelligence.opportunities.map(function(item) { return item.title; }).slice(0, 3);
+  }
+  const classification = getBusinessClassificationContext_(prospect || {}, {});
+  if (!(findings && findings.length) && !getReportScoreContext_(prospect || {}, {}).scoreVerified) {
+    return classification.priorities.map(function(item) { return 'To confirm during discovery: ' + item; }).slice(0, 3);
+  }
+  const source = (findings && findings.length ? findings : classification.priorities || []).filter(Boolean);
+  const fallback = classification.priorities;
   return (source.length ? source : fallback).slice(0, 3);
 }
 
@@ -1865,22 +1991,24 @@ function buildExecutiveSnapshotBiggestOpportunity_(prospect, opportunities) {
 }
 
 function buildExecutiveSnapshotBusinessImpact_(prospect) {
+  const classification = getBusinessClassificationContext_(prospect || {}, {});
   const score = Number(prospect.auditScore);
   if (!Number.isNaN(score) && score >= 90) {
-    return 'The business appears to have a strong foundation. The opportunity is likely growth-focused: clearer proof, stronger conversion paths, and better local visibility consistency.';
+    return `The business appears to have a strong foundation. The opportunity is likely growth-focused: ${classification.priorities.join(' ')}`;
   }
   if (!Number.isNaN(score) && score < 70) {
     return 'The highest-impact improvements may help reduce customer hesitation, clarify the service offer, and make contact or quote requests easier.';
   }
-  return 'These improvements may help customers find, trust, and contact the business more easily, with the strongest impact around clarity, confidence, and inquiry flow.';
+  return `These improvements may help ${classification.audience} understand, trust, and take the appropriate next step more easily.`;
 }
 
 function buildExecutiveSnapshotFirstStep_(prospect) {
+  const classification = getBusinessClassificationContext_(prospect || {}, {});
   const service = String(prospect.offerService || '').trim();
-  if (service) {
+  if (service && !/^website audit$/i.test(service)) {
     return `Review the ${service} opportunities first, then confirm the highest-impact improvement to prioritize.`;
   }
-  return 'Review the top opportunities first, then confirm which improvement would most directly support calls, quote requests, or customer trust.';
+  return classification.firstStep;
 }
 
 function buildExecutiveSnapshotEvidenceHtml_(prospect, reportFile) {
@@ -1920,12 +2048,15 @@ function buildExecutiveSnapshotEvidenceHtml_(prospect, reportFile) {
     ].join('');
   }
 
-  const observation = firstNonBlank_([
-    prospect.summary,
-    prospect.notes,
-    getDigitalPresenceAssessment_(prospect.auditScore).subtitle,
-    'The first opportunity is to confirm the customer path: what visitors see first, what they understand, and how easily they can take action.'
-  ]);
+  const scoreContext = getReportScoreContext_(prospect || {}, reportFile || {});
+  const observation = scoreContext.scoreVerified
+    ? firstNonBlank_([
+      prospect.summary,
+      prospect.notes,
+      scoreContext.safeFallbackLanguage,
+      'The first opportunity is to confirm the customer path: what visitors see first, what they understand, and how easily they can take action.'
+    ])
+    : 'Available evidence supports a preliminary review. Confirm the priority findings and business context during discovery before treating any score, severity, or recommendation as verified.';
   return [
     '<div class="evidence">',
     '<div class="evidence-head">Key Observation</div>',
@@ -1936,14 +2067,17 @@ function buildExecutiveSnapshotEvidenceHtml_(prospect, reportFile) {
   ].join('');
 }
 
-function businessImpactSectionHtml_(prospect, findings) {
-  const template = getIndustryRecommendationTemplate_(prospect);
-  const impactItems = [
-    `Help customers quickly understand why ${template.businessContext} should be trusted.`,
-    'Reduce friction between a visitor landing on the website and taking the next step.',
-    'Make contact options, service details, and credibility signals easier to find.',
-    'Support better local visibility by clarifying services, location, and customer intent.'
+function businessImpactSectionHtml_(prospect, findings, reportFile) {
+  const classification = getBusinessClassificationContext_(prospect || {}, {});
+  let impactItems = [
+    `Help ${classification.audience} quickly understand the organization, its relevance, and why it should be trusted.`,
+    'Reduce friction between a website visit and the appropriate next step.',
+    classification.priorities[1],
+    classification.priorities[2]
   ];
+  if (!getReportScoreContext_(prospect, reportFile || {}).scoreVerified) {
+    impactItems = impactItems.map(function(item) { return 'To confirm during discovery: ' + item; });
+  }
 
   if (isHighScoringAudit_(prospect)) {
     impactItems[0] = 'Turn an already credible digital presence into more consistent customer action.';
@@ -1958,17 +2092,17 @@ function businessImpactSectionHtml_(prospect, findings) {
   ].join('');
 }
 
-function quickWinsSectionHtml_(prospect, findings) {
+function quickWinsSectionHtml_(prospect, findings, reportFile) {
+  const classification = getBusinessClassificationContext_(prospect || {}, {});
   const template = getIndustryRecommendationTemplate_(prospect);
   const actions = ((template.roadmap && template.roadmap.quickWins) || []).slice(0, 4);
-  const fallbackActions = [
-    'Make phone, quote, booking, or contact options visible near the top of key pages.',
-    'Clarify the primary services and service area in plain English.',
-    'Add or improve trust signals such as reviews, testimonials, certifications, project examples, or guarantees.',
-    'Simplify the next step so customers know exactly how to request help.'
-  ];
+  const fallbackActions = classification.priorities.concat([classification.firstStep]);
 
-  return recommendationCardsHtml_(actions.length ? actions : fallbackActions, 'Quick Win');
+  let selected = actions.length ? actions : fallbackActions;
+  if (!getReportScoreContext_(prospect, reportFile || {}).scoreVerified) {
+    selected = fallbackActions.map(function(item) { return 'To confirm during discovery: ' + item; });
+  }
+  return recommendationCardsHtml_(selected, 'Quick Win');
 }
 
 function recommendedServicePackageHtml_(recommendedPackage) {
@@ -2011,37 +2145,65 @@ function recommendedInvestmentRangeForService_(service) {
 }
 
 function proposalIntroHtml_(prospect) {
+  const audience = getImprovementPlanBusinessContext_(prospect);
+  const decisionLanguage = audience.type === 'nonprofit'
+    ? 'what participants, families, volunteers, and supporters see, what may slow engagement, and what should be improved first to create more trust, clarity, and participation'
+    : (audience.type === 'professional'
+      ? 'what business decision-makers see, what may slow evaluation, and what should be improved first to create more trust, clarity, and qualified conversations'
+      : 'what customers see, what may slow them down, and what should be improved first to create more trust, visibility, and qualified inquiries');
   return [
     '<div class="summary-card executive-summary">',
     `<h3>Thank you, ${escapeHtml_(prospect.company || 'team')}.</h3>`,
-    '<p>This proposal translates the website review into a practical improvement plan. It focuses on what customers see, what may slow them down, and what should be improved first to create more trust, visibility, and qualified inquiries.</p>',
+    `<p>This proposal translates the website review into a practical improvement plan. It focuses on ${decisionLanguage}.</p>`,
     '<p>The recommendation is intentionally focused. The goal is not to add unnecessary technology. The goal is to create a clearer digital foundation that supports real customer decisions.</p>',
     '</div>'
   ].join('');
 }
 
 function proposalFindingsSummaryHtml_(prospect) {
+  const audience = getImprovementPlanBusinessContext_(prospect);
+  const scoreContext = getReportScoreContext_(prospect || {}, (prospect && prospect.reportFile) || {});
+  const verified = scoreContext.scoreVerified === true;
   const findings = getSmartFindings_(prospect).slice(0, 5);
-  const values = findings.length ? findings : [
+  const fallbackValues = audience.type === 'nonprofit' ? [
+    'People should be able to quickly understand the mission, programs, and ways to participate.',
+    'Trust signals should be visible before someone decides to visit, volunteer, seek support, or contribute.',
+    'The engagement path should be simple, clear, and easy to find.'
+  ] : (audience.type === 'professional' ? [
+    'Business decision-makers should be able to quickly understand the capabilities and best-fit needs.',
+    'Credibility signals should be visible before a buyer decides to start a conversation.',
+    'The qualified inquiry path should be simple, clear, and easy to find.'
+  ] : [
     'Customers should be able to quickly understand what the business offers.',
     'Trust signals should be visible before a customer decides to call or request help.',
     'The next step should be simple, clear, and easy to find.'
-  ];
+  ]);
+  const values = verified && findings.length
+    ? findings
+    : fallbackValues.map(function(item) {
+      return verified ? item : 'To confirm during discovery: ' + item;
+    });
 
   return [
     '<div class="narrative-callout">',
-    '<div class="callout-label">What this means</div>',
-    '<p>The findings point to the same business goal: help customers understand the offer faster, feel more confident, and know exactly how to take the next step.</p>',
+    `<div class="callout-label">${verified ? 'What this means' : 'Preliminary planning context'}</div>`,
+    `<p>${verified ? 'The findings point' : 'These discovery items point'} to the same business goal: help ${escapeHtml_(audience.audience)} understand the offer faster, feel more confident, and know exactly how to take the next step.</p>`,
     '</div>',
-    recommendationCardsHtml_(values, 'Finding')
+    recommendationCardsHtml_(values, verified ? 'Finding' : 'Discovery Item')
   ].join('');
 }
 
 function proposalSolutionHtml_(prospect, recommendedPackage) {
+  const audience = getImprovementPlanBusinessContext_(prospect);
+  const actionLanguage = audience.type === 'nonprofit'
+    ? 'people move from awareness to participation or support with less friction'
+    : (audience.type === 'professional'
+      ? 'business decision-makers move from interest to a qualified conversation with less friction'
+      : 'customers move from interest to inquiry with less friction');
   return [
     '<div class="solution-panel">',
     `<h3>${escapeHtml_(recommendedPackage.name)}</h3>`,
-    '<p>The recommended solution is focused on practical improvements that can help customers move from interest to inquiry with less friction.</p>',
+    `<p>The recommended solution is focused on practical improvements that can help ${actionLanguage}.</p>`,
     brandedPdfDefinitionListHtml_([
       ['Service', recommendedPackage.service],
       ['Outcome', recommendedPackage.outcome],
@@ -2276,6 +2438,9 @@ function buildBrandedPdfHtml_(document) {
           .cover .meta { margin-top: 16px; color: #f4ead7; font-size: 13px; line-height: 1.6; }
           .badge { display: inline-block; padding: 7px 11px; border: 1px solid ${colors.gold}; color: ${colors.gold}; text-transform: uppercase; font-size: 10px; letter-spacing: 1px; }
           .section { padding: ${spacing.pageTop} ${spacing.pageX} ${spacing.pageBottom}; page-break-inside: auto; position: relative; z-index: 1; }
+          .section.force-page-break { break-before: page; page-break-before: always; }
+          .section.keep-with-first-block > .section-heading, .section.keep-with-first-block > .section-content > :first-child { break-after: avoid; break-before: avoid; page-break-after: avoid; page-break-before: avoid; }
+          .section.page-top-safe, .section + .section.page-top-safe { padding-top: calc(${spacing.pageTop} + 28px); }
           .section-title-large { font-size: ${typography.sectionTitleSize}; letter-spacing: 0; }
           .section + .section { padding-top: ${spacing.sectionGap}; }
           .section-subtitle { color: #4f4a42; font-size: 13px; margin: -6px 0 18px; }
@@ -2407,6 +2572,9 @@ function buildBrandedPdfHtml_(document) {
           table, tr, td, th, img, .keep-together, .pdf-card-group, .metric-card, .recommendation-card, .summary-card, .price-card, .solution-panel, .insight-panel, .narrative-callout, .brief-primary, .impact-summary, .finding-card, .proof-card, .roadmap-card, .checklist-item, .conclusion-panel, .acceptance-panel, .next-step-flow div, .deliverable-card, .visual-evidence-card, .signature-row, .contact-card { break-inside: avoid; page-break-inside: avoid; }
           .section-heading { break-after: avoid; page-break-after: avoid; }
           .section-content { break-before: avoid; page-break-before: avoid; }
+          .section-content > :first-child { break-before: avoid; page-break-before: avoid; }
+          .compact-divider + .section { break-before: avoid; page-break-before: avoid; }
+          .compact-divider + .section.force-page-break, .section.force-page-break { break-before: page; page-break-before: always; }
           .soft-page-break { height: 0; line-height: 0; break-before: page; page-break-before: always; }
           .compact-divider { margin: 10px ${spacing.pageX} 18px; padding: 16px 20px; background: ${colors.charcoal}; color: ${colors.paper}; border-left: 5px solid ${colors.gold}; border-radius: ${radius.small}; break-inside: avoid; page-break-inside: avoid; }
           .compact-divider-rule { width: 72px; height: 2px; background: ${colors.gold}; margin: 0 0 8px; }
@@ -2674,13 +2842,22 @@ function statusLabelFromClass_(statusClass) {
   return labels[statusClass] || 'Current Score';
 }
 
-function brandedPdfSectionHtml_(title, contentHtml) {
-  return renderPdfSection_(title, contentHtml);
+function brandedPdfSectionHtml_(title, contentHtml, options) {
+  return renderPdfSection_(title, contentHtml, options);
 }
 
-function renderPdfSection_(title, contentHtml) {
+function renderPdfSection_(title, contentHtml, options) {
+  const opts = options || {};
+  const sectionClasses = ['section'];
+  if (opts.keepWithFirstBlock) {
+    sectionClasses.push('force-page-break', 'keep-with-first-block');
+  }
+  if (opts.pageTopSafe) {
+    sectionClasses.push('page-top-safe');
+  }
+  const sectionClass = sectionClasses.join(' ');
   return [
-    '<div class="section">',
+    `<div class="${sectionClass}">`,
     `<h2 class="section-heading">${escapeHtml_(title)}</h2>`,
     `<div class="section-content">${contentHtml || ''}</div>`,
     '</div>'
@@ -2941,16 +3118,17 @@ function generateProposal() {
 function buildProposal_(prospect) {
   const company = String(prospect.company || '').trim();
   const website = String(prospect.website || 'Not provided').trim();
-  const auditScore = getDigitalPresenceAssessment_(prospect.auditScore).scoreText;
-  const digitalPresence = getDigitalPresenceAssessment_(prospect.auditScore);
+  const reportFile = prospect.reportFile || {};
+  const scoreContext = getReportScoreContext_(prospect, reportFile);
   const recommendedService = getClientFacingServiceName_(prospect.offerService || 'Website and local visibility improvement', prospect.auditScore);
-  const findings = getSmartFindings_(prospect);
+  const findings = filterClientEligibleEvidence_(getSmartFindings_(prospect), prospect, reportFile, 'finding');
+  const audience = getImprovementPlanBusinessContext_(prospect);
   const findingsText = findings.length
     ? findings.map(function(finding) {
       return '- ' + finding;
     }).join('\n')
-    : proposalFindingsFromOutcome_(digitalPresence);
-  const impact = proposalImpactFromService_(recommendedService);
+    : proposalFindingsFromOutcome_(scoreContext, prospect);
+  const impact = proposalImpactFromService_(recommendedService, prospect);
 
   const proposalText = [
     'ROGERS HOLDINGS LLC',
@@ -2958,7 +3136,7 @@ function buildProposal_(prospect) {
     '',
     `Prepared for: ${company}`,
     `Website: ${website}`,
-    `Digital Presence Score: ${auditScore}`,
+    `Digital Presence Score: ${scoreContext.displayScore}`,
     '',
     'SUMMARY OF FINDINGS',
     findingsText,
@@ -2980,10 +3158,10 @@ function buildProposal_(prospect) {
     '',
     'Professional',
     '$1,500 one-time',
-    'Best for businesses that need stronger website conversion and local visibility.',
+    audience.planDescription,
     '- Implement priority website improvements',
     '- Improve call-to-action and service messaging',
-    '- Strengthen local search and trust signals',
+    `- ${audience.visibilityAction}`,
     '- Provide before/after summary notes',
     '',
     'Premium',
@@ -2991,7 +3169,7 @@ function buildProposal_(prospect) {
     'Best for businesses that need a deeper digital foundation or a larger rebuild.',
     '- Full website and digital presence improvement plan',
     '- Conversion-focused page updates or rebuild guidance',
-    '- Local visibility and customer inquiry improvements',
+    `- ${audience.visibilityAction}`,
     '- Follow-up review and next-step recommendations',
     '',
     'NEXT STEP',
@@ -3004,7 +3182,7 @@ function buildProposal_(prospect) {
   return {
     company: company,
     website: website,
-    auditScore: auditScore,
+    auditScore: scoreContext.displayScore,
     findings: findingsText,
     recommendedService: recommendedService,
     impact: impact,
@@ -3012,19 +3190,28 @@ function buildProposal_(prospect) {
   };
 }
 
-function proposalFindingsFromOutcome_(digitalPresence) {
-  const assessment = digitalPresence || getDigitalPresenceAssessment_(null);
+function proposalFindingsFromOutcome_(scoreContext, prospect) {
+  const context = scoreContext || getReportScoreContext_(prospect || {}, {});
+  const audience = getImprovementPlanBusinessContext_(prospect || {});
   return [
-    `The Digital Presence Score indicates: ${assessment.title}.`,
-    assessment.subtitle,
-    'The main opportunity is to make the website easier for local customers to understand, trust, and act on.'
+    context.scoreVerified ? `The Digital Presence Score indicates: ${context.severityLabel}.` : 'The Digital Presence Score is not verified.',
+    context.safeFallbackLanguage,
+    `The main opportunity is to make the website easier for ${audience.audience} to understand, trust, and act on.`
   ].join(' ');
 }
 
-function proposalImpactFromService_(recommendedService) {
+function proposalImpactFromService_(recommendedService, prospect) {
+  const classification = getBusinessClassificationContext_(prospect || {}, (prospect && prospect.reportFile) || {});
+  const impact = classification.type === 'nonprofit'
+    ? 'Expected impact includes clearer mission and program communication, stronger stewardship trust, easier participation paths, and better engagement from people already reviewing the organization.'
+    : (classification.type === 'professional'
+      ? 'Expected impact includes clearer capability positioning, stronger decision-maker credibility, easier qualified inquiry paths, and better discovery conversations with organizations already evaluating the firm.'
+      : (classification.type === 'local-service'
+        ? 'Expected impact includes clearer service messaging, stronger local-customer trust, easier contact paths, and better conversion from people already reviewing the business.'
+        : 'Expected impact includes clearer messaging, stronger audience trust, easier inquiry or engagement paths, and better action from people already reviewing the organization.'));
   return [
     `The recommended service is ${recommendedService}.`,
-    'Expected impact includes clearer messaging, stronger customer trust, easier contact paths, and better conversion from visitors who are already reviewing the business online.'
+    impact
   ].join(' ');
 }
 

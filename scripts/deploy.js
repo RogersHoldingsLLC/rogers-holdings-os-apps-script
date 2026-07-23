@@ -126,6 +126,8 @@ async function deploy(targetName, options = {}) {
     run('npm', ['run', 'validate'], projectRoot);
     run('npm', ['run', 'test:lifecycle'], projectRoot);
     run('npm', ['run', 'test:audit-rendering'], projectRoot);
+    run('npm', ['run', 'test:ebi'], projectRoot);
+    run('npm', ['test'], projectRoot);
     run('git', ['diff', '--check'], projectRoot);
     assertProductionGitSafety(projectRoot, capture, environment);
   } else {

@@ -11,6 +11,7 @@ const requiredFiles = [
   'Menu.gs',
   'SheetHelpers.gs',
   'AuditEngine.gs',
+  'ExecutiveBusinessIntelligenceEngine.gs',
   'PdfEngine.gs',
   'GmailEngine.gs',
   'CalendarEngine.gs',

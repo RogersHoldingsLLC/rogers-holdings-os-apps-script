@@ -108,20 +108,23 @@ function renderPreviewList_(items) {
 }
 
 function showExecutiveSnapshotPreview_(prospect, reportFile) {
-  const findings = getSmartFindings_(prospect);
-  const digitalPresence = getDigitalPresenceAssessment_(prospect.auditScore);
+  const safeReportFile = getClientSafeReportFile_(prospect, reportFile || {});
+  const findings = filterClientEligibleEvidence_([].concat(safeReportFile.findings || [], getSmartFindings_(prospect)), prospect, reportFile || {}, 'finding');
+  const scoreContext = getReportScoreContext_(prospect, reportFile || {});
+  const executiveIntelligence = getExecutiveBusinessIntelligenceForReport_(prospect, safeReportFile);
+  const clientIntelligence = executiveBusinessClientContent_(executiveIntelligence);
   const bodyHtml = [
     '<div class="hero-card">',
     '<div class="hero-label">Executive Snapshot</div>',
     `<h2>${escapeHtml_(prospect.company || 'Selected Company')}</h2>`,
-    '<p>Concise meeting-focused summary prepared for initial review.</p>',
+    `<p>${escapeHtml_(clientIntelligence.consultantOpeningLetter || 'We identified practical opportunities that may help customers find, trust, and contact the business more easily.')}</p>`,
     '</div>',
     '<div class="card-grid">',
-    renderPreviewCard_('Digital Presence Score', `<div class="big-number">${escapeHtml_(digitalPresence.scoreText)}</div><p><strong>${escapeHtml_(digitalPresence.title)}</strong></p><p>${escapeHtml_(digitalPresence.subtitle)}</p>`),
+    renderPreviewCard_('Digital Presence Score', `<div class="big-number">${escapeHtml_(scoreContext.displayScore)}</div><p><strong>${escapeHtml_(scoreContext.severityLabel)}</strong></p><p>${escapeHtml_(scoreContext.safeFallbackLanguage)}</p>`),
     renderPreviewCard_('Recommended First Step', `<p>${escapeHtml_(buildExecutiveSnapshotFirstStep_(prospect))}</p>`),
     '</div>',
     renderPreviewCard_('Top Opportunities', renderPreviewList_(buildExecutiveSnapshotOpportunities_(prospect, findings).slice(0, 3))),
-    renderPreviewCard_('Key Observation', buildExecutiveSnapshotEvidenceHtml_(prospect, reportFile || {}))
+    renderPreviewCard_('Key Observation', `<p>${escapeHtml_(clientIntelligence.immediateStandout || buildExecutiveSnapshotBiggestOpportunity_(prospect, buildExecutiveSnapshotOpportunities_(prospect, findings)))}</p>` + buildExecutiveSnapshotEvidenceHtml_(prospect, safeReportFile))
   ].join('');
 
   SpreadsheetApp.getUi().showModalDialog(createPreviewDialog_({
@@ -135,10 +138,13 @@ function showExecutiveSnapshotPreview_(prospect, reportFile) {
 }
 
 function showDigitalBusinessAssessmentPreview_(prospect, reportFile) {
-  const findings = getSmartFindings_(prospect);
-  const opportunities = buildAuditOpportunities_(prospect, findings, getAuditReportTextFromReportFile_(reportFile || {}), reportFile || {});
-  let cards = buildConsultingFindingCards_(prospect, opportunities, reportFile || {});
-  cards = enforcePdfFindingEvidenceQuality_(prospect, reportFile || {}, cards);
+  const safeReportFile = getClientSafeReportFile_(prospect, reportFile || {});
+  const findings = filterClientEligibleEvidence_([].concat(safeReportFile.findings || [], getSmartFindings_(prospect)), prospect, reportFile || {}, 'finding');
+  const opportunities = buildAuditOpportunities_(prospect, findings, getAuditReportTextFromReportFile_(safeReportFile), safeReportFile);
+  let cards = buildConsultingFindingCards_(prospect, opportunities, safeReportFile);
+  cards = enforcePdfFindingEvidenceQuality_(prospect, safeReportFile, cards);
+  const executiveIntelligence = getExecutiveBusinessIntelligenceForReport_(prospect, safeReportFile);
+  const clientIntelligence = executiveBusinessClientContent_(executiveIntelligence);
   const bodyHtml = [
     '<div class="hero-card">',
     '<div class="hero-label">Digital Business Assessment</div>',
@@ -146,11 +152,11 @@ function showDigitalBusinessAssessmentPreview_(prospect, reportFile) {
     '<p>Executive summary, findings, evidence, and practical recommendations.</p>',
     '</div>',
     '<div class="card-grid">',
-    renderPreviewCard_('Executive Summary', `<p>${escapeHtml_(buildDeliverablePreviewAssessmentSummary_(prospect, cards))}</p>`),
-    renderPreviewCard_('Recommended Focus', `<p>${escapeHtml_(buildRecommendedNextStep_(prospect))}</p>`),
+    renderPreviewCard_('Executive Summary', `<p>${escapeHtml_(clientIntelligence.executiveSummary || buildDeliverablePreviewAssessmentSummary_(prospect, cards))}</p>`),
+    renderPreviewCard_('Recommended Focus', `<p>${escapeHtml_(buildRecommendedNextStep_(prospect, safeReportFile))}</p>`),
     '</div>',
-    renderPreviewCard_('Findings', consultingFindingCardsHtml_(cards, getAuditEvidenceObject_(prospect, reportFile || {}))),
-    renderPreviewCard_('Recommendations', priorityRoadmapHtml_(prospect))
+    renderPreviewCard_('Findings', consultingFindingCardsHtml_(cards, getAuditEvidenceObject_(prospect, safeReportFile))),
+    renderPreviewCard_('Recommendations', clientIntelligence.available && executiveIntelligence.opportunities.length ? renderPreviewList_(executiveIntelligence.opportunities.map(function(item) { return item.recommendedAction; })) : priorityRoadmapHtml_(prospect, safeReportFile))
   ].join('');
 
   SpreadsheetApp.getUi().showModalDialog(createPreviewDialog_({
@@ -177,7 +183,7 @@ function showImprovementPlanPreview_(prospect, proposal) {
     renderPreviewCard_('Estimated Investment', `<p>${escapeHtml_(recommendedPackage.investment || 'Final investment confirmed after scope review')}</p>`, { editable: true, field: 'investment' }),
     '</div>',
     renderPreviewCard_('Recommended Scope', deliverableCardsHtml_(recommendedPackage.deliverables), { editable: true, field: 'scope' }),
-    renderPreviewCard_('Business Outcomes', `<p>${escapeHtml_(proposal.impact || proposalImpactFromService_(proposal.recommendedService))}</p>`, { editable: true, field: 'businessOutcomes' }),
+    renderPreviewCard_('Business Outcomes', `<p>${escapeHtml_(proposal.impact || proposalImpactFromService_(proposal.recommendedService, prospect))}</p>`, { editable: true, field: 'businessOutcomes' }),
     renderPreviewCard_('Next Steps', proposalNextStepsHtml_(prospect), { editable: true, field: 'nextSteps' })
   ].join('');
 

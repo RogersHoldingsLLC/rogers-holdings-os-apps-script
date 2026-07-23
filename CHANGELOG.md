@@ -6,8 +6,34 @@ All notable Business Optimization Platform changes are tracked here.
 
 Build `2026.07.20-rc`. This is a release candidate, not production-ready or released. Final live acceptance, release sign-off, and production approval remain required.
 
+### Added
+
+- Added a deterministic Executive Business Intelligence pipeline for business discovery, normalized evidence, contextual analysis, evidence-linked opportunity prioritization, rules-based editorial review, personalized narrative, and fail-safe consultant-review status.
+- Connected grounded EBI output to existing Digital Business Assessment and Executive Snapshot sections and previews through the existing in-memory `prospect + reportFile` boundary without changing spreadsheet schemas, public APIs, lifecycle semantics, or deployment targets. Improvement Plan rendering remains on its legacy path until reviewed assessment evidence can be safely reused.
+- Added four grounded industry fixtures, an insufficient-evidence fixture, a metadata-only guard, and regression tests for profile/narrative differentiation, evidence linkage, supported strengths, fallback behavior, adjacent-section duplication, internal terminology, focused priorities, generic filler, and consultant-review defaults.
+- Added `npm run acceptance:ebi` to regenerate an inspectable synthetic fixture comparison under `test-output/` without treating fixture output as live acceptance evidence.
+- Added `docs/EXECUTIVE_BUSINESS_INTELLIGENCE_ENGINE.md` with schemas, evidence/confidence rules, failure behavior, integration points, and the future approved-AI adapter boundary.
+
 ### Fixed
 
+- Completed live disposable-workbook artifact acceptance hardening: normalized structured screenshot evidence before filtering, removed unverified score/confidence/severity leakage from the Executive Snapshot, Assessment, and Improvement Plan, qualified unsupported findings as discovery items, and kept professional/B2B classification consistent across all four deliverables.
+- Corrected Improvement Plan PDF pagination so the Timeline heading clears the repeating page header, remains with its first timeline item, and preserves the professional five-page layout without blank pages or orphaned headings.
+- Added regression coverage for incomplete-evidence client language, structured screenshot evidence, unverified legacy summary metrics, discovery-qualified recommendations, duplicated final headings, and page-top-safe Timeline rendering.
+- Expanded the production deployment gate to rerun the EBI regression and deployment-safety suites before any production push.
+- Made evidence state item-specific across EBI, assessment findings, proof, recommendations, roadmap, Improvement Plan, and outreach; unknown or incomplete items are omitted from definitive client claims while explicitly verified siblings remain eligible.
+- Added one shared business-classification context for professional/B2B, local-service, nonprofit, and neutral audience language across reports, packages, roadmaps, final steps, and outreach.
+- Prevented low-confidence outreach and Improvement Plans from listing unsupported prospect-note findings, using a preliminary discovery-confirmation state when no verified findings exist.
+- Forced the Improvement Roadmap section to a clean PDF page with heading/first-block keep rules, preventing orphan headings and clipped first cards, and removed repeated final discovery-action wording.
+- Unified visible deliverable score handling through one report score-context helper so incomplete inspection data and unsupported zero scores render `Not verified` without critical severity in the Digital Business Assessment, Executive Snapshot PDF/preview, and Improvement Plan.
+- Preserved the legacy Improvement Plan architecture while making its fallback language business-context safe for professional/B2B, supported local-service, nonprofit, and neutral records.
+
+- Added an inspection-confidence safeguard that suppresses definitive scores and severity labels when execution is incomplete or an unsupported zero lacks structured evidence; the same safeguard now protects outreach copy.
+- Replaced the Digital Trust Checklist's truthy default logic with explicit `PASS`, `FAIL`, `UNKNOWN`, and client-visible `Not Verified` states derived from a shared normalized evidence contract.
+- Sanitized semantic EBI inputs so internal review markers cannot become audience, service, geography, strength, recommendation, or narrative content; low-confidence/review-required observations no longer create client opportunities.
+- Added professional-services classification and buyer context for business consulting and digital optimization firms, preventing unsupported local SEO, phone-hours, and service-area assumptions.
+- Tightened PDF keep-together rules so compact dividers and section headings stay with the first content block and roadmap/cards avoid cross-page clipping.
+- Added the malformed Rogers Holdings LLC live-acceptance regression fixture with incomplete inspection, mixed missing/unknown signals, internal metadata, professional-services evidence, outreach, checklist, and pagination assertions.
+- Kept Executive Business Intelligence workflow status and diagnostics internal, removed repeated finding/recommendation text from adjacent narrative sections, required observed report evidence before personalization, recognized common “does not” gap wording, added clean insufficient-evidence fallbacks, and preserved legacy Improvement Plan content until reviewed assessment evidence can be safely reused without a contract change.
 - Restricted Reset Test Data and Reset Demo Data to Developer Mode in the System menu and added fail-closed runtime guards that block direct execution before destructive work when Developer Mode is disabled.
 - Added a non-mutating Developer Mode read path for menu construction and reset authorization; it reads only the existing Settings sheet and never creates or repairs workbook content.
 - Removed the unused anonymous web-app declaration from `appsscript.json`; no `doGet` or `doPost` handler exists in the authoritative Apps Script source.
@@ -77,7 +103,7 @@ Build `2026.07.20-rc`. This is a release candidate, not production-ready or rele
 ### Validation
 
 - `npm run status:acceptance` and `npm run status:production` passed.
-- `npm run validate` passed for 23 authoritative Apps Script files.
+- `npm run validate` passed for 24 authoritative Apps Script files.
 
 ## [1.0.0-rc.0] - 2026-06-25
 

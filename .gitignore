@@ -16,6 +16,7 @@ full-split-disabled-*/
 # Temporary files
 *.log
 *.tmp
+test-output/
 
 # Local environment
 .env

@@ -70,6 +70,23 @@ async function main() {
       confirm: async () => 'deploy production'
     })), /confirmation did not exactly match/);
   });
+  await test('production runs the complete release validation gate', async () => {
+    const root = fixture();
+    const commands = [];
+    await deploy('production', options(root, {
+      run: (command, args) => {
+        commands.push([command].concat(args).join(' '));
+      }
+    }));
+    assert.deepStrictEqual(commands.slice(0, 6), [
+      'npm run validate',
+      'npm run test:lifecycle',
+      'npm run test:audit-rendering',
+      'npm run test:ebi',
+      'npm test',
+      'git diff --check'
+    ]);
+  });
   await test('production restores .clasp.json after success', async () => {
     const root = fixture();
     let pushedConfig = '';
