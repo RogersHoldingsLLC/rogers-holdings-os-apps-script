@@ -1,5 +1,5 @@
 /**
- * Rogers Holdings OS - InspectionEngine.
+ * Business Optimization Platform - InspectionEngine.
  * Creates structured inspection objects for future Website & Digital Presence Review workflows.
  *
  * This module intentionally does not replace existing audit scoring, PDF rendering,
@@ -21,7 +21,7 @@ function createInspection(input) {
     city: data.city || '',
     state: data.state || '',
     industry: data.industry || '',
-    source: data.source || 'Rogers Holdings OS',
+    source: data.source || 'Business Optimization Platform',
     status: data.status || 'Draft',
     categories: categories,
     findings: [],

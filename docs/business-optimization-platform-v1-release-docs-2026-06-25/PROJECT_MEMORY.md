@@ -1,10 +1,10 @@
 # Project Memory
 
-This document preserves the current operating knowledge for future Rogers Holdings OS development.
+This document preserves the current operating knowledge for future Business Optimization Platform development.
 
 ## Current Status
 
-Rogers Holdings OS is a Version 1.0 release candidate as of 2026-06-25.
+Business Optimization Platform is a Version 1.0 release candidate as of 2026-06-25.
 
 Feature development is frozen for V1.0. Current work should focus on release acceptance, bug fixes, documentation, and production readiness.
 
@@ -135,7 +135,7 @@ npm run deploy
 
 ## Brand Standards
 
-Rogers Holdings OS should feel:
+Business Optimization Platform should feel:
 
 - Professional
 - Executive

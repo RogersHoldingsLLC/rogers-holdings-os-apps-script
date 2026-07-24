@@ -33,7 +33,7 @@ function copyDirectoryIfExists(directory, targetDir) {
 }
 
 function main() {
-  const targetDir = path.join(backupRoot, `rogers-os-local-${timestamp()}`);
+  const targetDir = path.join(backupRoot, `business-optimization-platform-local-${timestamp()}`);
   fs.mkdirSync(targetDir, { recursive: true });
 
   fs.readdirSync(projectRoot)
@@ -41,7 +41,7 @@ function main() {
     .sort()
     .forEach((file) => copyIfExists(file, targetDir));
 
-  ['package.json', 'README.md', '.clasp.json', '.claspignore', 'appsscript.json'].forEach((file) => {
+  ['package.json', 'README.md', '.clasp.json', '.clasp.production.json', '.claspignore', 'appsscript.json'].forEach((file) => {
     copyIfExists(file, targetDir);
   });
   copyDirectoryIfExists('scripts', targetDir);

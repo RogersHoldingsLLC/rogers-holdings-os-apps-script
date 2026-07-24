@@ -1,5 +1,5 @@
 /**
- * Rogers Holdings OS - InspectionOrchestrator.
+ * Business Optimization Platform - InspectionOrchestrator.
  * Central inspection entry point. Coordinates registered inspectors and returns
  * one normalized InspectionResult.
  *

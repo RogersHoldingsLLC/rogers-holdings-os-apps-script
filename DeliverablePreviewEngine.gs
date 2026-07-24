@@ -1,5 +1,5 @@
 /**
- * Rogers Holdings OS - Client Deliverable Preview System.
+ * Business Optimization Platform - Client Deliverable Preview System.
  * Provides preview-first modals for customer-facing deliverables without changing generation logic.
  */
 
@@ -30,7 +30,7 @@ function createPreviewDialog_(config) {
 
 function renderPreviewHeader_(config) {
   const settings = config || {};
-  const company = settings.company || 'Selected Company';
+  const company = normalizeClientBusinessName_(settings.company) || 'Selected Company';
   const website = settings.website || 'Website not provided';
   const assessmentDate = settings.assessmentDate || formatDisplayDate_(new Date());
   return [
@@ -76,11 +76,8 @@ function renderActionButtons_(config) {
   const gmailAction = settings.gmailAction || 'createOutreachGmailDraft';
   return [
     '<div class="button-row">',
-    '<button class="primary" type="button" onclick="setPreviewMode_()">Preview</button>',
-    `<button type="button" onclick="toggleEditMode_()" ${settings.editable ? '' : 'disabled'}>Edit</button>`,
-    `<button type="button" onclick="runPreviewServerAction_('${escapeHtml_(generatePdfAction)}', 'PDF generation started.')">Generate PDF</button>`,
-    `<button type="button" onclick="runPreviewServerAction_('${escapeHtml_(gmailAction)}', 'Gmail draft creation started.')">Create Gmail Draft</button>`,
-    `<button type="button" onclick="savePreviewEdits_()" ${settings.editable ? '' : 'disabled'}>Save</button>`,
+    `<button class="primary" type="button" onclick="runPreviewServerAction_(this, '${escapeHtml_(generatePdfAction)}', 'Generating PDF…', 'PDF generated successfully.')">Generate PDF</button>`,
+    `<button type="button" onclick="runPreviewServerAction_(this, '${escapeHtml_(gmailAction)}', 'Creating Gmail draft…', 'Gmail draft created successfully.')">Create Gmail Draft</button>`,
     '<button type="button" onclick="google.script.host.close()">Close</button>',
     '</div>'
   ].join('');
@@ -103,7 +100,7 @@ function renderPreviewList_(items) {
     return String(item || '').trim();
   });
   if (!values.length) {
-    return '<p class="muted">No details available yet.</p>';
+    return '<p class="muted">Details will appear here when they are available.</p>';
   }
   return '<ul>' + values.map(function(item) {
     return `<li>${escapeHtml_(item)}</li>`;
@@ -111,20 +108,24 @@ function renderPreviewList_(items) {
 }
 
 function showExecutiveSnapshotPreview_(prospect, reportFile) {
-  const findings = getSmartFindings_(prospect);
-  const digitalPresence = getDigitalPresenceAssessment_(prospect.auditScore);
+  prospect = normalizeClientProspect_(prospect);
+  const safeReportFile = getClientSafeReportFile_(prospect, reportFile || {});
+  const findings = filterClientEligibleEvidence_([].concat(safeReportFile.findings || [], getSmartFindings_(prospect)), prospect, reportFile || {}, 'finding');
+  const scoreContext = getReportScoreContext_(prospect, reportFile || {});
+  const executiveIntelligence = getExecutiveBusinessIntelligenceForReport_(prospect, safeReportFile);
+  const clientIntelligence = executiveBusinessClientContent_(executiveIntelligence);
   const bodyHtml = [
     '<div class="hero-card">',
     '<div class="hero-label">Executive Snapshot</div>',
     `<h2>${escapeHtml_(prospect.company || 'Selected Company')}</h2>`,
-    '<p>Concise meeting-focused summary prepared for initial review.</p>',
+    `<p>${escapeHtml_(clientIntelligence.consultantOpeningLetter || 'We identified practical opportunities that may help customers find, trust, and contact the business more easily.')}</p>`,
     '</div>',
     '<div class="card-grid">',
-    renderPreviewCard_('Digital Presence Score', `<div class="big-number">${escapeHtml_(digitalPresence.scoreText)}</div><p><strong>${escapeHtml_(digitalPresence.title)}</strong></p><p>${escapeHtml_(digitalPresence.subtitle)}</p>`),
+    renderPreviewCard_('Digital Presence Score', `<div class="big-number">${escapeHtml_(scoreContext.displayScore)}</div><p><strong>${escapeHtml_(scoreContext.severityLabel)}</strong></p><p>${escapeHtml_(scoreContext.safeFallbackLanguage)}</p>`),
     renderPreviewCard_('Recommended First Step', `<p>${escapeHtml_(buildExecutiveSnapshotFirstStep_(prospect))}</p>`),
     '</div>',
     renderPreviewCard_('Top Opportunities', renderPreviewList_(buildExecutiveSnapshotOpportunities_(prospect, findings).slice(0, 3))),
-    renderPreviewCard_('Key Observation', buildExecutiveSnapshotEvidenceHtml_(prospect, reportFile || {}))
+    renderPreviewCard_('Key Observation', `<p>${escapeHtml_(clientIntelligence.immediateStandout || buildExecutiveSnapshotBiggestOpportunity_(prospect, buildExecutiveSnapshotOpportunities_(prospect, findings), reportFile || {}))}</p>` + buildExecutiveSnapshotEvidenceHtml_(prospect, safeReportFile))
   ].join('');
 
   SpreadsheetApp.getUi().showModalDialog(createPreviewDialog_({
@@ -138,10 +139,14 @@ function showExecutiveSnapshotPreview_(prospect, reportFile) {
 }
 
 function showDigitalBusinessAssessmentPreview_(prospect, reportFile) {
-  const findings = getSmartFindings_(prospect);
-  const opportunities = buildAuditOpportunities_(prospect, findings, getAuditReportTextFromReportFile_(reportFile || {}), reportFile || {});
-  let cards = buildConsultingFindingCards_(prospect, opportunities, reportFile || {});
-  cards = enforcePdfFindingEvidenceQuality_(prospect, reportFile || {}, cards);
+  prospect = normalizeClientProspect_(prospect);
+  const safeReportFile = getClientSafeReportFile_(prospect, reportFile || {});
+  const findings = filterClientEligibleEvidence_([].concat(safeReportFile.findings || [], getSmartFindings_(prospect)), prospect, reportFile || {}, 'finding');
+  const opportunities = buildAuditOpportunities_(prospect, findings, getAuditReportTextFromReportFile_(safeReportFile), safeReportFile);
+  let cards = buildConsultingFindingCards_(prospect, opportunities, safeReportFile);
+  cards = enforcePdfFindingEvidenceQuality_(prospect, safeReportFile, cards);
+  const executiveIntelligence = getExecutiveBusinessIntelligenceForReport_(prospect, safeReportFile);
+  const clientIntelligence = executiveBusinessClientContent_(executiveIntelligence);
   const bodyHtml = [
     '<div class="hero-card">',
     '<div class="hero-label">Digital Business Assessment</div>',
@@ -149,11 +154,11 @@ function showDigitalBusinessAssessmentPreview_(prospect, reportFile) {
     '<p>Executive summary, findings, evidence, and practical recommendations.</p>',
     '</div>',
     '<div class="card-grid">',
-    renderPreviewCard_('Executive Summary', `<p>${escapeHtml_(buildDeliverablePreviewAssessmentSummary_(prospect, cards))}</p>`),
-    renderPreviewCard_('Recommended Focus', `<p>${escapeHtml_(buildRecommendedNextStep_(prospect))}</p>`),
+    renderPreviewCard_('Executive Summary', `<p>${escapeHtml_(clientIntelligence.executiveSummary || buildDeliverablePreviewAssessmentSummary_(prospect, cards))}</p>`),
+    renderPreviewCard_('Recommended Focus', `<p>${escapeHtml_(buildRecommendedNextStep_(prospect, safeReportFile))}</p>`),
     '</div>',
-    renderPreviewCard_('Findings', consultingFindingCardsHtml_(cards, getAuditEvidenceObject_(prospect, reportFile || {}))),
-    renderPreviewCard_('Recommendations', priorityRoadmapHtml_(prospect))
+    renderPreviewCard_('Findings', consultingFindingCardsHtml_(cards, getAuditEvidenceObject_(prospect, safeReportFile))),
+    renderPreviewCard_('Recommendations', clientIntelligence.available && executiveIntelligence.opportunities.length ? renderPreviewList_(executiveIntelligence.opportunities.map(function(item) { return item.recommendedAction; })) : priorityRoadmapHtml_(prospect, safeReportFile))
   ].join('');
 
   SpreadsheetApp.getUi().showModalDialog(createPreviewDialog_({
@@ -168,7 +173,16 @@ function showDigitalBusinessAssessmentPreview_(prospect, reportFile) {
 }
 
 function showImprovementPlanPreview_(prospect, proposal) {
+  prospect = normalizeClientProspect_(prospect);
+  proposal = Object.assign({}, proposal || {}, {
+    company: normalizeClientBusinessName_(proposal && proposal.company)
+  });
   const recommendedPackage = buildRecommendedPackage_(prospect);
+  const scoreContext = getReportScoreContext_(prospect, prospect.reportFile || {});
+  const recommendationLabel = scoreContext.scoreVerified ? 'Executive Recommendation' : 'Preliminary Service Option';
+  const recommendationText = scoreContext.scoreVerified
+    ? (proposal.recommendedService || recommendedPackage.name || 'Recommended service package')
+    : `To confirm during discovery: ${proposal.recommendedService || recommendedPackage.name || 'Recommended service package'}`;
   const bodyHtml = [
     '<div class="hero-card">',
     '<div class="hero-label">Improvement Plan</div>',
@@ -176,11 +190,11 @@ function showImprovementPlanPreview_(prospect, proposal) {
     '<p>A practical path from assessment findings to measurable business improvement.</p>',
     '</div>',
     '<div class="card-grid">',
-    renderPreviewCard_('Executive Recommendation', `<p>${escapeHtml_(proposal.recommendedService || recommendedPackage.name || 'Recommended service package')}</p>`, { editable: true, field: 'executiveRecommendation' }),
+    renderPreviewCard_(recommendationLabel, `<p>${escapeHtml_(recommendationText)}</p>`, { editable: true, field: 'executiveRecommendation' }),
     renderPreviewCard_('Estimated Investment', `<p>${escapeHtml_(recommendedPackage.investment || 'Final investment confirmed after scope review')}</p>`, { editable: true, field: 'investment' }),
     '</div>',
     renderPreviewCard_('Recommended Scope', deliverableCardsHtml_(recommendedPackage.deliverables), { editable: true, field: 'scope' }),
-    renderPreviewCard_('Business Outcomes', `<p>${escapeHtml_(proposal.impact || proposalImpactFromService_(proposal.recommendedService))}</p>`, { editable: true, field: 'businessOutcomes' }),
+    renderPreviewCard_('Business Outcomes', `<p>${escapeHtml_(proposal.impact || proposalImpactFromService_(proposal.recommendedService, prospect))}</p>`, { editable: true, field: 'businessOutcomes' }),
     renderPreviewCard_('Next Steps', proposalNextStepsHtml_(prospect), { editable: true, field: 'nextSteps' })
   ].join('');
 
@@ -196,6 +210,7 @@ function showImprovementPlanPreview_(prospect, proposal) {
 }
 
 function showOutreachEmailPreview_(prospect, drafts, recipient) {
+  prospect = normalizeClientProspect_(prospect);
   const bodyHtml = [
     '<div class="gmail-preview">',
     '<div class="gmail-top">',
@@ -227,7 +242,7 @@ function formatEmailPreviewHtml_(emailText) {
 }
 
 function buildDeliverablePreviewAssessmentSummary_(prospect, findings) {
-  const company = String(prospect && prospect.company || 'the business').trim();
+  const company = normalizeClientBusinessName_(prospect && prospect.company) || 'the business';
   const count = (findings || []).length;
   const focus = buildRecommendedNextStep_(prospect || {});
   return count
@@ -279,13 +294,10 @@ function renderPreviewStyles_() {
 function renderPreviewClientScript_() {
   return [
     '<script>',
-    'var editMode=false;',
-    'function setPreviewMode_(){editMode=false;document.querySelectorAll(".editable-field").forEach(function(el){el.contentEditable="false";});setStatus_("Preview mode");}',
-    'function toggleEditMode_(){editMode=!editMode;document.querySelectorAll(".editable-field").forEach(function(el){el.contentEditable=editMode?"true":"false";});setStatus_(editMode?"Edit mode enabled":"Preview mode");}',
-    'function savePreviewEdits_(){setPreviewMode_();setStatus_("Local edits saved in this preview. Regenerate the deliverable to persist changes.");}',
-    'function runPreviewServerAction_(fn,msg){if(!fn){setStatus_("No action configured for this button.");return;}setStatus_(msg||"Running action...");try{google.script.run.withSuccessHandler(function(){setStatus_("Action complete.");})[fn]();}catch(e){setStatus_("Action could not be started: "+e.message);}}',
+    'function setPreviewButtonsDisabled_(disabled){document.querySelectorAll(".button-row button").forEach(function(button){button.disabled=disabled;});}',
+    'function previewFailureMessage_(error){var detail=error&&error.message?error.message:"";return detail?"Action could not be completed. "+detail:"Action could not be completed. Please try again.";}',
+    'function runPreviewServerAction_(button,fn,pendingMessage,successMessage){if(!fn){setStatus_("This action is not available from this preview.");return;}setPreviewButtonsDisabled_(true);setStatus_(pendingMessage||"Working…");try{google.script.run.withSuccessHandler(function(){setPreviewButtonsDisabled_(false);setStatus_(successMessage||"Action completed successfully.");}).withFailureHandler(function(error){setPreviewButtonsDisabled_(false);setStatus_(previewFailureMessage_(error));})[fn]();}catch(e){setPreviewButtonsDisabled_(false);setStatus_(previewFailureMessage_(e));}}',
     'function setStatus_(message){var el=document.getElementById("previewStatus");if(el){el.textContent=message;}}',
-    'setPreviewMode_();',
     '</script>'
   ].join('');
 }

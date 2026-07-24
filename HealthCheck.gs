@@ -1,5 +1,5 @@
 /**
- * Rogers Holdings OS - HealthCheck.
+ * Business Optimization Platform - HealthCheck.
  * Split from the stable Code.gs monolith without changing function names or behavior.
  */
 
@@ -39,6 +39,7 @@ function buildSystemHealthReport_() {
     'Audit Score',
     'Audit Outcome',
     'Priority Tier',
+    'Audit Source',
     'Last Activity',
     'Follow-Up Date',
     'Next Action'
@@ -133,7 +134,10 @@ function buildSystemHealthReport_() {
   addRuntimeDependencyHealthChecks_(report);
   finalizeSystemHealthReport_(report);
   storeSystemHealthStatus_(report);
-  Logger.log('Rogers Holdings OS System Health Check: ' + JSON.stringify(report));
+  Logger.log('Business Optimization Platform System Health Check: ' + JSON.stringify({
+    status: report.status,
+    summary: report.summary
+  }));
 
   return report;
 }
@@ -181,7 +185,7 @@ function addScriptPropertyHealthChecks_(report) {
   if (auditEndpoint) {
     addHealthItem_(report, 'Pass', 'Audit endpoint script property configured', 'WEBSITE_AUDIT_TOOL_URL or WEBSITE_AUDIT_TOOL_ENDPOINT is available.', 'No action needed.');
   } else {
-    addHealthItem_(report, 'Fail', 'Missing audit endpoint script property', 'WEBSITE_AUDIT_TOOL_URL / WEBSITE_AUDIT_TOOL_ENDPOINT', 'Set the Website Audit Tool endpoint before running real audits or audit packages.');
+    addHealthItem_(report, 'Warning', 'Fresh audit acquisition endpoint not configured', 'WEBSITE_AUDIT_TOOL_URL / WEBSITE_AUDIT_TOOL_ENDPOINT is absent. Local package rendering remains available for prospects with complete, verified audit data.', 'Configure an approved Website Audit Tool endpoint before acquiring fresh real-audit data.');
   }
 
   if (brandFolderId) {
@@ -209,7 +213,7 @@ function addDrivePermissionHealthCheck_(report) {
     DriveApp.getRootFolder().getName();
     addHealthItem_(report, 'Pass', 'Drive permissions available', 'DriveApp can access Drive.', 'No action needed.');
   } catch (error) {
-    addHealthItem_(report, 'Fail', 'Drive permissions unavailable', error && error.message ? error.message : String(error), 'Authorize Drive access for Rogers Holdings OS.');
+    addHealthItem_(report, 'Fail', 'Drive permissions unavailable', error && error.message ? error.message : String(error), 'Authorize Drive access for Business Optimization Platform.');
   }
 }
 
@@ -217,7 +221,7 @@ function addGmailPermissionHealthCheck_(report) {
   let draft = null;
   try {
     const recipient = Session.getActiveUser().getEmail() || getRogersContactInfo_().email;
-    draft = GmailApp.createDraft(recipient, 'Rogers Holdings OS Permission Check', 'Temporary draft created by System Health Check.');
+    draft = GmailApp.createDraft(recipient, 'Business Optimization Platform Permission Check', 'Temporary draft created by System Health Check.');
     trashTemporaryGmailDraft_(draft);
     addHealthItem_(report, 'Pass', 'Gmail permissions available', 'GmailApp can create and remove a temporary draft.', 'No action needed.');
   } catch (error) {
@@ -343,12 +347,12 @@ function addProspectDataHealthChecks_(report, sheetInfo) {
     addHealthItem_(
       report,
       'Warning',
-      'Overdue follow-ups found',
+      'Overdue Follow-Ups found',
       overdueRows.join('; '),
-      'Review the Follow-Up Queue and complete or reschedule overdue follow-ups.'
+      'Review the Follow-Up Queue and complete or reschedule overdue Follow-Ups.'
     );
   } else {
-    addHealthItem_(report, 'Pass', 'No overdue follow-ups found', MASTER_PROSPECT_SHEET, 'No action needed.');
+    addHealthItem_(report, 'Pass', 'No overdue Follow-Ups found', MASTER_PROSPECT_SHEET, 'No action needed.');
   }
 }
 
@@ -378,7 +382,7 @@ function addProspectDropdownHealthCheck_(report, sheet, table) {
     'Warning',
     'Invalid prospect dropdown values found',
     issues.length > 12 ? detail + `; +${issues.length - 12} more` : detail,
-    'Run Rogers Holdings OS > System > Repair Invalid Dropdown Values.'
+    'Run Business Optimization Platform > System > Repair Invalid Dropdown Values.'
   );
 }
 
@@ -555,6 +559,14 @@ function addDuplicateHealthItems_(report, fieldName, lookup) {
 }
 
 function getHealthHeaderTable_(sheet) {
+  if (sheet.getName() === ACTIVITY_FEED_SHEET) {
+    return resolveActivityFeedHeaderTable_(sheet, [
+      'Date',
+      'Company',
+      'Activity Type',
+      'Activity Notes'
+    ]);
+  }
   const headerRow = findBestHeaderRow_(sheet);
   const lastColumn = Math.max(sheet.getLastColumn(), 1);
   const values = sheet.getRange(headerRow, 1, 1, lastColumn).getDisplayValues()[0];
@@ -607,8 +619,8 @@ function buildSystemHealthCheckHtml_(report) {
     const rowClass = String(item.status || '').toLowerCase();
     return `
       <tr>
-        <td><span class="pill ${rowClass}">${escapeHtml_(item.status)}</span></td>
-        <td>${escapeHtml_(item.check)}</td>
+        <td><span class="pill ${rowClass}">${escapeHtml_(getOperatorHealthStatus_(item.status))}</span></td>
+        <td>${escapeHtml_(getOperatorHealthCheckName_(item.check))}</td>
         <td>${escapeHtml_(item.detail)}</td>
         <td>${escapeHtml_(item.suggestedFix)}</td>
       </tr>
@@ -710,7 +722,7 @@ function buildSystemHealthCheckHtml_(report) {
           }
           .pill {
             display: inline-block;
-            min-width: 62px;
+            min-width: 112px;
             padding: 4px 8px;
             border-radius: 999px;
             color: #111111;
@@ -732,30 +744,30 @@ function buildSystemHealthCheckHtml_(report) {
       </head>
       <body>
         <div class="header">
-          <div class="eyebrow">Rogers Holdings OS</div>
+          <div class="eyebrow">Business Optimization Platform</div>
           <h1>System Health Check</h1>
-          <div class="timestamp">Generated: ${escapeHtml_(formatDisplayDate_(report.generatedAt))}</div>
+          <div class="timestamp">Operational readiness report &nbsp;•&nbsp; Generated ${escapeHtml_(formatDisplayDate_(report.generatedAt))}</div>
         </div>
 
         <div class="summary">
           <div class="metric overall">
-            <span>Status</span>
-            <strong class="${statusClass}">${escapeHtml_(report.status)}</strong>
+            <span>Overall Readiness</span>
+            <strong class="${statusClass}">${escapeHtml_(getOperatorHealthStatus_(report.status))}</strong>
           </div>
           <div class="metric">
-            <span>Pass</span>
+            <span>Operational</span>
             <strong>${report.summary.pass}</strong>
           </div>
           <div class="metric">
-            <span>Warnings</span>
+            <span>Configuration Needed</span>
             <strong>${report.summary.warning}</strong>
           </div>
           <div class="metric">
-            <span>Fails</span>
+            <span>Action Required</span>
             <strong>${report.summary.fail}</strong>
           </div>
           <div class="metric">
-            <span>Issues</span>
+            <span>Open Items</span>
             <strong>${report.summary.totalIssues}</strong>
           </div>
         </div>
@@ -763,10 +775,10 @@ function buildSystemHealthCheckHtml_(report) {
         <table>
           <thead>
             <tr>
-              <th>Status</th>
-              <th>Check</th>
-              <th>Issues Found</th>
-              <th>Suggested Fix</th>
+              <th>Readiness</th>
+              <th>Area</th>
+              <th>Details</th>
+              <th>Recommended Action</th>
             </tr>
           </thead>
           <tbody>${issueRows}</tbody>
@@ -774,4 +786,42 @@ function buildSystemHealthCheckHtml_(report) {
       </body>
     </html>
   `;
+}
+
+function getOperatorHealthStatus_(status) {
+  const labels = {
+    Pass: 'Operational',
+    Warning: 'Configuration Needed',
+    Fail: 'Action Required'
+  };
+  return labels[String(status || '')] || String(status || 'Unknown');
+}
+
+function getOperatorHealthCheckName_(technicalName) {
+  const name = String(technicalName || 'System check');
+  const exactNames = {
+    'Audit endpoint script property configured': 'Website Audit Tool connection ready',
+    'Fresh audit acquisition endpoint not configured': 'Website Audit Tool connection needs setup',
+    'Brand asset folder script property configured': 'Brand assets configured',
+    'Brand asset folder script property not configured': 'Brand assets need setup',
+    'Brand Asset Folder reachable': 'Brand assets available',
+    'Brand Asset Folder not reachable': 'Brand assets unavailable',
+    'Brand Asset Folder check failed': 'Brand assets unavailable',
+    'Drive permissions available': 'Google Drive access ready',
+    'Drive permissions unavailable': 'Google Drive access needs attention',
+    'Gmail permissions available': 'Gmail access ready',
+    'Gmail permissions unavailable': 'Gmail access needs attention',
+    'Audit Report.pdf generation dependencies available': 'Document generation ready',
+    'Audit Report.pdf dependencies missing': 'Document generation needs attention',
+    'Audit Report.pdf dependency check failed': 'Document generation needs attention'
+  };
+  if (exactNames[name]) return exactNames[name];
+  return name
+    .replace(/ workflow available$/, ' workflow ready')
+    .replace(/ integration available$/, ' integration ready')
+    .replace(/ renderer available$/, ' workspace ready')
+    .replace(/ creation available$/, ' creation ready')
+    .replace(/ completion available$/, ' completion ready')
+    .replace(/ duplicate prevention available$/, ' duplicate protection ready')
+    .replace(/ Activity logging available$/, ' activity tracking ready');
 }

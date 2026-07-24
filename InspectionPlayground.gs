@@ -1,5 +1,5 @@
 /**
- * Rogers Holdings OS - Inspection Playground.
+ * Business Optimization Platform - Inspection Playground.
  * Developer-only QA surface for running inspectors without changing production
  * workflows, audit data, PDFs, Gmail drafts, Drive routing, or dashboards.
  */
@@ -143,7 +143,7 @@ function renderInspectionPlayground_(sheet) {
   safeSetFrozenRows_(sheet, 3);
 
   const headers = [
-    ['ROGERS HOLDINGS OS', '', '', '', '', '', '', ''],
+    ['BUSINESS OPTIMIZATION PLATFORM', '', '', '', '', '', '', ''],
     ['INSPECTION PLAYGROUND', '', '', '', '', '', '', ''],
     ['Developer QA tool. Runs inspectors without modifying production records, reports, workflows, or dashboards.', '', '', '', '', '', '', '']
   ];
@@ -538,6 +538,20 @@ function isDeveloperModeEnabled_() {
     return false;
   }
   return isDeveloperModeTrueValue_(getDeveloperModeValue_(sheet));
+}
+
+function isDeveloperModeEnabledReadOnly_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss) {
+    return false;
+  }
+  const sheet = ss.getSheetByName('Settings');
+  if (!sheet) {
+    return false;
+  }
+  return isDeveloperModeTrueValue_(
+    findSystemDeveloperModeValue_(sheet) || findLegacyDeveloperModeValue_(sheet)
+  );
 }
 
 function ensureSystemSettingsSection_(ss) {

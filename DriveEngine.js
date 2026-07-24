@@ -1,5 +1,5 @@
 /**
- * Rogers Holdings OS - DriveEngine.
+ * Business Optimization Platform - DriveEngine.
  * Split from the stable Code.gs monolith without changing function names or behavior.
  */
 
@@ -28,7 +28,7 @@ function convertToClient() {
   };
 
   if (clientExists_(clientSheet, clientTable.headers, prospect.company, prospect.website)) {
-    ui.alert('Rogers Holdings OS', 'This prospect already exists in the Clients tab.', ui.ButtonSet.OK);
+    ui.alert('Business Optimization Platform', 'This prospect already exists in the Clients tab.', ui.ButtonSet.OK);
     return;
   }
 
@@ -43,7 +43,7 @@ function convertToClient() {
 
   const contractValue = parseCurrencyValue_(contractPrompt.getResponseText());
   if (contractValue === null) {
-    ui.alert('Rogers Holdings OS', 'Enter a valid contract value, then run Convert Prospect To Client again.', ui.ButtonSet.OK);
+    ui.alert('Business Optimization Platform', 'Enter a valid contract value, then run Convert Prospect To Client again.', ui.ButtonSet.OK);
     return;
   }
 
@@ -60,7 +60,7 @@ function convertToClient() {
   context.sheet.deleteRow(context.selectedRow);
   refreshSalesOperatingSystem_();
 
-  ui.alert('Rogers Holdings OS', 'Prospect converted to active client.', ui.ButtonSet.OK);
+  ui.alert('Business Optimization Platform', 'Prospect converted to active client.', ui.ButtonSet.OK);
 }
 
 function createClientFolderStructure_(company) {
@@ -172,7 +172,7 @@ function buildProjectScopeText_(prospect) {
     '- Confirm client goals and priority business outcomes.',
     '- Review audit findings and recommended improvements.',
     '- Define deliverables, timeline, and approval process.',
-    '- Track next actions through Rogers Holdings OS.',
+    '- Track next actions through Business Optimization Platform.',
     '',
     'Source Audit',
     `Website: ${prospect.website || ''}`,
@@ -196,7 +196,7 @@ function buildOnboardingChecklistText_(prospect) {
     '[ ] Confirm project scope',
     '[ ] Schedule kickoff/discovery meeting',
     '[ ] Define first milestone',
-    '[ ] Update Rogers Holdings OS next action'
+    '[ ] Update Business Optimization Platform next action'
   ].join('\n');
 }
 
@@ -250,12 +250,12 @@ function upsertAuditPackageTextFile_(folder, fileName, contents, mimeType) {
   const existingFile = findAuditPackageFileByName_(folder, fileName);
   if (existingFile) {
     existingFile.setContent(contents);
-    existingFile.setDescription(`Updated by Rogers Holdings OS on ${new Date().toISOString()}`);
+    existingFile.setDescription(`Updated by Business Optimization Platform on ${new Date().toISOString()}`);
     return existingFile;
   }
 
   const file = folder.createFile(fileName, contents, mimeType);
-  file.setDescription(`Created by Rogers Holdings OS on ${new Date().toISOString()}`);
+  file.setDescription(`Created by Business Optimization Platform on ${new Date().toISOString()}`);
   return file;
 }
 
@@ -266,7 +266,7 @@ function upsertAuditPackageBlobFile_(folder, fileName, blob) {
   }
 
   const file = folder.createFile(blob.setName(fileName));
-  file.setDescription(`${existingFile ? 'Updated' : 'Created'} by Rogers Holdings OS on ${new Date().toISOString()}`);
+  file.setDescription(`${existingFile ? 'Updated' : 'Created'} by Business Optimization Platform on ${new Date().toISOString()}`);
   return file;
 }
 

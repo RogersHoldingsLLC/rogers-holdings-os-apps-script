@@ -1,5 +1,5 @@
 /**
- * Rogers Holdings OS - CalendarEngine.
+ * Business Optimization Platform - CalendarEngine.
  * Split from the stable Code.gs monolith without changing function names or behavior.
  */
 
@@ -19,7 +19,7 @@ function createDiscoveryCall() {
 
   if (missing.length) {
     ui.alert(
-      'Rogers Holdings OS',
+      'Business Optimization Platform',
       'Add the missing fields before creating a discovery call: ' + missing.join(', '),
       ui.ButtonSet.OK
     );
@@ -29,7 +29,7 @@ function createDiscoveryCall() {
   const status = String(prospect.status || '').trim();
   if (status === 'Won' || status === 'Lost') {
     ui.alert(
-      'Rogers Holdings OS',
+      'Business Optimization Platform',
       'Discovery calls cannot be scheduled for prospects marked Won or Lost.',
       ui.ButtonSet.OK
     );
@@ -37,7 +37,7 @@ function createDiscoveryCall() {
   }
 
   const datePrompt = ui.prompt(
-    'Rogers Holdings OS',
+    'Business Optimization Platform',
     'Enter discovery call date as YYYY-MM-DD.',
     ui.ButtonSet.OK_CANCEL
   );
@@ -46,7 +46,7 @@ function createDiscoveryCall() {
   }
 
   const timePrompt = ui.prompt(
-    'Rogers Holdings OS',
+    'Business Optimization Platform',
     'Enter discovery call time as HH:MM AM/PM or 24-hour HH:MM.',
     ui.ButtonSet.OK_CANCEL
   );
@@ -55,7 +55,7 @@ function createDiscoveryCall() {
   }
 
   const durationPrompt = ui.prompt(
-    'Rogers Holdings OS',
+    'Business Optimization Platform',
     'Enter duration in minutes. Leave blank for 30.',
     ui.ButtonSet.OK_CANCEL
   );
@@ -66,11 +66,11 @@ function createDiscoveryCall() {
   const startDate = parseDiscoveryDateTime_(datePrompt.getResponseText(), timePrompt.getResponseText());
   const durationMinutes = parseDiscoveryDurationMinutes_(durationPrompt.getResponseText());
   if (!startDate) {
-    ui.alert('Rogers Holdings OS', 'Enter a valid date and time, then run Create Discovery Call again.', ui.ButtonSet.OK);
+    ui.alert('Business Optimization Platform', 'Enter a valid date and time, then run Create Discovery Call again.', ui.ButtonSet.OK);
     return;
   }
   if (!durationMinutes) {
-    ui.alert('Rogers Holdings OS', 'Enter a valid duration in minutes, then run Create Discovery Call again.', ui.ButtonSet.OK);
+    ui.alert('Business Optimization Platform', 'Enter a valid duration in minutes, then run Create Discovery Call again.', ui.ButtonSet.OK);
     return;
   }
 
@@ -96,10 +96,10 @@ function createDiscoveryCall() {
     );
     refreshSalesOperatingSystem_();
 
-    ui.alert('Rogers Holdings OS', 'Discovery Call Created', ui.ButtonSet.OK);
+    ui.alert('Business Optimization Platform', 'Discovery Call Created', ui.ButtonSet.OK);
   } catch (error) {
     ui.alert(
-      'Rogers Holdings OS',
+      'Business Optimization Platform',
       error && error.message ? error.message : String(error),
       ui.ButtonSet.OK
     );

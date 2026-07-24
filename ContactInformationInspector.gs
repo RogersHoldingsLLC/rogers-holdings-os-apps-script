@@ -1,5 +1,5 @@
 /**
- * Rogers Holdings OS - ContactInformationInspector.
+ * Business Optimization Platform - ContactInformationInspector.
  * First production inspector for structured contact accessibility findings.
  *
  * This module is isolated and does not change existing audit, PDF, Gmail,

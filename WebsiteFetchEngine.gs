@@ -1,5 +1,5 @@
 /**
- * Rogers Holdings OS - WebsiteFetchEngine.
+ * Business Optimization Platform - WebsiteFetchEngine.
  * Fetches and normalizes website HTML into a reusable WebsiteDocument object.
  *
  * This module is intentionally not wired into production audit, PDF, Gmail,
@@ -54,7 +54,7 @@ function normalizeWebsiteFetchOptions_(url, options) {
     originalUrl: originalUrl,
     maxRedirects: Math.max(0, Math.min(Number(data.maxRedirects || 5), 10)),
     timeoutMs: Number(data.timeoutMs || 20000),
-    userAgent: data.userAgent || 'RogersHoldingsOS/1.0 WebsiteFetchEngine',
+    userAgent: data.userAgent || 'BusinessOptimizationPlatform/1.0 WebsiteFetchEngine',
     muteHttpExceptions: data.muteHttpExceptions === undefined ? true : data.muteHttpExceptions !== false
   };
 }

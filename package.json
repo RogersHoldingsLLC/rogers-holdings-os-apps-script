@@ -1,13 +1,22 @@
 {
-  "name": "rogers-holdings-os-apps-script",
-  "version": "1.0.0",
+  "name": "business-optimization-platform-apps-script",
+  "version": "1.0.0-rc",
   "private": true,
-  "description": "Safe local deployment workflow for Rogers Holdings OS Google Apps Script files.",
+  "description": "Safe local deployment workflow for Business Optimization Platform Google Apps Script files.",
   "scripts": {
     "validate": "node scripts/validate.js",
+    "test:lifecycle": "node scripts/test-crm-lifecycle.js",
+    "test:audit-rendering": "node scripts/test-audit-rendering.js",
+    "test:ebi": "node scripts/test-executive-business-intelligence.js",
+    "acceptance:ebi": "node scripts/test-executive-business-intelligence.js --write-acceptance",
+    "test": "node scripts/test-deploy.js",
     "deploy": "node scripts/deploy.js",
+    "deploy:acceptance": "node scripts/deploy.js acceptance",
+    "deploy:production": "node scripts/deploy.js production",
     "backup": "node scripts/backup.js",
-    "status": "node scripts/status.js"
+    "status": "node scripts/status.js",
+    "status:acceptance": "node scripts/status.js acceptance",
+    "status:production": "node scripts/status.js production"
   },
   "devDependencies": {}
 }

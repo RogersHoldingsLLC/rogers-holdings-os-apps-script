@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The Inspection Rules Registry centralizes rule metadata for Rogers Holdings OS inspectors.
+The Inspection Rules Registry centralizes rule metadata for Business Optimization Platform inspectors.
 
 Inspectors remain responsible for detection. The registry is responsible for the shared business definition of a rule:
 

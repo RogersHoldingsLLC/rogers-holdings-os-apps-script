@@ -1,13 +1,13 @@
-# Rogers Holdings OS v2 Product Specification
+# Business Optimization Platform v2 Product Specification
 
 Status: Draft for planning
 Date: 2026-06-25
 Owner: Rogers Holdings LLC
-Current baseline: Rogers Holdings OS v1.0 release candidate
+Current baseline: Business Optimization Platform v1.0 release candidate
 
 ## 1. Purpose
 
-Rogers Holdings OS v2 should evolve the v1 Google Workspace operating system into a more scalable, repeatable, client-ready business platform.
+Business Optimization Platform v2 should evolve the v1 Google Workspace operating system into a more scalable, repeatable, client-ready business platform.
 
 The goal is not to replace the v1 system. The goal is to make it easier to operate, easier to deploy for future small business clients, easier to trust, and easier to extend without destabilizing production workflows.
 
@@ -19,7 +19,7 @@ Prospect -> Audit -> Proposal -> Follow-Up -> Client -> Project -> Completed -> 
 
 ## 2. Product Vision
 
-Rogers Holdings OS is a lightweight business operating system for local and small business growth operations.
+Business Optimization Platform is a lightweight business operating system for local and small business growth operations.
 
 It should help Rogers Holdings LLC and future client implementations:
 
@@ -209,7 +209,7 @@ Capabilities:
 
 ### Theme 5: Repeatable Client Deployments
 
-Prepare Rogers Holdings OS to become a reusable operating system for future small business clients.
+Prepare Business Optimization Platform to become a reusable operating system for future small business clients.
 
 Capabilities:
 
@@ -448,7 +448,7 @@ v2 improvements:
 
 ### Website Audit Integration v2
 
-Purpose: Keep Website Audit Tool as the audit engine while Rogers Holdings OS acts as control center.
+Purpose: Keep Website Audit Tool as the audit engine while Business Optimization Platform acts as control center.
 
 Requirements:
 
@@ -660,7 +660,7 @@ Current role: external audit engine.
 
 v2 requirement:
 
-- Rogers Holdings OS controls workflow.
+- Business Optimization Platform controls workflow.
 - Website Audit Tool produces audit data.
 - Apps Script stores and packages results.
 - Apps Script does not duplicate scoring logic.
@@ -832,7 +832,7 @@ v2 cannot be considered release-ready until all items pass:
 - duplicate-function verification passes.
 - local backup is created.
 - Apps Script indexes functions after deployment.
-- Rogers Holdings OS menu loads.
+- Business Optimization Platform menu loads.
 - System Health Check passes or shows only known accepted warnings.
 - Executive Dashboard refreshes.
 - Next Action Engine routes a test prospect correctly.
@@ -941,4 +941,3 @@ Every v2 feature must include:
 - duplicate-function verification pass.
 - backup created.
 - manual Google Sheets test plan documented.
-

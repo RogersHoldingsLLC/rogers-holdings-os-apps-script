@@ -1,5 +1,5 @@
 /**
- * Rogers Holdings OS - AuditEngine.
+ * Business Optimization Platform - AuditEngine.
  * Split from the stable Code.gs monolith without changing function names or behavior.
  */
 
@@ -24,7 +24,7 @@ function runRealWebsiteAudit() {
 
   if (missing.length) {
     ui.alert(
-      'Rogers Holdings OS',
+      'Business Optimization Platform',
       'Add the missing required field before running the real Website Audit Tool: ' + missing.join(', '),
       ui.ButtonSet.OK
     );
@@ -32,7 +32,7 @@ function runRealWebsiteAudit() {
   }
 
   const confirm = ui.alert(
-    'Rogers Holdings OS',
+    'Business Optimization Platform',
     `Run full Website Audit Tool for ${prospect.company}?\n\nThis will execute the real audit workflow and may take several moments.`,
     ui.ButtonSet.OK_CANCEL
   );
@@ -46,14 +46,33 @@ function runRealWebsiteAudit() {
     applyWebsiteAuditToolResults_(context, auditPayload);
     refreshSalesOperatingSystem_();
 
-    ui.alert('Rogers Holdings OS', 'Website Audit Tool completed and prospect record updated.', ui.ButtonSet.OK);
+    ui.alert('Business Optimization Platform', 'Website Audit Tool completed and prospect record updated.', ui.ButtonSet.OK);
   } catch (error) {
+    console.error('Website Audit Tool: audit operation failed', {
+      company: prospect.company,
+      website: prospect.website,
+      error: error && error.stack ? error.stack : (error && error.message ? error.message : String(error))
+    });
     ui.alert(
-      'Rogers Holdings OS',
-      error && error.message ? error.message : String(error),
+      'Business Optimization Platform',
+      getWebsiteAuditOperatorErrorMessage_(error),
       ui.ButtonSet.OK
     );
   }
+}
+
+function getWebsiteAuditOperatorErrorMessage_(error) {
+  const detail = error && error.message ? error.message : String(error || '');
+  if (/WEBSITE_AUDIT_TOOL_URL|WEBSITE_AUDIT_TOOL_ENDPOINT|endpoint.*not configured/i.test(detail)) {
+    return 'The Website Audit Tool is not configured for this workspace. Ask an administrator to complete the audit connection, then try again.';
+  }
+  if (/HTTP|UrlFetch|request failed|timed? out|network|host/i.test(detail)) {
+    return 'The Website Audit Tool could not be reached. Confirm the service is available, then try again.';
+  }
+  if (/JSON|audit payload|required result fields|did not include/i.test(detail)) {
+    return 'The Website Audit Tool returned an incomplete result. Try again; if the issue continues, ask an administrator to review the integration log.';
+  }
+  return 'The website audit could not be completed. Try again; if the issue continues, ask an administrator to review the integration log.';
 }
 
 function runBulkAuditPipeline() {
@@ -61,7 +80,7 @@ function runBulkAuditPipeline() {
   const ui = SpreadsheetApp.getUi();
   const sheet = ss.getSheetByName(MASTER_PROSPECT_SHEET);
   if (!sheet) {
-    ui.alert('Rogers Holdings OS', 'Master Prospect Tracker sheet was not found.', ui.ButtonSet.OK);
+    ui.alert('Business Optimization Platform', 'Master Prospect Tracker sheet was not found.', ui.ButtonSet.OK);
     return;
   }
 
@@ -70,7 +89,7 @@ function runBulkAuditPipeline() {
   const skipCount = Math.max(getProspectDataRowCount_(sheet, table) - eligibleRows.length, 0);
   if (!eligibleRows.length) {
     ui.alert(
-      'Rogers Holdings OS',
+      'Business Optimization Platform',
       `Bulk Audit Pipeline complete.\n\nSuccess: 0\nFailures: 0\nSkipped: ${skipCount}`,
       ui.ButtonSet.OK
     );
@@ -78,7 +97,7 @@ function runBulkAuditPipeline() {
   }
 
   const confirm = ui.alert(
-    'Rogers Holdings OS',
+    'Business Optimization Platform',
     `Run Bulk Audit Pipeline for ${eligibleRows.length} prospect(s)?\n\nProspects are processed sequentially and may take several minutes.`,
     ui.ButtonSet.OK_CANCEL
   );
@@ -100,9 +119,7 @@ function runBulkAuditPipeline() {
       console.log('Bulk Audit Pipeline: processing prospect', {
         row: item.row,
         index: index + 1,
-        total: eligibleRows.length,
-        company: item.prospect.company,
-        website: item.prospect.website
+        total: eligibleRows.length
       });
       runBulkAuditPipelineForProspect_(ss, sheet, item);
       summary.successCount += 1;
@@ -137,7 +154,8 @@ function runBulkAuditPipelineForProspect_(ss, sheet, item) {
 }
 
 function generateAuditPackageForContext_(context, prospect) {
-  const reportFile = requestWebsiteAuditPackageReport_(prospect);
+  assertVerifiedAuditDataForLocalRendering_(prospect);
+  const reportFile = buildLocalAuditReportInput_(prospect);
   const drafts = buildOutreachDrafts_(prospect);
   const proposal = buildProposal_(prospect);
   const folder = getOrCreateAuditPackageFolder_(prospect.company);
@@ -150,8 +168,7 @@ function generateAuditPackageForContext_(context, prospect) {
 
   setIfHeaderCell_(context.sheet, headers, context.selectedRow, 'Audit Package Generated', 'Yes');
   setIfHeaderCell_(context.sheet, headers, context.selectedRow, 'Audit Package Date', now);
-  setProspectStatusIfHeader_(context.sheet, headers, context.selectedRow, 'Digital Business Assessment Presented');
-  setIfHeaderCell_(context.sheet, headers, context.selectedRow, 'Next Action', 'Generate Improvement Plan');
+  setIfHeaderCell_(context.sheet, headers, context.selectedRow, 'Next Action', 'Present Digital Business Assessment');
   updateSelectedProspectLastActivity_(context.sheet, headers, context.selectedRow);
   logPipelineActivity_(
     context.ss,
@@ -168,13 +185,14 @@ function generateAuditPackageForContext_(context, prospect) {
   logPipelineActivity_(
     context.ss,
     prospect.company,
-    'Outreach Draft Created',
-    'Generated outreach draft for Digital Business Assessment package.'
+    'Outreach Draft File Created',
+    'Created Outreach Email Draft.txt in the Digital Business Assessment package folder. No Gmail draft was created by this workflow.'
   );
 
   return {
     folder: folder,
     createdFiles: createdFiles,
+    reconciliationResults: createdFiles.reconciliationResults || [],
     reportFile: reportFile
   };
 }
@@ -263,7 +281,7 @@ function showBulkAuditPipelineProgressDialog_(totalCount) {
     ].join('')
   ).setWidth(360).setHeight(190);
 
-  SpreadsheetApp.getUi().showModelessDialog(html, 'Rogers Holdings OS');
+  SpreadsheetApp.getUi().showModelessDialog(html, 'Business Optimization Platform');
 }
 
 function showBulkAuditPipelineSummary_(summary) {
@@ -272,7 +290,7 @@ function showBulkAuditPipelineSummary_(summary) {
     : '';
 
   SpreadsheetApp.getUi().alert(
-    'Rogers Holdings OS',
+    'Business Optimization Platform',
     `Bulk Audit Pipeline complete.\n\nSuccess: ${summary.successCount}\nFailures: ${summary.failureCount}\nSkipped: ${summary.skipCount}${failureLines}`,
     SpreadsheetApp.getUi().ButtonSet.OK
   );
@@ -281,7 +299,7 @@ function showBulkAuditPipelineSummary_(summary) {
 function runWebsiteAuditToolWorkflow_(prospect) {
   const endpoint = getWebsiteAuditToolEndpoint_();
   if (!endpoint) {
-    throw new Error('Set Script Property WEBSITE_AUDIT_TOOL_URL to the Website Audit Tool runner endpoint, then run Run Real Website Audit again.');
+    throw new Error('Fresh website audit acquisition requires Script Property WEBSITE_AUDIT_TOOL_URL or WEBSITE_AUDIT_TOOL_ENDPOINT. Configure an approved Website Audit Tool endpoint, then run Run Real Website Audit again.');
   }
 
   const payload = buildWebsiteAuditToolLaunchPayload_(prospect);
@@ -325,17 +343,13 @@ function buildWebsiteAuditToolLaunchPayload_(prospect) {
     website: String(prospect.website || '').trim(),
     city: String(prospect.city || '').trim(),
     state: String(prospect.state || '').trim(),
-    source: 'Rogers Holdings OS',
-    requestedBy: 'Rogers Holdings OS'
+    source: 'Business Optimization Platform',
+    requestedBy: 'Business Optimization Platform'
   };
 }
 
 function logWebsiteAuditToolLaunchPayload_(payload) {
   console.log('Run Real Website Audit payload fields', {
-    company: payload.company,
-    website: payload.website,
-    city: payload.city,
-    state: payload.state,
     source: payload.source,
     requestedBy: payload.requestedBy,
     requestType: payload.requestType || '',
@@ -402,7 +416,6 @@ function applyWebsiteAuditToolResults_(context, auditPayload) {
   setIfHeaderCell_(sheet, headers, selectedRow, 'Competitive Position', auditPayload.competitivePosition);
   setIfHeaderCell_(sheet, headers, selectedRow, 'Competitor Summary', auditPayload.competitorSummary);
   setIfHeaderCell_(sheet, headers, selectedRow, 'Audit Source', 'Website Audit Tool');
-  setProspectStatusIfHeader_(sheet, headers, selectedRow, 'Digital Business Assessment Presented');
   updateSelectedProspectLastActivity_(sheet, headers, selectedRow);
   logPipelineActivity_(context.ss, auditPayload.company, 'Website Audit Tool', summary);
 }
@@ -426,7 +439,7 @@ function generateAuditPackage() {
 
   if (missing.length) {
     ui.alert(
-      'Rogers Holdings OS',
+      'Business Optimization Platform',
       'Add the missing required fields before generating the Digital Business Assessment: ' + missing.join(', '),
       ui.ButtonSet.OK
     );
@@ -436,7 +449,10 @@ function generateAuditPackage() {
   let auditWasRunFirst = false;
 
   try {
-    if (isAuditDataMissingForPackage_(prospect)) {
+    if (!isVerifiedAuditDataForLocalRendering_(prospect)) {
+      if (!getWebsiteAuditToolEndpoint_()) {
+        throw new Error(buildVerifiedAuditRequiredMessage_(prospect));
+      }
       const auditPayload = runWebsiteAuditToolWorkflow_(prospect);
       applyWebsiteAuditToolResults_(activeContext, auditPayload);
       activeContext = buildProspectContextForRow_(context.ss, context.sheet, context.selectedRow);
@@ -451,17 +467,20 @@ function generateAuditPackage() {
       showDigitalBusinessAssessmentPreview_(prospect, packageResult.reportFile);
     } else {
       ui.alert(
-        'Rogers Holdings OS',
+        'Business Optimization Platform',
         auditWasRunFirst
-          ? `Audit data was missing, so Rogers Holdings OS ran the website audit first and then generated the Digital Business Assessment.\n\nFolder: ${packageResult.folder.getName()}`
+          ? `Audit data was missing, so Business Optimization Platform ran the website audit first and then generated the Digital Business Assessment.\n\nFolder: ${packageResult.folder.getName()}`
           : `Digital Business Assessment generated for ${prospect.company}.\n\nFolder: ${packageResult.folder.getName()}`,
         ui.ButtonSet.OK
       );
     }
   } catch (error) {
+    console.error('Digital Business Assessment generation failed', error && error.stack ? error.stack : error);
     ui.alert(
-      'Rogers Holdings OS',
-      error && error.message ? error.message : String(error),
+      'Business Optimization Platform',
+      /WEBSITE_AUDIT_TOOL_URL|WEBSITE_AUDIT_TOOL_ENDPOINT|HTTP|UrlFetch|request failed|valid JSON|audit payload|required result fields/i.test(error && error.message ? error.message : String(error))
+        ? getWebsiteAuditOperatorErrorMessage_(error)
+        : (error && error.message ? error.message : String(error)),
       ui.ButtonSet.OK
     );
   }
@@ -485,7 +504,7 @@ function generateExecutiveSnapshot() {
 
   if (missing.length) {
     ui.alert(
-      'Rogers Holdings OS',
+      'Business Optimization Platform',
       'Add the missing required fields before generating the Executive Snapshot: ' + missing.join(', '),
       ui.ButtonSet.OK
     );
@@ -526,7 +545,6 @@ function generateExecutiveSnapshot() {
       'Executive Snapshot Generated',
       'Generated Executive Snapshot.pdf for meeting-focused outreach.'
     );
-    setProspectStatusIfHeader_(context.sheet, context.table.headers, context.selectedRow, 'Executive Snapshot Sent');
     setIfHeaderCell_(context.sheet, context.table.headers, context.selectedRow, 'Next Action', 'Create Outreach Draft');
     updateSelectedProspectLastActivity_(context.sheet, context.table.headers, context.selectedRow);
     refreshSalesOperatingSystem_();
@@ -535,14 +553,14 @@ function generateExecutiveSnapshot() {
       showExecutiveSnapshotPreview_(prospect, reportFile);
     } else {
       ui.alert(
-        'Rogers Holdings OS',
+        'Business Optimization Platform',
         `Executive Snapshot generated for ${prospect.company}.\n\nFile: ${file.getName()}\nFolder: ${folder.getName()}`,
         ui.ButtonSet.OK
       );
     }
   } catch (error) {
     ui.alert(
-      'Rogers Holdings OS',
+      'Business Optimization Platform',
       error && error.message ? error.message : String(error),
       ui.ButtonSet.OK
     );
@@ -570,7 +588,7 @@ function runFullProspectPackage() {
 
   if (missing.length) {
     ui.alert(
-      'Rogers Holdings OS',
+      'Business Optimization Platform',
       'Add the missing required fields before running the full prospect package: ' + missing.join(', '),
       ui.ButtonSet.OK
     );
@@ -589,7 +607,10 @@ function runFullProspectPackage() {
     folder = getOrCreateAuditPackageFolder_(prospect.company);
 
     currentStep = 'Run real Website Audit if audit data is missing';
-    if (isAuditDataMissingForPackage_(prospect)) {
+    if (!isVerifiedAuditDataForLocalRendering_(prospect)) {
+      if (!getWebsiteAuditToolEndpoint_()) {
+        throw new Error(buildVerifiedAuditRequiredMessage_(prospect));
+      }
       const auditPayload = runWebsiteAuditToolWorkflow_(prospect);
       applyWebsiteAuditToolResults_(activeContext, auditPayload);
       activeContext = buildProspectContextForRow_(context.ss, context.sheet, context.selectedRow);
@@ -603,9 +624,16 @@ function runFullProspectPackage() {
 
     currentStep = 'Create outreach Gmail draft';
     const drafts = buildOutreachDrafts_(prospect);
-    GmailApp.createDraft(String(prospect.email || '').trim(), drafts.subject, drafts.initialEmail);
+    const gmailDraftResult = createOrReuseFullPackageGmailDraft_(String(prospect.email || '').trim(), drafts.subject, drafts.initialEmail);
     gmailDraftCreated = true;
-    logFullPackageActivity_(activeContext.ss, prospect.company, 'Outreach Draft Created', 'Created outreach Gmail draft as part of full prospect package.');
+    logFullPackageActivity_(
+      activeContext.ss,
+      prospect.company,
+      gmailDraftResult.created ? 'Outreach Gmail Draft Created' : 'Outreach Gmail Draft Updated',
+      gmailDraftResult.created
+        ? 'Created outreach Gmail draft as part of full prospect package.'
+        : 'Reused and refreshed the existing outreach Gmail draft as part of full prospect package retry.'
+    );
 
     currentStep = 'Update prospect row';
     updateFullPackageProspectFields_(activeContext.sheet, activeContext.table.headers, activeContext.selectedRow);
@@ -613,7 +641,7 @@ function runFullProspectPackage() {
     refreshSalesOperatingSystem_();
 
     ui.alert(
-      'Rogers Holdings OS',
+      'Business Optimization Platform',
       buildFullProspectPackageSummary_(prospect, folder, packageResult, gmailDraftCreated),
       ui.ButtonSet.OK
     );
@@ -631,8 +659,8 @@ function runFullProspectPackage() {
     }
 
     ui.alert(
-      'Rogers Holdings OS',
-      `Full Prospect Package failed during step: ${currentStep}.\n\n${message}\n\nPrevious successful work was preserved.`,
+      'Business Optimization Platform',
+      `Full Prospect Package could not be completed during: ${currentStep}.\n\n${/WEBSITE_AUDIT_TOOL_URL|WEBSITE_AUDIT_TOOL_ENDPOINT|HTTP|UrlFetch|request failed|valid JSON|audit payload|required result fields/i.test(message) ? getWebsiteAuditOperatorErrorMessage_(error) : message}\n\nPrevious successful work was preserved.`,
       ui.ButtonSet.OK
     );
   }
@@ -642,7 +670,7 @@ function buildFullProspectPackageSummary_(prospect, folder, packageResult, gmail
   const createdFileNames = (packageResult && packageResult.createdFiles || []).map(function(file) {
     return file.getName();
   });
-  const auditReportStatus = createdFileNames.indexOf('Audit Report.pdf') !== -1 ? 'generated' : 'found';
+  const auditReportStatus = createdFileNames.indexOf('AuditReport.pdf') !== -1 ? 'generated' : 'found';
   const proposalStatus = createdFileNames.indexOf('Proposal.pdf') !== -1 ? 'generated' : 'found';
 
   return [
@@ -650,16 +678,15 @@ function buildFullProspectPackageSummary_(prospect, folder, packageResult, gmail
     '',
     'Company: ' + prospect.company,
     'Folder: ' + (folder ? folder.getName() : 'Not available'),
-    'Audit Report.pdf: ' + auditReportStatus,
+    'AuditReport.pdf: ' + auditReportStatus,
     'Proposal.pdf: ' + proposalStatus,
     'Gmail draft created: ' + (gmailDraftCreated ? 'Yes' : 'No'),
-    'Next Action: Schedule Discovery Meeting'
+    'Next Action: Confirm Executive Snapshot Sent after it is actually sent'
   ].join('\n');
 }
 
 function updateFullPackageProspectFields_(sheet, headers, selectedRow) {
-  setIfHeaderCell_(sheet, headers, selectedRow, 'Status', 'Executive Snapshot Sent');
-  setIfHeaderCell_(sheet, headers, selectedRow, 'Next Action', 'Schedule Discovery Meeting');
+  setIfHeaderCell_(sheet, headers, selectedRow, 'Next Action', 'Confirm Executive Snapshot Sent');
   setIfHeaderCell_(sheet, headers, selectedRow, 'Last Activity', new Date());
   setIfHeaderCell_(sheet, headers, selectedRow, 'Audit Package Generated', 'Yes');
   setIfHeaderCell_(sheet, headers, selectedRow, 'Proposal Generated', 'Yes');
@@ -672,6 +699,125 @@ function logFullPackageActivity_(ss, company, activityType, activityNotes) {
 
 function isAuditDataMissingForPackage_(prospect) {
   return !String(prospect.auditScore || '').trim() || !String(prospect.auditOutcome || '').trim();
+}
+
+function getLocalAuditDataReadiness_(prospect) {
+  const data = prospect || {};
+  const missing = [];
+  const invalid = [];
+  const source = String(data.auditSource || '');
+  const sourceTrimmed = source.trim();
+  const scoreText = String(data.auditScore === null || data.auditScore === undefined ? '' : data.auditScore).trim();
+  const outcome = String(data.auditOutcome || '');
+  const priorityTier = String(data.priorityTier || '');
+  const narrative = firstNonBlank_([data.summary, data.notes]);
+
+  if (!sourceTrimmed) {
+    missing.push('Audit Source');
+  } else if (VERIFIED_CLIENT_FACING_AUDIT_SOURCES.indexOf(source) === -1) {
+    invalid.push('Audit Source (must be Website Audit Tool)');
+  }
+
+  if (!scoreText) {
+    missing.push('Audit Score');
+  } else {
+    const score = Number(scoreText);
+    if (!Number.isFinite(score) || score < 0 || score > 100) {
+      invalid.push('Audit Score (must be numeric from 0 to 100)');
+    }
+  }
+
+  if (!outcome.trim()) {
+    missing.push('Audit Outcome');
+  } else if (VERIFIED_CLIENT_FACING_AUDIT_OUTCOMES.indexOf(outcome) === -1) {
+    invalid.push('Audit Outcome');
+  }
+
+  if (!priorityTier.trim()) {
+    missing.push('Priority Tier');
+  } else if (VERIFIED_CLIENT_FACING_PRIORITY_TIERS.indexOf(priorityTier) === -1) {
+    invalid.push('Priority Tier');
+  }
+
+  if (!String(narrative || '').trim()) {
+    missing.push('Summary or Notes');
+  }
+
+  return {
+    ready: missing.length === 0 && invalid.length === 0,
+    missing: missing,
+    invalid: invalid,
+    placeholder: source === 'Quick Internal Audit',
+    source: source
+  };
+}
+
+function isVerifiedAuditDataForLocalRendering_(prospect) {
+  return getLocalAuditDataReadiness_(prospect).ready;
+}
+
+function buildVerifiedAuditRequiredMessage_(prospect) {
+  const readiness = getLocalAuditDataReadiness_(prospect);
+  const details = [];
+  if (readiness.missing.length) {
+    details.push('Missing: ' + readiness.missing.join(', ') + '.');
+  }
+  if (readiness.invalid.length) {
+    details.push('Invalid: ' + readiness.invalid.join(', ') + '.');
+  }
+  return 'A complete, verified Website Audit Tool audit is required before generating client-facing assessment files. ' +
+    details.join(' ') +
+    ' Fresh audit acquisition is unavailable because WEBSITE_AUDIT_TOOL_URL or WEBSITE_AUDIT_TOOL_ENDPOINT is not configured. Quick Internal Audit and inferred or manually entered provenance are not eligible.';
+}
+
+function assertVerifiedAuditDataForLocalRendering_(prospect) {
+  const readiness = getLocalAuditDataReadiness_(prospect);
+  if (readiness.ready) {
+    return;
+  }
+  const details = [];
+  if (readiness.missing.length) {
+    details.push('Missing: ' + readiness.missing.join(', ') + '.');
+  }
+  if (readiness.invalid.length) {
+    details.push('Invalid: ' + readiness.invalid.join(', ') + '.');
+  }
+  throw new Error('A complete, verified Website Audit Tool audit is required before generating client-facing assessment files. ' + details.join(' '));
+}
+
+function buildLocalAuditReportInput_(prospect) {
+  const data = prospect || {};
+  return {
+    sourceUrl: data.website || '',
+    text: firstNonBlank_([data.summary, data.notes]),
+    screenshotUrl: data.websiteScreenshotUrl || '',
+    screenshotBase64: data.websiteScreenshotBase64 || '',
+    screenshotMimeType: data.websiteScreenshotMimeType || '',
+    websiteScreenshotUrl: data.websiteScreenshotUrl || '',
+    websiteScreenshotBase64: data.websiteScreenshotBase64 || '',
+    websiteScreenshotMimeType: data.websiteScreenshotMimeType || '',
+    mobileScreenshotUrl: data.mobileScreenshotUrl || '',
+    mobileScreenshotBase64: data.mobileScreenshotBase64 || '',
+    mobileScreenshotMimeType: data.mobileScreenshotMimeType || '',
+    competitivePosition: data.competitivePosition || '',
+    competitorSummary: data.competitorSummary || '',
+    evidence: {
+      websiteScreenshotUrl: data.websiteScreenshotUrl || '',
+      websiteScreenshotBase64: data.websiteScreenshotBase64 || '',
+      websiteScreenshotMimeType: data.websiteScreenshotMimeType || '',
+      mobileScreenshotUrl: data.mobileScreenshotUrl || '',
+      mobileScreenshotBase64: data.mobileScreenshotBase64 || '',
+      mobileScreenshotMimeType: data.mobileScreenshotMimeType || ''
+    },
+    metadata: {
+      auditSource: data.auditSource || '',
+      renderingSource: 'Local prospect audit data'
+    }
+  };
+}
+
+function createOrReuseFullPackageGmailDraft_(recipient, subject, body) {
+  return reconcileExactGmailDraft_(recipient, subject, body);
 }
 
 function isAuditPackageGenerated_(rowValues, headers) {
@@ -709,7 +855,8 @@ function buildSelectedProspectForAuditPackage_(context) {
     mobileScreenshotMimeType: getValueByHeader_(values, headers, 'Mobile Screenshot MIME Type'),
     competitivePosition: getValueByHeader_(values, headers, 'Competitive Position'),
     competitorSummary: getValueByHeader_(values, headers, 'Competitor Summary'),
-    competitors: getValueByHeader_(values, headers, 'Competitors')
+    competitors: getValueByHeader_(values, headers, 'Competitors'),
+    auditSource: getValueByHeader_(values, headers, 'Audit Source')
   };
 }
 
@@ -767,7 +914,6 @@ function logAuditPackageApiResponseDebug_(responseJson) {
   const reportText = report && report.reportText;
   const summary = responseJson && responseJson.summary;
 
-  console.log('Audit Package API full response JSON', responseJson);
   console.log('Audit Package API response diagnostics', {
     reportExists: !!report,
     reportTextExists: reportText !== null && reportText !== undefined && String(reportText).trim() !== '',
@@ -856,13 +1002,13 @@ function runWebsiteAudit() {
   };
 
   if (!String(prospect.website || '').trim()) {
-    ui.alert('Rogers Holdings OS', 'Add a Website before running the internal audit.', ui.ButtonSet.OK);
+    ui.alert('Business Optimization Platform', 'Add a Website before running the internal audit.', ui.ButtonSet.OK);
     return;
   }
 
   if (isWebsiteAuditToolResult_(prospect)) {
     ui.alert(
-      'Rogers Holdings OS',
+      'Business Optimization Platform',
       'This prospect already has Website Audit Tool results. Quick Internal Audit will not overwrite full audit data.',
       ui.ButtonSet.OK
     );
@@ -870,7 +1016,7 @@ function runWebsiteAudit() {
   }
 
   const confirm = ui.alert(
-    'Rogers Holdings OS',
+    'Business Optimization Platform',
     `This is a quick internal placeholder audit, not the full Website Audit Tool report. It should not be used as a final client-facing audit. Continue?\n\nProspect: ${prospect.company}`,
     ui.ButtonSet.OK_CANCEL
   );
@@ -887,12 +1033,11 @@ function runWebsiteAudit() {
   setIfHeaderCell_(context.sheet, context.table.headers, context.selectedRow, 'Notes', audit.notes);
   setIfHeaderCell_(context.sheet, context.table.headers, context.selectedRow, 'Summary', audit.summary);
   setIfHeaderCell_(context.sheet, context.table.headers, context.selectedRow, 'Audit Source', 'Quick Internal Audit');
-  setProspectStatusIfHeader_(context.sheet, context.table.headers, context.selectedRow, 'Digital Business Assessment Presented');
   updateSelectedProspectLastActivity_(context.sheet, context.table.headers, context.selectedRow);
   logPipelineActivity_(context.ss, prospect.company, 'Quick Internal Audit', audit.summary);
   refreshSalesOperatingSystem_();
 
-  ui.alert('Rogers Holdings OS', 'Internal website audit complete.', ui.ButtonSet.OK);
+  ui.alert('Business Optimization Platform', 'Internal website audit complete.', ui.ButtonSet.OK);
 }
 
 function isWebsiteAuditToolResult_(prospect) {

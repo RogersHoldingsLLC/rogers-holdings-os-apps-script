@@ -1,5 +1,5 @@
 /**
- * Rogers Holdings OS - InspectionIntelligenceEngine.
+ * Business Optimization Platform - InspectionIntelligenceEngine.
  * Translates structured inspection and WebsiteDocument data into business-ready
  * findings without changing audit scoring, report layout, workflows, or menus.
  */

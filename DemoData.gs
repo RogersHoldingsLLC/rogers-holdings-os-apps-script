@@ -1,12 +1,20 @@
 /**
- * Rogers Holdings OS - DemoData.
+ * Business Optimization Platform - DemoData.
  * Split from the stable Code.gs monolith without changing function names or behavior.
  */
 
 function resetDemoData() {
   const ui = SpreadsheetApp.getUi();
+  if (!isDeveloperModeEnabledReadOnly_()) {
+    ui.alert(
+      'Business Optimization Platform',
+      'Reset Demo Data is available only in Developer Mode.',
+      ui.ButtonSet.OK
+    );
+    return;
+  }
   const confirm = ui.alert(
-    'Rogers Holdings OS',
+    'Business Optimization Platform',
     'This will clear demo/test data from Master Prospect Tracker, Activity Feed, Clients, and generated demo folders. Continue?',
     ui.ButtonSet.OK_CANCEL
   );
@@ -65,7 +73,7 @@ function resetDemoData() {
   refreshSalesOperatingSystem_();
 
   ui.alert(
-    'Rogers Holdings OS',
+    'Business Optimization Platform',
     [
       'Reset Demo Data complete.',
       '',
@@ -165,7 +173,7 @@ function buildDemoProspectRecords_() {
       'Audit Outcome': 'Good Fit',
       'Priority Tier': 'B - Good',
       Status: 'Client',
-      'Next Action': 'Start Project',
+      'Next Action': 'Follow Up',
       'Follow-Up Date': addDays_(today, 4),
       'Offer / Service': 'Google Business Optimization',
       Notes: 'A few visibility improvements could make the cafe easier to find in local search.',
@@ -602,7 +610,7 @@ function createDemoCompanyDriveAssets_(companyName, prospect) {
   const internalProspect = demoProspectToInternalProspect_(prospect);
   const proposal = buildProposal_(internalProspect);
   trashLegacyAuditPackageTextFiles_(folder);
-  upsertAuditPackageBlobFile_(folder, 'Audit Report.pdf', buildAuditReportPdfBlob_(internalProspect, { text: buildDemoAuditReportText_(prospect) }));
+  upsertAuditPackageBlobFile_(folder, 'AuditReport.pdf', buildAuditReportPdfBlob_(internalProspect, { text: buildDemoAuditReportText_(prospect) }));
   upsertAuditPackageTextFile_(folder, 'Outreach Email Draft.txt', buildAuditPackageOutreachText_(buildOutreachDrafts_(internalProspect)), MimeType.PLAIN_TEXT);
   upsertAuditPackageBlobFile_(folder, 'Proposal.pdf', buildProposalPdfBlob_(internalProspect, proposal));
   filesCreated += 3;

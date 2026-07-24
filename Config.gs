@@ -1,10 +1,10 @@
 /**
- * Rogers Holdings OS - Config.
+ * Business Optimization Platform - Config.
  * Split from the stable Code.gs monolith without changing function names or behavior.
  */
 
 /**
- * Rogers Holdings OS prospect automation menu.
+ * Business Optimization Platform prospect automation menu.
  */
 
 var MASTER_PROSPECT_SHEET = 'Master Prospect Tracker';
@@ -16,6 +16,9 @@ var FOLLOW_UPS_SHEET = 'Follow-Ups';
 var PROJECTS_SHEET = 'Projects';
 var DAILY_FRICTION_LOG_SHEET = "Brian's Daily Friction Log";
 var PRODUCT_FEEDBACK_SHEET = 'Product Feedback';
+var PRODUCT_NAME = 'Business Optimization Platform';
+var PRODUCT_VERSION = '1.0.0-rc';
+var PRODUCT_BUILD = '2026.07.20-rc';
 
 var PRODUCT_FEEDBACK_COLUMNS = [
   'Feedback ID',
@@ -189,6 +192,16 @@ var PIPELINE_STAGES = [
   'Lost'
 ];
 
+var LIFECYCLE_RECONCILIATION_COLUMNS = [
+  'Lifecycle Operation Key',
+  'Lifecycle Operation State',
+  'Lifecycle Operation Details',
+  'Lifecycle Confirmed At',
+  'Calendar Operation Key',
+  'Calendar Event ID',
+  'Calendar Operation State'
+];
+
 var PIPELINE_STAGE_COLORS = {
   'Lead Found': '#d9d9d9',
   'Executive Snapshot Sent': '#d9d2e9',
@@ -218,13 +231,18 @@ var PROSPECT_DROPDOWN_DEFAULTS = {
   'Next Action': [
     'Generate Executive Snapshot',
     'Create Outreach Draft',
+    'Confirm Executive Snapshot Sent',
     'Schedule Discovery Meeting',
     'Present Digital Business Assessment',
+    'Confirm Assessment Presented',
     'Generate Improvement Plan',
-    'Convert to Client',
-    'Start Project',
+    'Confirm Improvement Plan Sent',
+    'Record Improvement Plan Outcome',
+    'Complete Client Onboarding',
+    'Reactivate Nurtured Prospect',
     'Follow Up',
-    'Nurture'
+    'Nurture',
+    'Archived'
   ],
   'Offer / Service': [
     'Website Audit',
@@ -243,6 +261,28 @@ var PROSPECT_DROPDOWN_DEFAULTS = {
   ]
 };
 
+var AUDIT_SOURCE_VALUES = [
+  'Website Audit Tool',
+  'Quick Internal Audit'
+];
+
+var VERIFIED_CLIENT_FACING_AUDIT_SOURCES = [
+  'Website Audit Tool'
+];
+
+var VERIFIED_CLIENT_FACING_AUDIT_OUTCOMES = [
+  'Strong Fit',
+  'Good Fit',
+  'Needs Nurture',
+  'Poor Fit'
+];
+
+var VERIFIED_CLIENT_FACING_PRIORITY_TIERS = [
+  'A - Hot',
+  'B - Good',
+  'C - Later'
+];
+
 var DEMO_COMPANY_NAMES = [
   'Bluegrass Roofing Co',
   'Commonwealth Plumbing',
@@ -254,7 +294,7 @@ var DEMO_COMPANY_NAMES = [
   'Heritage Lawn Care'
 ];
 
-var ROGERS_OS_THEME = {
+var BUSINESS_OPTIMIZATION_PLATFORM_THEME = {
   black: '#111111',
   charcoal: '#1c1c1c',
   gold: '#b88728',
