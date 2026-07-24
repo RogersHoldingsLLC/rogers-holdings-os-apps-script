@@ -4,7 +4,8 @@
  */
 
 function buildOutreachDrafts_(prospect) {
-  const company = String(prospect.company || '').trim();
+  prospect = normalizeClientProspect_(prospect);
+  const company = prospect.company;
   const website = String(prospect.website || '').trim();
   const auditScore = prospect.auditScore === '' || prospect.auditScore === null || prospect.auditScore === undefined
     ? 'not scored'
@@ -14,6 +15,7 @@ function buildOutreachDrafts_(prospect) {
   const safeDigitalPresence = getDigitalPresenceAssessment_(prospect.auditScore, confidence);
   const classification = getBusinessClassificationContext_(prospect, reportFile);
   const offerService = getClientFacingServiceName_(prospect.offerService || 'website and local visibility review', prospect.auditScore);
+  const recommendationVerified = confidence.scoreAllowed === true;
   const findings = filterClientEligibleEvidence_(getSmartFindings_(prospect), prospect, reportFile, 'outreach');
   const websiteLine = website
     ? `I reviewed ${website} from the perspective of ${classification.audiencePerspective}.`
@@ -39,7 +41,9 @@ function buildOutreachDrafts_(prospect) {
     `My name is Brian Keith Rogers with Rogers Holdings LLC. ${websiteLine}`,
     auditLine,
     findingsLine,
-    `I prepared a short Executive Snapshot with the clearest next step: ${offerService}.`,
+    recommendationVerified
+      ? `I prepared a short Executive Snapshot with the clearest next step: ${offerService}.`
+      : `I prepared a short Executive Snapshot with a preliminary service option to confirm during discovery: ${offerService}.`,
     'If it would be useful, I can send it over or walk through it in a quick conversation.',
     'Best,',
     'Brian Keith Rogers',
@@ -51,7 +55,9 @@ function buildOutreachDrafts_(prospect) {
   const followUpParts = [
     `Hi ${company} team,`,
     website ? 'I wanted to follow up on the website review note I sent over.' : 'I wanted to follow up on the digital presence review note I sent over.',
-    `The practical next step still looks like ${offerService}.`,
+    recommendationVerified
+      ? `The practical next step still looks like ${offerService}.`
+      : `A practical service option to confirm during discovery is ${offerService}.`,
     'If useful, I can share the Executive Snapshot and walk through the highest-impact opportunities in a short conversation.',
     'Best,',
     'Brian Keith Rogers',

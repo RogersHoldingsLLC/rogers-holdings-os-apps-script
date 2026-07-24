@@ -30,7 +30,7 @@ function createPreviewDialog_(config) {
 
 function renderPreviewHeader_(config) {
   const settings = config || {};
-  const company = settings.company || 'Selected Company';
+  const company = normalizeClientBusinessName_(settings.company) || 'Selected Company';
   const website = settings.website || 'Website not provided';
   const assessmentDate = settings.assessmentDate || formatDisplayDate_(new Date());
   return [
@@ -108,6 +108,7 @@ function renderPreviewList_(items) {
 }
 
 function showExecutiveSnapshotPreview_(prospect, reportFile) {
+  prospect = normalizeClientProspect_(prospect);
   const safeReportFile = getClientSafeReportFile_(prospect, reportFile || {});
   const findings = filterClientEligibleEvidence_([].concat(safeReportFile.findings || [], getSmartFindings_(prospect)), prospect, reportFile || {}, 'finding');
   const scoreContext = getReportScoreContext_(prospect, reportFile || {});
@@ -124,7 +125,7 @@ function showExecutiveSnapshotPreview_(prospect, reportFile) {
     renderPreviewCard_('Recommended First Step', `<p>${escapeHtml_(buildExecutiveSnapshotFirstStep_(prospect))}</p>`),
     '</div>',
     renderPreviewCard_('Top Opportunities', renderPreviewList_(buildExecutiveSnapshotOpportunities_(prospect, findings).slice(0, 3))),
-    renderPreviewCard_('Key Observation', `<p>${escapeHtml_(clientIntelligence.immediateStandout || buildExecutiveSnapshotBiggestOpportunity_(prospect, buildExecutiveSnapshotOpportunities_(prospect, findings)))}</p>` + buildExecutiveSnapshotEvidenceHtml_(prospect, safeReportFile))
+    renderPreviewCard_('Key Observation', `<p>${escapeHtml_(clientIntelligence.immediateStandout || buildExecutiveSnapshotBiggestOpportunity_(prospect, buildExecutiveSnapshotOpportunities_(prospect, findings), reportFile || {}))}</p>` + buildExecutiveSnapshotEvidenceHtml_(prospect, safeReportFile))
   ].join('');
 
   SpreadsheetApp.getUi().showModalDialog(createPreviewDialog_({
@@ -138,6 +139,7 @@ function showExecutiveSnapshotPreview_(prospect, reportFile) {
 }
 
 function showDigitalBusinessAssessmentPreview_(prospect, reportFile) {
+  prospect = normalizeClientProspect_(prospect);
   const safeReportFile = getClientSafeReportFile_(prospect, reportFile || {});
   const findings = filterClientEligibleEvidence_([].concat(safeReportFile.findings || [], getSmartFindings_(prospect)), prospect, reportFile || {}, 'finding');
   const opportunities = buildAuditOpportunities_(prospect, findings, getAuditReportTextFromReportFile_(safeReportFile), safeReportFile);
@@ -171,7 +173,16 @@ function showDigitalBusinessAssessmentPreview_(prospect, reportFile) {
 }
 
 function showImprovementPlanPreview_(prospect, proposal) {
+  prospect = normalizeClientProspect_(prospect);
+  proposal = Object.assign({}, proposal || {}, {
+    company: normalizeClientBusinessName_(proposal && proposal.company)
+  });
   const recommendedPackage = buildRecommendedPackage_(prospect);
+  const scoreContext = getReportScoreContext_(prospect, prospect.reportFile || {});
+  const recommendationLabel = scoreContext.scoreVerified ? 'Executive Recommendation' : 'Preliminary Service Option';
+  const recommendationText = scoreContext.scoreVerified
+    ? (proposal.recommendedService || recommendedPackage.name || 'Recommended service package')
+    : `To confirm during discovery: ${proposal.recommendedService || recommendedPackage.name || 'Recommended service package'}`;
   const bodyHtml = [
     '<div class="hero-card">',
     '<div class="hero-label">Improvement Plan</div>',
@@ -179,7 +190,7 @@ function showImprovementPlanPreview_(prospect, proposal) {
     '<p>A practical path from assessment findings to measurable business improvement.</p>',
     '</div>',
     '<div class="card-grid">',
-    renderPreviewCard_('Executive Recommendation', `<p>${escapeHtml_(proposal.recommendedService || recommendedPackage.name || 'Recommended service package')}</p>`, { editable: true, field: 'executiveRecommendation' }),
+    renderPreviewCard_(recommendationLabel, `<p>${escapeHtml_(recommendationText)}</p>`, { editable: true, field: 'executiveRecommendation' }),
     renderPreviewCard_('Estimated Investment', `<p>${escapeHtml_(recommendedPackage.investment || 'Final investment confirmed after scope review')}</p>`, { editable: true, field: 'investment' }),
     '</div>',
     renderPreviewCard_('Recommended Scope', deliverableCardsHtml_(recommendedPackage.deliverables), { editable: true, field: 'scope' }),
@@ -199,6 +210,7 @@ function showImprovementPlanPreview_(prospect, proposal) {
 }
 
 function showOutreachEmailPreview_(prospect, drafts, recipient) {
+  prospect = normalizeClientProspect_(prospect);
   const bodyHtml = [
     '<div class="gmail-preview">',
     '<div class="gmail-top">',
@@ -230,7 +242,7 @@ function formatEmailPreviewHtml_(emailText) {
 }
 
 function buildDeliverablePreviewAssessmentSummary_(prospect, findings) {
-  const company = String(prospect && prospect.company || 'the business').trim();
+  const company = normalizeClientBusinessName_(prospect && prospect.company) || 'the business';
   const count = (findings || []).length;
   const focus = buildRecommendedNextStep_(prospect || {});
   return count

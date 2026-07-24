@@ -203,7 +203,7 @@ function discoverExecutiveBusinessProfile_(context, evidence) {
   if (!evidence.length) uncertainties.push('No normalized business evidence is available.');
 
   return {
-    companyName: executiveBusinessText_(prospect.company) || 'Unknown',
+    companyName: normalizeClientBusinessName_(executiveBusinessText_(prospect.company)) || 'Unknown',
     website: executiveBusinessText_(prospect.website) || 'Unknown',
     industry: industry || 'Unknown',
     businessModel: model || 'Unknown',

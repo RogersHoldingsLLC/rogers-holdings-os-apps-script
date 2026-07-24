@@ -190,6 +190,16 @@ function getClientSafeReportFile_(prospect, reportFile) {
   });
 }
 
+function normalizeClientBusinessName_(value) {
+  return String(value || '').trim().replace(/\bL\.?\s*L\.?\s*C\.?\b/gi, 'LLC');
+}
+
+function normalizeClientProspect_(prospect) {
+  return Object.assign({}, prospect || {}, {
+    company: normalizeClientBusinessName_(prospect && prospect.company)
+  });
+}
+
 function parseDigitalPresenceScore_(score) {
   if (score === '' || score === null || score === undefined) {
     return null;
@@ -207,7 +217,7 @@ function parseDigitalPresenceScore_(score) {
 function getClientFacingServiceName_(service, score) {
   const value = String(service || '').trim();
   const normalized = value.toLowerCase();
-  if (!value || normalized === 'website audit' || normalized === 'website and local visibility review') {
+  if (!value || normalized === 'website audit' || normalized === 'website and local visibility review' || normalized === 'website and local visibility improvement') {
     const assessment = getDigitalPresenceAssessment_(score);
     if (assessment.score !== null && assessment.score >= 90) {
       return 'Growth & Optimization Review';

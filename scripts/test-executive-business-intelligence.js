@@ -240,6 +240,36 @@ assert.doesNotMatch(malformedOutreach.initialEmail, /local customer|local search
 assert.doesNotMatch(malformedOutreach.initialEmail, /A couple of opportunities stood out/i, 'no verified findings produces preliminary outreach without a findings list');
 assert.doesNotMatch(flattenStrings(malformedLiveAcceptance.opportunities).join(' '), /phone|hours|google business|local seo|service area/i, 'unsupported local-service recommendations are excluded');
 
+const mixedCaseCompanyProspect = Object.assign({}, fixtures.malformedLiveAcceptance.prospect, {
+  company: 'Rogers Holdings LLc',
+  offerService: 'Website Audit'
+});
+assert.strictEqual(context.normalizeClientBusinessName_('Rogers Holdings LLc'), 'Rogers Holdings LLC', 'client business-name normalization canonicalizes LLC capitalization');
+const mixedCaseOutreach = plain(context.buildOutreachDrafts_(mixedCaseCompanyProspect));
+assert.match(mixedCaseOutreach.initialEmail, /Rogers Holdings LLC team/, 'initial outreach renders canonical LLC capitalization');
+assert.match(mixedCaseOutreach.followUpEmail, /Rogers Holdings LLC team/, 'follow-up outreach renders canonical LLC capitalization');
+assert.doesNotMatch(mixedCaseOutreach.initialEmail + mixedCaseOutreach.followUpEmail, /\bLLc\b/, 'outreach contains no mixed-case LLC token');
+assert.match(mixedCaseOutreach.initialEmail, /preliminary service option to confirm during discovery: Digital Visibility & Conversion Improvement Package/i, 'incomplete-evidence initial outreach qualifies the canonical service option');
+assert.match(mixedCaseOutreach.followUpEmail, /service option to confirm during discovery is Digital Visibility & Conversion Improvement Package/i, 'incomplete-evidence follow-up qualifies the canonical service option');
+
+const unverifiedSnapshotRecommendation = context.buildExecutiveSnapshotBiggestOpportunity_(mixedCaseCompanyProspect, ['Website Audit'], {});
+assert.doesNotMatch(unverifiedSnapshotRecommendation, /Website Audit/i, 'Executive Snapshot never exposes Website Audit as the missed-opportunity recommendation');
+assert.match(unverifiedSnapshotRecommendation, /Digital Visibility & Conversion Improvement Package/, 'Executive Snapshot uses the canonical service recommendation');
+assert.match(unverifiedSnapshotRecommendation, /preliminary service option to confirm during discovery/i, 'Executive Snapshot qualifies the service option when evidence is incomplete');
+
+const mixedCasePlan = plain(context.buildProposal_(Object.assign({}, mixedCaseCompanyProspect, { reportFile: {} })));
+assert.strictEqual(mixedCasePlan.company, 'Rogers Holdings LLC', 'Improvement Plan canonicalizes LLC capitalization');
+assert.doesNotMatch(mixedCasePlan.proposalText, /\bLLc\b/, 'Improvement Plan contains no mixed-case LLC token');
+assert.match(mixedCasePlan.proposalText, /PRELIMINARY SERVICE OPTION[\s\S]*Digital Visibility & Conversion Improvement Package/, 'incomplete-evidence Improvement Plan uses qualified canonical service terminology');
+assert.match(context.buildDeliverablePreviewAssessmentSummary_(mixedCaseCompanyProspect, []), /Rogers Holdings LLC's digital presence/, 'Digital Business Assessment summary canonicalizes LLC capitalization');
+
+const preliminaryPackage = plain(context.buildRecommendedPackage_(Object.assign({}, mixedCaseCompanyProspect, { reportFile: {} })));
+const preliminaryPackageHtml = context.recommendedServicePackageHtml_(preliminaryPackage, mixedCaseCompanyProspect, {});
+assert.match(preliminaryPackageHtml, /preliminary service option to confirm during discovery/i, 'assessment package language remains conditional when evidence is incomplete');
+assert.doesNotMatch(preliminaryPackageHtml, /This package is recommended because/i, 'assessment does not state a definitive package recommendation without verified evidence');
+const preliminaryProposalSolution = context.proposalSolutionHtml_(Object.assign({}, mixedCaseCompanyProspect, { reportFile: {} }), preliminaryPackage);
+assert.match(preliminaryProposalSolution, /subject to discovery confirmation/i, 'Improvement Plan solution language remains conditional when evidence is incomplete');
+
 const incompleteScoreContext = plain(context.getReportScoreContext_(fixtures.malformedLiveAcceptance.prospect, fixtures.malformedLiveAcceptance.reportFile));
 assert.strictEqual(incompleteScoreContext.displayScore, 'Not verified', 'incomplete raw zero has no numeric display score');
 assert.strictEqual(incompleteScoreContext.scoreVerified, false);

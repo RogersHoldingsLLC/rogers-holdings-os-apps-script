@@ -16,6 +16,8 @@ Build `2026.07.20-rc`. This is a release candidate, not production-ready or rele
 
 ### Fixed
 
+- Normalized client-visible business-name suffixes to `LLC` across the Executive Snapshot, Digital Business Assessment, Improvement Plan, and both outreach messages; unified Snapshot service terminology on `Digital Visibility & Conversion Improvement Package`; and made incomplete-evidence service language explicitly preliminary pending discovery.
+- Reflowed the Digital Business Assessment so the Improvement Roadmap divider stays with Business Impact, heading keep rules no longer force unintended standalone pages, and Quick Wins, roadmap, checklist, and service-package sections use a more intentional page sequence.
 - Completed live disposable-workbook artifact acceptance hardening: normalized structured screenshot evidence before filtering, removed unverified score/confidence/severity leakage from the Executive Snapshot, Assessment, and Improvement Plan, qualified unsupported findings as discovery items, and kept professional/B2B classification consistent across all four deliverables.
 - Corrected Improvement Plan PDF pagination so the Timeline heading clears the repeating page header, remains with its first timeline item, and preserves the professional five-page layout without blank pages or orphaned headings.
 - Added regression coverage for incomplete-evidence client language, structured screenshot evidence, unverified legacy summary metrics, discovery-qualified recommendations, duplicated final headings, and page-top-safe Timeline rendering.

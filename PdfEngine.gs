@@ -4,6 +4,7 @@
  */
 
 function buildAuditReportPdfBlob_(prospect, reportFile) {
+  prospect = normalizeClientProspect_(prospect);
   const safeReportFile = getClientSafeReportFile_(prospect, reportFile || {});
   // PDF V3 CHANGE: add executive impression, divider sequencing, and score display guardrails.
   const reportText = getAuditReportTextFromReportFile_(safeReportFile);
@@ -37,12 +38,19 @@ function buildAuditReportPdfBlob_(prospect, reportFile) {
       renderPdfCompactDivider_('WEBSITE REVIEW FINDINGS'),
       brandedPdfSectionHtml_('Key Findings', consultingFindingCardsHtml_(consultingFindings, visualEvidenceSource)),
       proofOfFindingsSectionHtml_(prospect, safeReportFile, consultingFindings),
-      renderPdfCompactDivider_('IMPROVEMENT ROADMAP'),
-      brandedPdfSectionHtml_('Business Impact', businessImpactSectionHtml_(prospect, consultingFindings, safeReportFile)),
+      renderPdfSectionIntroGroup_(
+        'IMPROVEMENT ROADMAP',
+        'Business Impact',
+        businessImpactSectionHtml_(prospect, consultingFindings, safeReportFile)
+      ),
       brandedPdfSectionHtml_('Quick Wins', quickWinsSectionHtml_(prospect, consultingFindings, safeReportFile)),
-      brandedPdfSectionHtml_('Improvement Roadmap', priorityRoadmapHtml_(prospect, safeReportFile), { keepWithFirstBlock: true }),
+      brandedPdfSectionHtml_('Improvement Roadmap', priorityRoadmapHtml_(prospect, safeReportFile), {
+        keepWithFirstBlock: true,
+        forcePageBreak: true,
+        pageTopSafe: true
+      }),
       brandedPdfSectionHtml_('Digital Trust Checklist', trustChecklistHtml_(prospect, reportFile)),
-      brandedPdfSectionHtml_('Recommended Service Package', recommendedServicePackageHtml_(recommendedPackage)),
+      brandedPdfSectionHtml_('Recommended Service Package', recommendedServicePackageHtml_(recommendedPackage, prospect, safeReportFile)),
       buildCompetitivePositionSection_(prospect),
       renderPdfCompactDivider_('RECOMMENDED NEXT STEPS'),
       brandedPdfSectionHtml_('Recommended Next Step', finalRecommendationHtml_(prospect, nextStep, estimatedImpact, safeReportFile))
@@ -52,6 +60,10 @@ function buildAuditReportPdfBlob_(prospect, reportFile) {
 }
 
 function buildProposalPdfBlob_(prospect, proposal) {
+  prospect = normalizeClientProspect_(prospect);
+  proposal = Object.assign({}, proposal || {}, {
+    company: normalizeClientBusinessName_(proposal && proposal.company)
+  });
   const recommendedPackage = buildRecommendedPackage_(prospect);
   const html = buildBrandedPdfHtml_({
     title: 'Improvement Plan',
@@ -63,7 +75,7 @@ function buildProposalPdfBlob_(prospect, proposal) {
       brandedPdfSectionHtml_('What We Found', proposalFindingsSummaryHtml_(prospect)),
       brandedPdfSectionHtml_('Recommended Solution', proposalSolutionHtml_(prospect, recommendedPackage)),
       brandedPdfSectionHtml_('Deliverables', deliverableCardsHtml_(recommendedPackage.deliverables)),
-      brandedPdfSectionHtml_('Timeline', projectRoadmapHtml_(), { keepWithFirstBlock: true, pageTopSafe: true }),
+      brandedPdfSectionHtml_('Timeline', projectRoadmapHtml_(), { keepWithFirstBlock: true, forcePageBreak: true, pageTopSafe: true }),
       brandedPdfSectionHtml_('Why Rogers Holdings', whyRogersHoldingsHtml_()),
       brandedPdfSectionHtml_('Investment', proposalInvestmentHtml_(recommendedPackage)),
       brandedPdfSectionHtml_('Next Steps', proposalNextStepsHtml_(prospect)),
@@ -1753,7 +1765,7 @@ function finalRecommendationHtml_(prospect, nextStep, estimatedImpact, reportFil
     ? classification.priorities
     : classification.priorities.map(function(item) { return 'To confirm during discovery: ' + item; });
   return [
-    '<div class="conclusion-panel">',
+    '<div class="conclusion-panel audit-conclusion">',
     '<h3>Decision Framework</h3>',
     '<p>The next step should be simple: confirm the highest-impact improvement, define the first scope of work, and connect that work to a business result the owner can recognize.</p>',
     '<div class="next-step-flow">',
@@ -1764,6 +1776,7 @@ function finalRecommendationHtml_(prospect, nextStep, estimatedImpact, reportFil
     '</div>',
     '<p>Based on this review, the highest-return improvements are:</p>',
     brandedPdfListHtml_(priorities),
+    '<div class="audit-discovery-close">',
     '<div class="final-metrics">',
     `<div class="metric-card"><div class="metric-label">Estimated Effort</div><div class="metric-value">${escapeHtml_(estimatedEffort)}</div></div>`,
     `<div class="metric-card"><div class="metric-label">Expected Impact</div><div class="metric-value">${escapeHtml_(impactLabel)}</div></div>`,
@@ -1776,6 +1789,7 @@ function finalRecommendationHtml_(prospect, nextStep, estimatedImpact, reportFil
     contact.email ? `${escapeHtml_(contact.email)}<br>` : '',
     contact.phone ? `${escapeHtml_(contact.phone)}<br>` : '',
     '</div>',
+    '</div>',
     '</div>'
   ].join('');
 }
@@ -1783,7 +1797,7 @@ function finalRecommendationHtml_(prospect, nextStep, estimatedImpact, reportFil
 function buildRecommendedPackage_(prospect) {
   const service = getClientFacingServiceName_(prospect.offerService || 'Website Audit', prospect.auditScore);
   const investmentRange = recommendedInvestmentRangeForService_(service);
-  const highScore = isNearPerfectAuditScore_(prospect);
+  const highScore = getReportScoreContext_(prospect || {}, (prospect && prospect.reportFile) || {}).scoreVerified === true && isNearPerfectAuditScore_(prospect);
   const audience = getImprovementPlanBusinessContext_(prospect);
   return {
     name: highScore ? 'Growth & Optimization Review' : 'Digital Visibility & Conversion Improvement Package',
@@ -1819,6 +1833,7 @@ function getImprovementPlanBusinessContext_(prospect) {
 }
 
 function buildExecutiveSnapshotPdfHtml_(prospect, reportFile) {
+  prospect = normalizeClientProspect_(prospect);
   const design = getPdfDesignSystem_();
   const colors = design.colors;
   const assets = getRogersBrandPdfAssets_();
@@ -1827,7 +1842,7 @@ function buildExecutiveSnapshotPdfHtml_(prospect, reportFile) {
   const findings = filterClientEligibleEvidence_([].concat(safeReportFile.findings || [], getSmartFindings_(prospect)), prospect, reportFile || {}, 'finding');
   const scoreContext = getReportScoreContext_(prospect, reportFile || {});
   const opportunities = buildExecutiveSnapshotOpportunities_(prospect, findings);
-  const biggestOpportunity = buildExecutiveSnapshotBiggestOpportunity_(prospect, opportunities);
+  const biggestOpportunity = buildExecutiveSnapshotBiggestOpportunity_(prospect, opportunities, reportFile || {});
   const impact = buildExecutiveSnapshotBusinessImpact_(prospect);
   const firstStep = buildExecutiveSnapshotFirstStep_(prospect);
   const evidenceHtml = buildExecutiveSnapshotEvidenceHtml_(prospect, safeReportFile);
@@ -1979,15 +1994,12 @@ function buildExecutiveSnapshotOpportunities_(prospect, findings) {
   return (source.length ? source : fallback).slice(0, 3);
 }
 
-function buildExecutiveSnapshotBiggestOpportunity_(prospect, opportunities) {
-  const service = String(prospect.offerService || '').trim();
-  if (service) {
-    return `The clearest improvement path appears to be ${service}, focused on helping more visitors understand the offer, trust the business, and take the next step.`;
-  }
-  if (opportunities && opportunities.length) {
-    return opportunities[0];
-  }
-  return 'The clearest improvement path appears to be making the website easier to understand, trust, and act on from the first visit.';
+function buildExecutiveSnapshotBiggestOpportunity_(prospect, opportunities, reportFile) {
+  const service = 'Digital Visibility & Conversion Improvement Package';
+  const verified = getReportScoreContext_(prospect || {}, reportFile || {}).scoreVerified === true;
+  return verified
+    ? `The clearest improvement path appears to be the ${service}, focused on helping more visitors understand the offer, trust the business, and take the next step.`
+    : `A preliminary service option to confirm during discovery is the ${service}. Available evidence is incomplete, so scope and priority should be verified before implementation.`;
 }
 
 function buildExecutiveSnapshotBusinessImpact_(prospect) {
@@ -2105,11 +2117,14 @@ function quickWinsSectionHtml_(prospect, findings, reportFile) {
   return recommendationCardsHtml_(selected, 'Quick Win');
 }
 
-function recommendedServicePackageHtml_(recommendedPackage) {
+function recommendedServicePackageHtml_(recommendedPackage, prospect, reportFile) {
+  const verified = getReportScoreContext_(prospect || {}, reportFile || {}).scoreVerified === true;
   return [
     '<div class="solution-panel">',
     `<h3>${escapeHtml_(recommendedPackage.name)}</h3>`,
-    '<p>This package is recommended because it focuses first on the improvements most likely to create customer confidence and clearer inquiry flow.</p>',
+    verified
+      ? '<p>This package is recommended because it focuses first on the improvements most likely to create customer confidence and clearer inquiry flow.</p>'
+      : '<p>This is a preliminary service option to confirm during discovery. Scope and priority should be verified before implementation because the available evidence is incomplete.</p>',
     brandedPdfDefinitionListHtml_([
       ['Recommended Service', recommendedPackage.service],
       ['Primary Outcome', recommendedPackage.outcome],
@@ -2200,10 +2215,11 @@ function proposalSolutionHtml_(prospect, recommendedPackage) {
     : (audience.type === 'professional'
       ? 'business decision-makers move from interest to a qualified conversation with less friction'
       : 'customers move from interest to inquiry with less friction');
+  const verified = getReportScoreContext_(prospect || {}, (prospect && prospect.reportFile) || {}).scoreVerified === true;
   return [
     '<div class="solution-panel">',
     `<h3>${escapeHtml_(recommendedPackage.name)}</h3>`,
-    `<p>The recommended solution is focused on practical improvements that can help ${actionLanguage}.</p>`,
+    `<p>${verified ? 'The recommended solution is' : 'This preliminary service option, subject to discovery confirmation, is'} focused on practical improvements that can help ${actionLanguage}.</p>`,
     brandedPdfDefinitionListHtml_([
       ['Service', recommendedPackage.service],
       ['Outcome', recommendedPackage.outcome],
@@ -2570,11 +2586,15 @@ function buildBrandedPdfHtml_(document) {
           h1, h2, h3, h4, .section-heading, .compact-divider-title { break-after: avoid; page-break-after: avoid; }
           p, li { widows: 3; orphans: 3; }
           table, tr, td, th, img, .keep-together, .pdf-card-group, .metric-card, .recommendation-card, .summary-card, .price-card, .solution-panel, .insight-panel, .narrative-callout, .brief-primary, .impact-summary, .finding-card, .proof-card, .roadmap-card, .checklist-item, .conclusion-panel, .acceptance-panel, .next-step-flow div, .deliverable-card, .visual-evidence-card, .signature-row, .contact-card { break-inside: avoid; page-break-inside: avoid; }
+          .conclusion-panel.audit-conclusion { break-inside: auto; page-break-inside: auto; }
+          .audit-discovery-close { break-before: page; page-break-before: always; }
           .section-heading { break-after: avoid; page-break-after: avoid; }
           .section-content { break-before: avoid; page-break-before: avoid; }
           .section-content > :first-child { break-before: avoid; page-break-before: avoid; }
           .compact-divider + .section { break-before: avoid; page-break-before: avoid; }
           .compact-divider + .section.force-page-break, .section.force-page-break { break-before: page; page-break-before: always; }
+          .section-intro-group .compact-divider { margin: 0 0 18px; }
+          .section-intro-group > .section-heading, .section-intro-group > .section-content > :first-child { break-after: avoid; break-before: avoid; page-break-after: avoid; page-break-before: avoid; }
           .soft-page-break { height: 0; line-height: 0; break-before: page; page-break-before: always; }
           .compact-divider { margin: 10px ${spacing.pageX} 18px; padding: 16px 20px; background: ${colors.charcoal}; color: ${colors.paper}; border-left: 5px solid ${colors.gold}; border-radius: ${radius.small}; break-inside: avoid; page-break-inside: avoid; }
           .compact-divider-rule { width: 72px; height: 2px; background: ${colors.gold}; margin: 0 0 8px; }
@@ -2850,7 +2870,13 @@ function renderPdfSection_(title, contentHtml, options) {
   const opts = options || {};
   const sectionClasses = ['section'];
   if (opts.keepWithFirstBlock) {
-    sectionClasses.push('force-page-break', 'keep-with-first-block');
+    sectionClasses.push('keep-with-first-block');
+  }
+  if (opts.forcePageBreak) {
+    sectionClasses.push('force-page-break');
+  }
+  if (opts.compact) {
+    sectionClasses.push('compact-section');
   }
   if (opts.pageTopSafe) {
     sectionClasses.push('page-top-safe');
@@ -2868,6 +2894,16 @@ function renderPdfCardGroup_(contentHtml, options) {
   const opts = options || {};
   const extraClass = opts.compact ? ' compact' : '';
   return `<div class="pdf-card-group${extraClass}">${contentHtml || ''}</div>`;
+}
+
+function renderPdfSectionIntroGroup_(dividerTitle, sectionTitle, contentHtml) {
+  return [
+    '<div class="section section-intro-group">',
+    renderPdfCompactDivider_(dividerTitle),
+    `<h2 class="section-heading">${escapeHtml_(sectionTitle)}</h2>`,
+    `<div class="section-content">${contentHtml || ''}</div>`,
+    '</div>'
+  ].join('');
 }
 
 function renderPdfKeepTogether_(contentHtml) {
@@ -3116,7 +3152,8 @@ function generateProposal() {
 }
 
 function buildProposal_(prospect) {
-  const company = String(prospect.company || '').trim();
+  prospect = normalizeClientProspect_(prospect);
+  const company = prospect.company;
   const website = String(prospect.website || 'Not provided').trim();
   const reportFile = prospect.reportFile || {};
   const scoreContext = getReportScoreContext_(prospect, reportFile);
@@ -3141,7 +3178,7 @@ function buildProposal_(prospect) {
     'SUMMARY OF FINDINGS',
     findingsText,
     '',
-    'RECOMMENDED SERVICE',
+    scoreContext.scoreVerified ? 'RECOMMENDED SERVICE' : 'PRELIMINARY SERVICE OPTION',
     recommendedService,
     '',
     'EXPECTED BUSINESS IMPACT',
@@ -3209,8 +3246,11 @@ function proposalImpactFromService_(recommendedService, prospect) {
       : (classification.type === 'local-service'
         ? 'Expected impact includes clearer service messaging, stronger local-customer trust, easier contact paths, and better conversion from people already reviewing the business.'
         : 'Expected impact includes clearer messaging, stronger audience trust, easier inquiry or engagement paths, and better action from people already reviewing the organization.'));
+  const verified = getReportScoreContext_(prospect || {}, (prospect && prospect.reportFile) || {}).scoreVerified === true;
   return [
-    `The recommended service is ${recommendedService}.`,
+    verified
+      ? `The recommended service is ${recommendedService}.`
+      : `A preliminary service option to confirm during discovery is ${recommendedService}.`,
     impact
   ].join(' ');
 }
