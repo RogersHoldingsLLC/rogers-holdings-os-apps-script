@@ -42,13 +42,21 @@ function buildSystemHealthReport_() {
     'Audit Source',
     'Last Activity',
     'Follow-Up Date',
-    'Next Action'
+    'Next Action',
+    'Prospect ID',
+    'Validation Status',
+    'Inspection Status',
+    'Workflow Status',
+    'Workflow Operation Key',
+    'Review Status'
   ];
   requiredHeaders[ACTIVITY_FEED_SHEET] = [
     'Date',
     'Company',
     'Activity Type',
-    'Activity Notes'
+    'Activity Notes',
+    'Prospect ID',
+    'Operation Key'
   ];
   requiredHeaders[CLIENTS_SHEET] = [
     'Client ID',

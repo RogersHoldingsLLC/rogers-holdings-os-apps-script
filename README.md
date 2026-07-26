@@ -67,6 +67,10 @@ Authoritative runtime sheets:
 
 The scripts create or verify required operational sheets when workflows run.
 
+Prospect-to-Revenue Workflow v1 connects validation, verified website inspection, executive deliverable generation, exact-match Gmail draft reconciliation, Brian review, and recovery for one selected prospect. It never sends email or advances CRM Status during preparation. See `docs/PROSPECT_TO_REVENUE_WORKFLOW.md`.
+
+EBI v1 is already production-released. Prospect-to-Revenue Workflow v1 has passed disposable-workbook acceptance, but its production deployment remains pending separate approval.
+
 CRM lifecycle stages represent confirmed business events. Deliverable generation and Gmail draft creation do not advance CRM Status. Use the explicit Pipeline confirmation actions; Discovery Meeting Scheduled is the sole externally confirmed automatic transition and occurs only after Calendar event creation succeeds.
 
 Lifecycle changes are serialized with a document lock and recorded with durable operation/reconciliation fields on the prospect row. Calendar scheduling stores an operation key and event ID so retries reconcile before inserting. Use **System -> Audit Legacy Lifecycle Values** for a read-only inventory of historical Status and Next Action values; the audit never migrates data.
@@ -234,4 +238,4 @@ Local release-candidate status as of 2026-07-20:
 - menu target verification: passing
 - deployment: not automatic; must be explicitly run
 
-Live acceptance in the disposable workbook, recorded evidence, and final release sign-off are required before production deployment or creation of `v1.0.0`. After an approved deployment, complete the documented production smoke tests before declaring the release final.
+Prospect-to-Revenue Workflow v1 has passed disposable-workbook acceptance with recorded evidence. Final release sign-off and separate production approval are still required before production deployment or creation of `v1.0.0`. After an approved deployment, complete the documented production smoke tests before declaring the release final.

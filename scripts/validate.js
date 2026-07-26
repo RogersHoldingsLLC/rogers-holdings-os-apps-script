@@ -9,6 +9,7 @@ const requiredFiles = [
   'Code.gs',
   'Config.gs',
   'Menu.gs',
+  'ProspectRevenueWorkflow.gs',
   'SheetHelpers.gs',
   'AuditEngine.gs',
   'ExecutiveBusinessIntelligenceEngine.gs',

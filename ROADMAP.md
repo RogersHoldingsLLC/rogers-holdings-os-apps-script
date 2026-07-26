@@ -24,6 +24,10 @@ Required before final release:
 
 ## Version 1.0 Patch Scope
 
+### Prospect-to-Revenue Workflow v1 acceptance
+
+The one-prospect coordinator is implemented on its approved feature branch and has passed disposable-workbook acceptance, including field validation, verified audit reuse, artifact reconciliation, one exact canonical Gmail draft across retries, visible Brian review, manual-send boundaries, Activity Feed correlation, and safe resume. Production deployment remains pending separate approval.
+
 Allowed:
 
 - Bug fixes.

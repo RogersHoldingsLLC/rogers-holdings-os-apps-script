@@ -5,6 +5,9 @@
 
 function onOpen(e) {
   const ui = SpreadsheetApp.getUi();
+  if (typeof ensureProspectRevenueWorkflowSchema_ === 'function') {
+    ensureProspectRevenueWorkflowSchema_(SpreadsheetApp.getActiveSpreadsheet());
+  }
   const developerModeEnabled = typeof isDeveloperModeEnabledReadOnly_ === 'function' &&
     isDeveloperModeEnabledReadOnly_();
   const navigateMenu = ui.createMenu('Navigate')
@@ -16,6 +19,13 @@ function onOpen(e) {
     .addItem('Open Activity Feed', 'openActivityFeedSheet');
 
   const salesMenu = ui.createMenu('Sales Workflow')
+    .addItem('Validate Selected Prospect', 'validateSelectedProspectForRevenue')
+    .addItem('Prepare Prospect for Outreach', 'prepareProspectForOutreach')
+    .addItem('Resume Prospect Workflow', 'resumeProspectRevenueWorkflow')
+    .addItem('Open Prospect Review', 'openProspectRevenueReview')
+    .addItem('Approve for Manual Outreach', 'approveProspectForManualOutreach')
+    .addItem('Request Changes', 'requestProspectRevenueChanges')
+    .addSeparator()
     .addItem('Run Full Prospect Package', 'runFullProspectPackage')
     .addSeparator()
     .addItem('Generate Executive Snapshot', 'generateExecutiveSnapshot')

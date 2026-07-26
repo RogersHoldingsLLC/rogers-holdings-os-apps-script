@@ -8,6 +8,7 @@
     "test:lifecycle": "node scripts/test-crm-lifecycle.js",
     "test:audit-rendering": "node scripts/test-audit-rendering.js",
     "test:ebi": "node scripts/test-executive-business-intelligence.js",
+    "test:prospect-revenue": "node scripts/test-prospect-revenue-workflow.js",
     "acceptance:ebi": "node scripts/test-executive-business-intelligence.js --write-acceptance",
     "test": "node scripts/test-deploy.js",
     "deploy": "node scripts/deploy.js",
