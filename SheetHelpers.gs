@@ -2386,6 +2386,8 @@ function normalizeNextAction_(value, allowedValues) {
     snapshot: ['Generate Executive Snapshot'],
     'review email': ['Create Outreach Draft', 'Follow Up'],
     'review gmail draft': ['Create Outreach Draft', 'Follow Up'],
+    'review outreach': ['Review Outreach', 'Create Outreach Draft'],
+    'confirm executive snapshot sent': ['Confirm Executive Snapshot Sent'],
     'send email': ['Create Outreach Draft'],
     'send intro': ['Create Outreach Draft'],
     'send intro email': ['Create Outreach Draft'],
@@ -3327,7 +3329,16 @@ function buildProspectWorkspaceData_(context) {
     status: getValueByHeader_(values, headers, 'Status'),
     lastActivity: getValueByHeader_(values, headers, 'Last Activity'),
     followUpDate: getValueByHeader_(values, headers, 'Follow-Up Date'),
-    nextAction: getValueByHeader_(values, headers, 'Next Action')
+    nextAction: getValueByHeader_(values, headers, 'Next Action'),
+    prospectId: getValueByHeader_(values, headers, 'Prospect ID'),
+    validationStatus: getValueByHeader_(values, headers, 'Validation Status'),
+    validationDetails: getValueByHeader_(values, headers, 'Validation Details'),
+    inspectionStatus: getValueByHeader_(values, headers, 'Inspection Status'),
+    workflowStatus: getValueByHeader_(values, headers, 'Workflow Status'),
+    workflowDetails: getValueByHeader_(values, headers, 'Workflow Details'),
+    reviewStatus: getValueByHeader_(values, headers, 'Review Status'),
+    reviewedAt: getValueByHeader_(values, headers, 'Reviewed At'),
+    reviewNotes: getValueByHeader_(values, headers, 'Review Notes')
   };
 
   return {
@@ -3559,6 +3570,11 @@ function buildProspectWorkspaceHtml_(workspace) {
           </div>
 
           <div class="actions">
+            <button onclick="runAction('validateSelectedProspectForRevenue')">Validate Selected Prospect</button>
+            <button onclick="runAction('prepareProspectForOutreach')">Prepare Prospect for Outreach</button>
+            <button onclick="runAction('resumeProspectRevenueWorkflow')" class="secondary">Resume Prospect Workflow</button>
+            <button onclick="runAction('approveProspectForManualOutreach')" class="secondary">Approve for Manual Outreach</button>
+            <button onclick="runAction('requestProspectRevenueChanges')" class="secondary">Request Changes</button>
             ${developmentActionsHtml}
             <button onclick="runAction('workspaceGenerateAuditPackage')">Generate Digital Business Assessment</button>
             <button onclick="runAction('workspaceCreateGmailDraft')">Create Outreach Gmail Draft</button>
@@ -3590,10 +3606,23 @@ function buildProspectWorkspaceHtml_(workspace) {
 
           <h2>Pipeline</h2>
           <div class="section grid">
+            ${workspaceFieldHtml_('Prospect ID', prospect.prospectId)}
             ${workspaceFieldHtml_('Status', prospect.status)}
             ${workspaceFieldHtml_('Last Activity', formatDisplayDate_(prospect.lastActivity))}
             ${workspaceFieldHtml_('Follow-Up Date', formatDisplayDate_(prospect.followUpDate))}
             ${workspaceFieldHtml_('Next Action', prospect.nextAction)}
+          </div>
+
+          <h2>Prospect-to-Revenue Readiness</h2>
+          <div class="section grid">
+            ${workspaceFieldHtml_('Validation Status', prospect.validationStatus)}
+            ${workspaceFieldHtml_('Validation Details', prospect.validationDetails)}
+            ${workspaceFieldHtml_('Inspection Status', prospect.inspectionStatus)}
+            ${workspaceFieldHtml_('Workflow Status', prospect.workflowStatus)}
+            ${workspaceFieldHtml_('Workflow Details', prospect.workflowDetails)}
+            ${workspaceFieldHtml_('Review Status', prospect.reviewStatus)}
+            ${workspaceFieldHtml_('Reviewed At', formatDisplayDate_(prospect.reviewedAt))}
+            ${workspaceFieldHtml_('Review Notes', prospect.reviewNotes)}
           </div>
 
           <h2>Client Info</h2>

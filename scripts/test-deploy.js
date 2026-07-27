@@ -78,8 +78,9 @@ async function main() {
         commands.push([command].concat(args).join(' '));
       }
     }));
-    assert.deepStrictEqual(commands.slice(0, 6), [
+    assert.deepStrictEqual(commands.slice(0, 7), [
       'npm run validate',
+      'npm run test:prospect-revenue',
       'npm run test:lifecycle',
       'npm run test:audit-rendering',
       'npm run test:ebi',

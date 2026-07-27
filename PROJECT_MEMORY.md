@@ -8,6 +8,10 @@ The Business Optimization Platform is at Version `1.0.0-rc` (build `2026.07.20-r
 
 Feature development is frozen for V1.0. Current work should focus on release acceptance, bug fixes, documentation, and production readiness.
 
+Prospect-to-Revenue Workflow v1 is implemented on `feature/prospect-to-revenue-workflow-v1` for local validation and disposable-workbook acceptance. It adds a thin coordinator around existing engines, stable Prospect IDs, visible validation/inspection/workflow/review state, Prospect ID and operation-key activity correlation, explicit Brian approval, and deterministic resume behavior. Preparation creates or updates a Gmail draft but cannot send email or advance CRM Status. It has not been deployed to production.
+
+Disposable-workbook acceptance was completed on 2026-07-23. The selected prospect validated as Ready, reused exact Website Audit Tool provenance, reconciled the Executive Snapshot and three-file assessment package, updated one exact-match canonical Gmail draft, surfaced `Needs Brian Review`, recorded explicit approval, and preserved the blank preexisting CRM Status because no external send was confirmed. A resume run reused the same audit and Gmail draft. Live acceptance found and corrected legacy Next Action validation fallback; the repaired run persisted `Review Outreach` and then `Confirm Executive Snapshot Sent`. A stale-review-note reset correction was locally regression-tested and pushed to acceptance after the live run. Production deployment remains pending separate approval.
+
 ## Architecture
 
 The system runs in Google Apps Script attached to a Google Sheet.
@@ -35,7 +39,7 @@ Primary services:
 
 ## Audit Acquisition and Rendering
 
-Client-facing PDF and preview rendering now has an in-memory Executive Business Intelligence layer at the existing `prospect + reportFile` boundary. `ExecutiveBusinessIntelligenceEngine.gs` normalizes available evidence, builds a business profile, performs contextual analysis, prioritizes no more than four evidence-linked opportunities, applies deterministic editorial rules, and generates business-specific narrative. Grounded output defaults to `Needs Consultant Review`; insufficient evidence creates no recommendations and returns `Insufficient Evidence`. The implementation adds no spreadsheet fields, approval action, external AI dependency, or audit/API contract change. See `docs/EXECUTIVE_BUSINESS_INTELLIGENCE_ENGINE.md`.
+EBI v1 is production-released. Client-facing PDF and preview rendering has an in-memory Executive Business Intelligence layer at the existing `prospect + reportFile` boundary. `ExecutiveBusinessIntelligenceEngine.gs` normalizes available evidence, builds a business profile, performs contextual analysis, prioritizes no more than four evidence-linked opportunities, applies deterministic editorial rules, and generates business-specific narrative. Grounded output defaults to `Needs Consultant Review`; insufficient evidence creates no recommendations and returns `Insufficient Evidence`. The implementation adds no spreadsheet fields, approval action, external AI dependency, or audit/API contract change. See `docs/EXECUTIVE_BUSINESS_INTELLIGENCE_ENGINE.md`.
 
 Executive Business Intelligence review state remains internal and is never rendered in client PDFs or previews. Insufficient-evidence results fall back to established client content without warnings or personalized claims. Assessment intelligence is integrated into existing briefing, strength, opportunity, journey, and recommendation paths rather than a duplicate consultation section. The standalone Improvement Plan remains on legacy content because its lifecycle does not persist or reload the reviewed assessment evidence; changing that requires a separately approved lifecycle design.
 

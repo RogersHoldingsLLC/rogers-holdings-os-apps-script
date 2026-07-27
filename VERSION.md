@@ -16,7 +16,7 @@ Target release: `1.0.0` after final acceptance and production approval
 
 ## Release State
 
-Version 1.0 implementation is in release-candidate validation. The candidate is not production-ready or released. Promotion to `1.0.0` remains gated by the documented live Google Workspace acceptance run, final sign-off, a clean release branch, and the guarded production deployment workflow.
+Version 1.0 implementation is in release-candidate validation. EBI v1 is already production-released. Prospect-to-Revenue Workflow v1 has passed disposable-workbook acceptance but has not been deployed to production. Promotion to `1.0.0` remains gated by final sign-off, separate production approval, a clean release branch, and the guarded production deployment workflow.
 
 ## Required Local Checks
 

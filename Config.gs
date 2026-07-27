@@ -202,6 +202,17 @@ var LIFECYCLE_RECONCILIATION_COLUMNS = [
   'Calendar Operation State'
 ];
 
+var PROSPECT_REVENUE_WORKFLOW_COLUMNS = [
+  'Prospect ID', 'Validation Status', 'Validation Details',
+  'Inspection Status', 'Inspection Attempted At', 'Inspection Completed At',
+  'Workflow Status', 'Workflow Operation Key', 'Workflow Details',
+  'Review Status', 'Reviewed At', 'Review Notes',
+  'Audit Package Generated', 'Audit Package Date',
+  'Proposal Generated', 'Gmail Draft Created'
+];
+
+var PROSPECT_REVENUE_ACTIVITY_COLUMNS = ['Prospect ID', 'Operation Key'];
+
 var PIPELINE_STAGE_COLORS = {
   'Lead Found': '#d9d9d9',
   'Executive Snapshot Sent': '#d9d2e9',
@@ -231,6 +242,7 @@ var PROSPECT_DROPDOWN_DEFAULTS = {
   'Next Action': [
     'Generate Executive Snapshot',
     'Create Outreach Draft',
+    'Review Outreach',
     'Confirm Executive Snapshot Sent',
     'Schedule Discovery Meeting',
     'Present Digital Business Assessment',

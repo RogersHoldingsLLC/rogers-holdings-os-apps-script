@@ -1,5 +1,7 @@
 # Executive Business Intelligence Engine
 
+Release state: EBI v1 is production-released.
+
 ## Purpose
 
 The Executive Business Intelligence (EBI) Engine turns verified business and website evidence into a deterministic, business-specific consultation layer. It is designed to make each Business Snapshot, Executive Brief, and Digital Business Assessment reflect the business being reviewed rather than a universal checklist. Improvement Plan personalization remains deferred for the lifecycle reason documented below.

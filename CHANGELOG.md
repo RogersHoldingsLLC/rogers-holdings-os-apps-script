@@ -1,5 +1,28 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- Added Prospect-to-Revenue Workflow v1 for one selected prospect, with stable Prospect IDs, persistent validation, inspection, workflow, recovery, and Brian-review state.
+- Added menu and Prospect Workspace actions to validate, prepare, resume, review, approve for manual outreach, or request changes.
+- Added Activity Feed correlation by Prospect ID and workflow operation key.
+- Added deterministic workflow safety coverage and operator documentation.
+- Reconciled legacy Next Action validation with the canonical review and sent-confirmation actions so workflow state cannot fall back to `Send Intro Email`.
+- Cleared stale approval notes whenever preparation re-enters `Needs Brian Review`.
+
+### Safety
+
+- Prospect preparation reuses the established Website Audit Tool, Drive/PDF, and exact-match Gmail draft engines.
+- Preparation never sends email and never advances confirmed CRM Status.
+- Explicit approval records Brian's decision but still requires manual Gmail sending and the existing sent-confirmation action.
+
+### Acceptance
+
+- Completed a live disposable-workbook one-prospect run covering validation, verified audit reuse, deliverable reconciliation, exact-match Gmail draft update, Prospect Workspace review visibility, explicit approval, Activity Feed correlation, and idempotent resume.
+- Confirmed preparation and approval sent no email and did not advance CRM Status.
+- Verified Gmail contains one exact canonical recipient/subject draft; a separate historical mixed-case `LLc` subject remains a distinct legacy draft and was not modified or deleted.
+
 All notable Business Optimization Platform changes are tracked here.
 
 ## [1.0.0-rc] - Unreleased
