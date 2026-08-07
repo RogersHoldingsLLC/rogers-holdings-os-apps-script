@@ -12,10 +12,10 @@ const context = vm.createContext({ console });
 const validate = context.validateProspectStageTransition_;
 const stages = Array.from(context.PIPELINE_STAGES);
 const allowed = {
-  'Lead Found': ['Executive Snapshot Sent', 'Nurture', 'Lost'],
-  'Executive Snapshot Sent': ['Discovery Meeting Scheduled', 'Nurture', 'Lost'],
-  'Discovery Meeting Scheduled': ['Digital Business Assessment Presented', 'Nurture', 'Lost'],
-  'Digital Business Assessment Presented': ['Improvement Plan Sent', 'Nurture', 'Lost'],
+  'Lead Found': ['Executive Brief Sent', 'Nurture', 'Lost'],
+  'Executive Brief Sent': ['Discovery Meeting Scheduled', 'Nurture', 'Lost'],
+  'Discovery Meeting Scheduled': ['Digital Business Assessment', 'Nurture', 'Lost'],
+  'Digital Business Assessment': ['Improvement Plan Sent', 'Nurture', 'Lost'],
   'Improvement Plan Sent': ['Project Started', 'Nurture', 'Lost'],
   'Project Started': ['Client'],
   'Client': [],
@@ -34,6 +34,10 @@ assert.strictEqual(validate('Nurture', 'Lead Found').allowed, false);
 assert.strictEqual(validate('Nurture', 'Lead Found', { allowNurtureReentry: true }).allowed, true);
 assert.strictEqual(validate('Project Started', 'Nurture').allowed, false);
 assert.strictEqual(validate('Project Started', 'Lost').allowed, false);
+assert.strictEqual(context.normalizePipelineStage_('Executive Snapshot Sent'), 'Executive Brief Sent');
+assert.strictEqual(context.normalizePipelineStage_('Digital Business Assessment Presented'), 'Digital Business Assessment');
+assert.strictEqual(validate('Executive Snapshot Sent', 'Discovery Meeting Scheduled').allowed, true);
+assert.strictEqual(validate('Discovery Meeting Scheduled', 'Digital Business Assessment Presented').allowed, true);
 
 const artifactLabels = ['Draft Created', 'Gmail Draft Created', 'Executive Snapshot Generated', 'Audit Complete', 'Audit Package Sent', 'Proposal Sent', 'Won', 'Active'];
 artifactLabels.forEach((label) => {

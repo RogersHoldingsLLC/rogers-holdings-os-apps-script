@@ -17,7 +17,8 @@
     "backup": "node scripts/backup.js",
     "status": "node scripts/status.js",
     "status:acceptance": "node scripts/status.js acceptance",
-    "status:production": "node scripts/status.js production"
+    "status:production": "node scripts/status.js production",
+    "test:business-snapshot-naming": "node --test tests/*.test.js"
   },
   "devDependencies": {}
 }

@@ -156,7 +156,7 @@ function storeSystemHealthStatus_(report) {
   properties.setProperty('ROGERS_OS_LAST_HEALTH_CHECK_RESULT', report.status || 'Unknown');
   properties.setProperty('ROGERS_OS_LAST_GMAIL_STATUS', getHealthCheckStatusByCheck_(report, 'Gmail permissions available', 'Gmail permissions unavailable'));
   properties.setProperty('ROGERS_OS_LAST_DRIVE_STATUS', getHealthCheckStatusByCheck_(report, 'Drive permissions available', 'Drive permissions unavailable'));
-  properties.setProperty('ROGERS_OS_LAST_PDF_STATUS', getHealthCheckStatusByCheck_(report, 'Audit Report.pdf generation dependencies available', 'Audit Report.pdf dependency check failed'));
+  properties.setProperty('ROGERS_OS_LAST_PDF_STATUS', getHealthCheckStatusByCheck_(report, 'Digital Business Assessment.pdf generation dependencies available', 'Digital Business Assessment.pdf dependency check failed'));
 }
 
 function getHealthCheckStatusByCheck_(report, passCheck, failCheck) {
@@ -193,7 +193,7 @@ function addScriptPropertyHealthChecks_(report) {
   if (auditEndpoint) {
     addHealthItem_(report, 'Pass', 'Audit endpoint script property configured', 'WEBSITE_AUDIT_TOOL_URL or WEBSITE_AUDIT_TOOL_ENDPOINT is available.', 'No action needed.');
   } else {
-    addHealthItem_(report, 'Warning', 'Fresh audit acquisition endpoint not configured', 'WEBSITE_AUDIT_TOOL_URL / WEBSITE_AUDIT_TOOL_ENDPOINT is absent. Local package rendering remains available for prospects with complete, verified audit data.', 'Configure an approved Website Audit Tool endpoint before acquiring fresh real-audit data.');
+    addHealthItem_(report, 'Warning', 'Fresh audit acquisition endpoint not configured', 'WEBSITE_AUDIT_TOOL_URL / WEBSITE_AUDIT_TOOL_ENDPOINT is absent. Local package rendering remains available for prospects with complete, verified audit data.', 'Configure an approved Website Audit Tool API endpoint before acquiring fresh real-audit data.');
   }
 
   if (brandFolderId) {
@@ -272,15 +272,15 @@ function addPdfGenerationDependencyHealthCheck_(report) {
     });
 
     if (missing.length) {
-      addHealthItem_(report, 'Fail', 'Audit Report.pdf dependencies missing', missing.join(', '), 'Restore missing PDF engine helpers before generating audit packages.');
+      addHealthItem_(report, 'Fail', 'Digital Business Assessment.pdf dependencies missing', missing.join(', '), 'Restore missing PDF engine helpers before generating assessment packages.');
       return;
     }
 
     HtmlService.createHtmlOutput('<p>PDF dependency check</p>');
     Utilities.newBlob('PDF dependency check', 'text/html', 'health-check.html');
-    addHealthItem_(report, 'Pass', 'Audit Report.pdf generation dependencies available', 'HTML, blob, Drive, and PDF helper dependencies are present.', 'No action needed.');
+    addHealthItem_(report, 'Pass', 'Digital Business Assessment.pdf generation dependencies available', 'HTML, blob, Drive, and PDF helper dependencies are present.', 'No action needed.');
   } catch (error) {
-    addHealthItem_(report, 'Fail', 'Audit Report.pdf dependency check failed', error && error.message ? error.message : String(error), 'Verify Apps Script services and PDF helper functions.');
+    addHealthItem_(report, 'Fail', 'Digital Business Assessment.pdf dependency check failed', error && error.message ? error.message : String(error), 'Verify Apps Script services and PDF helper functions.');
   }
 }
 
@@ -808,8 +808,8 @@ function getOperatorHealthStatus_(status) {
 function getOperatorHealthCheckName_(technicalName) {
   const name = String(technicalName || 'System check');
   const exactNames = {
-    'Audit endpoint script property configured': 'Website Audit Tool connection ready',
-    'Fresh audit acquisition endpoint not configured': 'Website Audit Tool connection needs setup',
+    'Audit endpoint script property configured': 'Website Audit Tool API connection ready',
+    'Fresh audit acquisition endpoint not configured': 'Website Audit Tool API connection needs setup',
     'Brand asset folder script property configured': 'Brand assets configured',
     'Brand asset folder script property not configured': 'Brand assets need setup',
     'Brand Asset Folder reachable': 'Brand assets available',
@@ -819,9 +819,9 @@ function getOperatorHealthCheckName_(technicalName) {
     'Drive permissions unavailable': 'Google Drive access needs attention',
     'Gmail permissions available': 'Gmail access ready',
     'Gmail permissions unavailable': 'Gmail access needs attention',
-    'Audit Report.pdf generation dependencies available': 'Document generation ready',
-    'Audit Report.pdf dependencies missing': 'Document generation needs attention',
-    'Audit Report.pdf dependency check failed': 'Document generation needs attention'
+    'Digital Business Assessment.pdf generation dependencies available': 'Document generation ready',
+    'Digital Business Assessment.pdf dependencies missing': 'Document generation needs attention',
+    'Digital Business Assessment.pdf dependency check failed': 'Document generation needs attention'
   };
   if (exactNames[name]) return exactNames[name];
   return name

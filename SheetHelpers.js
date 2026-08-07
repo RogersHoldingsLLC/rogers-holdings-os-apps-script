@@ -23,8 +23,16 @@ function updateSelectedProspectFollowUpDate_(sheet, headers, selectedRow, daysFr
 }
 
 function refreshSalesOperatingSystem_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
   standardizeMasterProspectTrackerColumns_();
+  ensureMasterProspectAuditSourceColumn_();
   ensureAuditPackageColumns_();
+  getOrCreateClientsSheet_(ss);
+  getOrCreateClientWorkspaceSheet_(ss);
+  getOrCreateDailyFrictionLogSheet_(ss);
+  getOrCreateProductFeedbackSheet_(ss);
+  refreshFollowUps();
+  refreshProjects();
   updatePipelineDashboardMetrics_();
   refreshExecutiveDashboard();
   applyPipelineStatusConditionalFormatting_();
@@ -32,47 +40,2317 @@ function refreshSalesOperatingSystem_() {
   applyRogersHoldingsVisualDesign_();
 }
 
-function advanceProspectStage() {
-  const context = getSelectedProspectContext_(['Company', 'Status']);
+function resetTestData() {
+  const ui = SpreadsheetApp.getUi();
+  if (!isDeveloperModeEnabledReadOnly_()) {
+    ui.alert(
+      'Business Optimization Platform',
+      'Reset Test Data is available only in Developer Mode.',
+      ui.ButtonSet.OK
+    );
+    return;
+  }
+  const response = ui.alert(
+    'Reset Test Data',
+    'This will delete test, prospect, client, Follow-Up, project, and activity data but preserve Business Optimization Platform structure. Continue?',
+    ui.ButtonSet.YES_NO
+  );
+
+  if (response !== ui.Button.YES) {
+    return;
+  }
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const results = [];
+  results.push(clearResetTableData_(ss, MASTER_PROSPECT_SHEET, ['Company']));
+  results.push(clearResetTableData_(ss, CLIENTS_SHEET, ['Company']));
+  results.push(clearResetTableData_(ss, FOLLOW_UPS_SHEET, ['Follow-Up ID']));
+  results.push(clearResetTableData_(ss, PROJECTS_SHEET, ['Project ID']));
+  results.push(clearResetTableData_(ss, ACTIVITY_FEED_SHEET, ['Date', 'Company', 'Activity Type']));
+  results.push(clearDashboardMetricsDemoRows_(ss));
+  results.push(clearResetWorkspaceContent_(ss, 'Prospect Workspace'));
+  results.push(clearResetWorkspaceContent_(ss, CLIENT_WORKSPACE_SHEET));
+
+  refreshFollowUps();
+  refreshProjects();
+  updatePipelineDashboardMetrics_();
+  refreshClientWorkspaceAfterTestReset_(ss);
+
+  if (ss.getSheetByName(ACTIVITY_FEED_SHEET)) {
+    logPipelineActivity_(
+      ss,
+      'Business Optimization Platform',
+      'System Reset',
+      'Reset Test Data cleared operational records while preserving workbook structure.'
+    );
+  }
+
+  refreshExecutiveDashboard();
+  applyRogersHoldingsVisualDesign_();
+
+  const clearedRows = results.reduce(function(total, result) {
+    return total + (result && result.rowsCleared ? result.rowsCleared : 0);
+  }, 0);
+  const summary = results
+    .filter(function(result) {
+      return result && result.sheet;
+    })
+    .map(function(result) {
+      return `${result.sheet}: ${result.rowsCleared || 0} row(s)`;
+    })
+    .join('\n');
+
+  ui.alert(
+    'Business Optimization Platform',
+    `Reset Test Data complete.\n\nRows cleared: ${clearedRows}\n${summary}`,
+    ui.ButtonSet.OK
+  );
+}
+
+function repairInvalidDropdownValues() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ui = SpreadsheetApp.getUi();
+  const sheet = ss.getSheetByName(MASTER_PROSPECT_SHEET);
+  if (!sheet) {
+    ui.alert('Business Optimization Platform', 'Master Prospect Tracker not found.', ui.ButtonSet.OK);
+    return;
+  }
+
+  const table = getHeaderTable_(sheet, ['Company']);
+  const result = repairInvalidDropdownValuesForSheet_(sheet, table);
+  if (result.changedCells > 0) {
+    logPipelineActivity_(
+      ss,
+      'Business Optimization Platform',
+      'Dropdown Values Repaired',
+      `Repaired ${result.changedCells} invalid dropdown value(s) across ${result.changedRows} prospect row(s).`
+    );
+  }
+  refreshExecutiveDashboard();
+
+  ui.alert(
+    'Business Optimization Platform',
+    `Dropdown repair complete.\n\nCells repaired: ${result.changedCells}\nRows affected: ${result.changedRows}`,
+    ui.ButtonSet.OK
+  );
+}
+
+function auditLegacyLifecycleValues() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(MASTER_PROSPECT_SHEET);
+  if (!sheet) {
+    SpreadsheetApp.getUi().alert('Business Optimization Platform', 'Master Prospect Tracker not found.', SpreadsheetApp.getUi().ButtonSet.OK);
+    return [];
+  }
+  const table = getHeaderTable_(sheet, ['Company', 'Status']);
+  const findings = inventoryLegacyLifecycleValues_(sheet, table);
+  const rows = findings.length
+    ? findings.map(function(item) { return `<tr><td>${item.row}</td><td>${escapeHtml_(item.company)}</td><td>${escapeHtml_(item.field)}</td><td>${escapeHtml_(item.value)}</td></tr>`; }).join('')
+    : '<tr><td colspan="4">No unrecognized lifecycle values found.</td></tr>';
+  const html = HtmlService.createHtmlOutput(
+    '<div style="font-family:Arial,sans-serif;padding:16px"><h2>Legacy Lifecycle Audit</h2>' +
+    '<p>This report is read-only. Artifact labels are not converted into confirmed customer events.</p>' +
+    '<table style="border-collapse:collapse;width:100%"><tr><th>Row</th><th>Company</th><th>Field</th><th>Unrecognized value</th></tr>' + rows + '</table></div>'
+  ).setWidth(720).setHeight(520);
+  SpreadsheetApp.getUi().showModalDialog(html, 'Business Optimization Platform');
+  return findings;
+}
+
+function inventoryLegacyLifecycleValues_(sheet, table) {
+  const rowCount = Math.max(sheet.getLastRow() - table.headerRow, 0);
+  if (!rowCount) return [];
+  const values = sheet.getRange(table.headerRow + 1, 1, rowCount, table.lastColumn).getValues();
+  const allowedNextActions = PROSPECT_DROPDOWN_DEFAULTS['Next Action'];
+  const findings = [];
+  values.forEach(function(row, index) {
+    const company = String(getValueByHeader_(row, table.headers, 'Company') || '').trim();
+    if (!company) return;
+    const status = String(getValueByHeader_(row, table.headers, 'Status') || '').trim();
+    const nextAction = String(getValueByHeader_(row, table.headers, 'Next Action') || '').trim();
+    if (status && PIPELINE_STAGES.indexOf(status) === -1) findings.push({ row: table.headerRow + 1 + index, company: company, field: 'Status', value: status });
+    if (nextAction && !inferAllowedDropdownValue_(allowedNextActions, nextAction)) findings.push({ row: table.headerRow + 1 + index, company: company, field: 'Next Action', value: nextAction });
+  });
+  return findings;
+}
+
+function repairInvalidDropdownValuesForSheet_(sheet, table) {
+  const headers = table.headers;
+  const dataStartRow = table.headerRow + 1;
+  const rowCount = Math.max(sheet.getLastRow() - table.headerRow, 0);
+  const targetHeaders = getProspectDropdownRepairHeaders_(headers);
+  if (rowCount <= 0 || !targetHeaders.length) {
+    return {
+      changedCells: 0,
+      changedRows: 0
+    };
+  }
+
+  const values = sheet.getRange(dataStartRow, 1, rowCount, table.lastColumn).getValues();
+  let changedCells = 0;
+  const changedRows = {};
+
+  values.forEach(function(rowValues, rowIndex) {
+    targetHeaders.forEach(function(header) {
+      const columnIndex = headers[header] - 1;
+      const originalValue = rowValues[columnIndex];
+      if (originalValue === null || originalValue === undefined || String(originalValue).trim() === '') {
+        return;
+      }
+
+      const normalizedValue = normalizeProspectDropdownValue_(sheet, headers, header, originalValue);
+      if (String(normalizedValue || '').trim() !== String(originalValue || '').trim()) {
+        rowValues[columnIndex] = normalizedValue;
+        changedCells += 1;
+        changedRows[dataStartRow + rowIndex] = true;
+      }
+    });
+  });
+
+  if (changedCells > 0) {
+    sheet.getRange(dataStartRow, 1, rowCount, table.lastColumn).setValues(values);
+  }
+
+  return {
+    changedCells: changedCells,
+    changedRows: Object.keys(changedRows).length
+  };
+}
+
+function getProspectDropdownRepairHeaders_(headers) {
+  return [
+    'Audit Outcome',
+    'Priority Tier',
+    'Status',
+    'Next Action',
+    'Offer / Service',
+    'Moved to CRM'
+  ].filter(function(header) {
+    return !!headers[header];
+  });
+}
+
+function findInvalidProspectDropdownValues_(sheet, table) {
+  const headers = table.headers;
+  const dataStartRow = table.headerRow + 1;
+  const rowCount = Math.max(sheet.getLastRow() - table.headerRow, 0);
+  const targetHeaders = getProspectDropdownRepairHeaders_(headers);
+  const issues = [];
+  if (rowCount <= 0 || !targetHeaders.length) {
+    return issues;
+  }
+
+  const allowedByHeader = targetHeaders.reduce(function(result, header) {
+    result[header] = approvedProspectDropdownValues_(
+      getApprovedProspectDropdownValues_(sheet, headers, header),
+      header
+    );
+    return result;
+  }, {});
+  const values = sheet.getRange(dataStartRow, 1, rowCount, table.lastColumn).getValues();
+  values.forEach(function(rowValues, rowIndex) {
+    targetHeaders.forEach(function(header) {
+      const value = getValueByHeader_(rowValues, headers, header);
+      const text = String(value || '').trim();
+      if (!text) {
+        return;
+      }
+
+      const allowedValues = allowedByHeader[header] || [];
+      if (!inferAllowedDropdownValue_(allowedValues, text)) {
+        issues.push({
+          row: dataStartRow + rowIndex,
+          header: header,
+          value: text,
+          suggestedValue: normalizeProspectDropdownValue_(sheet, headers, header, text)
+        });
+      }
+    });
+  });
+
+  return issues;
+}
+
+function clearResetTableData_(ss, sheetName, requiredHeaders) {
+  const sheet = ss.getSheetByName(sheetName);
+  if (!sheet) {
+    return {
+      sheet: sheetName,
+      rowsCleared: 0,
+      skipped: true
+    };
+  }
+
+  try {
+    return {
+      sheet: sheetName,
+      rowsCleared: clearAllRowsBelowHeaderPreservingFormulas_(sheet, requiredHeaders || [])
+    };
+  } catch (error) {
+    console.warn(
+      `Reset Test Data skipped "${sheetName}": ` +
+      (error && error.message ? error.message : String(error))
+    );
+    return {
+      sheet: sheetName,
+      rowsCleared: 0,
+      skipped: true
+    };
+  }
+}
+
+function clearDashboardMetricsDemoRows_(ss) {
+  const sheet = ss.getSheetByName(DASHBOARD_METRICS_SHEET);
+  if (!sheet) {
+    return {
+      sheet: DASHBOARD_METRICS_SHEET,
+      rowsCleared: 0,
+      skipped: true
+    };
+  }
+
+  try {
+    const table = getHealthHeaderTable_(sheet);
+    const dataStartRow = table.headerRow + 1;
+    const rowCount = Math.max(sheet.getLastRow() - dataStartRow + 1, 0);
+    if (rowCount <= 0) {
+      return {
+        sheet: DASHBOARD_METRICS_SHEET,
+        rowsCleared: 0
+      };
+    }
+
+    const lastColumn = Math.max(table.lastColumn, sheet.getLastColumn());
+    const range = sheet.getRange(dataStartRow, 1, rowCount, lastColumn);
+    const values = range.getDisplayValues();
+    let clearedRows = 0;
+
+    values.forEach(function(row, index) {
+      const rowText = row.join(' ').toLowerCase();
+      if (!/\b(demo reset|demo data|sample data|test data)\b/.test(rowText)) {
+        return;
+      }
+
+      const rowRange = sheet.getRange(dataStartRow + index, 1, 1, lastColumn);
+      const formulas = rowRange.getFormulas();
+      rowRange.clearContent();
+      restoreFormulas_(rowRange, formulas);
+      clearedRows += 1;
+    });
+
+    return {
+      sheet: DASHBOARD_METRICS_SHEET,
+      rowsCleared: clearedRows
+    };
+  } catch (error) {
+    console.warn(
+      'Reset Test Data skipped Dashboard Metrics demo rows: ' +
+      (error && error.message ? error.message : String(error))
+    );
+    return {
+      sheet: DASHBOARD_METRICS_SHEET,
+      rowsCleared: 0,
+      skipped: true
+    };
+  }
+}
+
+function clearResetWorkspaceContent_(ss, sheetName) {
+  const sheet = ss.getSheetByName(sheetName);
+  if (!sheet) {
+    return {
+      sheet: sheetName,
+      rowsCleared: 0,
+      skipped: true
+    };
+  }
+
+  try {
+    const startRow = 4;
+    const rowCount = Math.max(sheet.getLastRow() - startRow + 1, 0);
+    const columnCount = Math.max(sheet.getLastColumn(), 1);
+    if (rowCount <= 0) {
+      return {
+        sheet: sheetName,
+        rowsCleared: 0
+      };
+    }
+
+    const range = sheet.getRange(startRow, 1, rowCount, columnCount);
+    const formulas = range.getFormulas();
+    range.clearContent();
+    restoreFormulas_(range, formulas);
+    return {
+      sheet: sheetName,
+      rowsCleared: rowCount
+    };
+  } catch (error) {
+    console.warn(
+      `Reset Test Data skipped workspace "${sheetName}": ` +
+      (error && error.message ? error.message : String(error))
+    );
+    return {
+      sheet: sheetName,
+      rowsCleared: 0,
+      skipped: true
+    };
+  }
+}
+
+function refreshClientWorkspaceAfterTestReset_(ss) {
+  const workspaceSheet = getOrCreateClientWorkspaceSheet_(ss);
+  renderClientWorkspace_(workspaceSheet, buildEmptyClientWorkspaceModel_());
+}
+
+function buildEmptyClientWorkspaceModel_() {
+  return {
+    clientId: '',
+    company: 'No Client Selected',
+    contact: '',
+    email: '',
+    phone: '',
+    website: '',
+    industry: '',
+    servicePackage: '',
+    status: '',
+    assignedTo: '',
+    currentProject: '',
+    projectStatus: '',
+    dueDate: '',
+    lastActivity: '',
+    notes: 'Select a client row to populate this workspace.',
+    activity: [],
+    documents: [],
+    followUps: [],
+    projects: []
+  };
+}
+
+function openExecutiveDashboard() {
+  openBusinessOptimizationPlatformSheet_('Executive Dashboard', true);
+}
+
+function openMasterProspectTracker() {
+  openBusinessOptimizationPlatformSheet_(MASTER_PROSPECT_SHEET, true);
+}
+
+function openClientsSheet() {
+  getOrCreateClientsSheet_(SpreadsheetApp.getActiveSpreadsheet());
+  openBusinessOptimizationPlatformSheet_(CLIENTS_SHEET, true);
+}
+
+function openFollowUpsSheet() {
+  getOrCreateFollowUpsSheet_(SpreadsheetApp.getActiveSpreadsheet());
+  openBusinessOptimizationPlatformSheet_(FOLLOW_UPS_SHEET, true);
+}
+
+function openProjectsSheet() {
+  getOrCreateProjectsSheet_(SpreadsheetApp.getActiveSpreadsheet());
+  openBusinessOptimizationPlatformSheet_(PROJECTS_SHEET, true);
+}
+
+function openActivityFeedSheet() {
+  openBusinessOptimizationPlatformSheet_(ACTIVITY_FEED_SHEET, true);
+}
+
+function openDailyFrictionLog() {
+  getOrCreateDailyFrictionLogSheet_(SpreadsheetApp.getActiveSpreadsheet());
+  openBusinessOptimizationPlatformSheet_(DAILY_FRICTION_LOG_SHEET, true);
+}
+
+function openProductFeedback() {
+  getOrCreateProductFeedbackSheet_(SpreadsheetApp.getActiveSpreadsheet());
+  openBusinessOptimizationPlatformSheet_(PRODUCT_FEEDBACK_SHEET, true);
+}
+
+function openBusinessOptimizationPlatformSheet_(sheetName, showAlert) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(sheetName);
+  if (!sheet) {
+    if (showAlert) {
+      SpreadsheetApp.getUi().alert('Business Optimization Platform', `Sheet not found: ${sheetName}`, SpreadsheetApp.getUi().ButtonSet.OK);
+    }
+    return;
+  }
+
+  ss.setActiveSheet(sheet);
+}
+
+function createFollowUp() {
+  const context = getSelectedFollowUpSourceContext_(true);
   if (!context) {
     return;
   }
 
-  const currentStage = normalizePipelineStage_(getValueByHeader_(context.values, context.table.headers, 'Status'));
-  const nextStage = getNextPipelineStage_(currentStage);
+  const ui = SpreadsheetApp.getUi();
+  const typePrompt = ui.prompt('Create Follow-Up', 'Follow-Up Type', ui.ButtonSet.OK_CANCEL);
+  if (typePrompt.getSelectedButton() !== ui.Button.OK) {
+    return;
+  }
 
-  setProspectStatus_(context.sheet, context.table.headers, context.selectedRow, nextStage);
-  updateSelectedProspectLastActivity_(context.sheet, context.table.headers, context.selectedRow);
-  logPipelineActivity_(context.ss, context.prospect.company, 'Prospect Stage Advanced', `Advanced prospect stage from ${currentStage || 'Unassigned'} to ${nextStage}.`);
+  const duePrompt = ui.prompt('Create Follow-Up', 'Due date, for example 2026-06-30. Leave blank for today.', ui.ButtonSet.OK_CANCEL);
+  if (duePrompt.getSelectedButton() !== ui.Button.OK) {
+    return;
+  }
+
+  const dueDate = parseDateInputOrToday_(duePrompt.getResponseText());
+  if (!dueDate) {
+    ui.alert('Business Optimization Platform', 'Enter a valid due date, then run Create Follow-Up again.', ui.ButtonSet.OK);
+    return;
+  }
+
+  const result = upsertOpenFollowUp_(context.ss, {
+    company: context.company,
+    contact: context.contact,
+    email: context.email,
+    relatedProspectId: context.prospectId,
+    relatedClientId: context.clientId,
+    currentStatus: context.status,
+    followUpType: String(typePrompt.getResponseText() || 'Follow-Up').trim() || 'Follow-Up',
+    dueDate: dueDate,
+    priority: context.priority,
+    assignedTo: getRogersContactInfo_().name,
+    notes: 'Manual Follow-Up created.'
+  });
+
+  logPipelineActivity_(context.ss, context.company, result.created ? 'Follow-Up Created' : 'Follow-Up Updated', `${result.followUpType} due ${formatDisplayDate_(dueDate)}.`);
   refreshSalesOperatingSystem_();
+  ui.alert('Business Optimization Platform', result.created ? 'Follow-Up created.' : 'Existing open Follow-Up updated.', ui.ButtonSet.OK);
+}
 
-  SpreadsheetApp.getUi().alert('Business Optimization Platform', `Prospect advanced to ${nextStage}.`, SpreadsheetApp.getUi().ButtonSet.OK);
+function completeFollowUp() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ui = SpreadsheetApp.getUi();
+  const activeSheet = ss.getActiveSheet();
+  const followUpSheet = getOrCreateFollowUpsSheet_(ss);
+  const table = ensureFollowUpColumns_(followUpSheet);
+  let completedCount = 0;
+  let company = '';
+
+  if (activeSheet && activeSheet.getName() === FOLLOW_UPS_SHEET && activeSheet.getActiveRange().getRow() > table.headerRow) {
+    const rowNumber = activeSheet.getActiveRange().getRow();
+    const values = followUpSheet.getRange(rowNumber, 1, 1, table.lastColumn).getValues()[0];
+    company = getValueByHeader_(values, table.headers, 'Company');
+    markFollowUpRowCompleted_(followUpSheet, table.headers, rowNumber);
+    completedCount = 1;
+  } else {
+    const context = getSelectedFollowUpSourceContext_(true);
+    if (!context) {
+      return;
+    }
+
+    company = context.company;
+    completedCount = completeOpenFollowUpsForCompany_(ss, context.company);
+  }
+
+  if (!completedCount) {
+    ui.alert('No Open Follow-Ups', 'There are no open Follow-Ups for the selected record. No changes were made.', ui.ButtonSet.OK);
+    return;
+  }
+
+  logPipelineActivity_(ss, company, 'Follow-Up Completed', `${completedCount} Follow-Up task(s) completed.`);
+  refreshSalesOperatingSystem_();
+  ui.alert('Follow-Up Complete', 'The Follow-Up has been completed and the activity record is up to date.', ui.ButtonSet.OK);
+}
+
+function refreshFollowUps() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = getOrCreateFollowUpsSheet_(ss);
+  const table = ensureFollowUpColumns_(sheet);
+  refreshFollowUpDaysUntilDue_(sheet, table.headers);
+  formatFollowUpsSheet_(sheet, table.headers);
+}
+
+function getOrCreateFollowUpsSheet_(ss) {
+  let sheet = ss.getSheetByName(FOLLOW_UPS_SHEET);
+  if (!sheet) {
+    sheet = ss.insertSheet(FOLLOW_UPS_SHEET);
+  }
+
+  ensureFollowUpColumns_(sheet);
+  return sheet;
+}
+
+function ensureFollowUpColumns_(sheet) {
+  if (sheet.getMaxColumns() < FOLLOW_UP_COLUMNS.length) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), FOLLOW_UP_COLUMNS.length - sheet.getMaxColumns());
+  }
+  const headerRow = findBestHeaderRow_(sheet);
+  const headerValues = sheet.getRange(headerRow, 1, 1, Math.max(sheet.getLastColumn(), FOLLOW_UP_COLUMNS.length)).getValues()[0];
+  const headers = {};
+
+  headerValues.forEach(function(value, index) {
+    const header = String(value || '').trim();
+    if (header && !headers[header]) {
+      headers[header] = index + 1;
+    }
+  });
+
+  if (!Object.keys(headers).length) {
+    sheet.getRange(headerRow, 1, 1, FOLLOW_UP_COLUMNS.length).setValues([FOLLOW_UP_COLUMNS]);
+    FOLLOW_UP_COLUMNS.forEach(function(header, index) {
+      headers[header] = index + 1;
+    });
+  }
+
+  let lastColumn = Math.max(sheet.getLastColumn(), 1);
+  FOLLOW_UP_COLUMNS.forEach(function(header) {
+    if (headers[header]) {
+      return;
+    }
+    lastColumn += 1;
+    sheet.getRange(headerRow, lastColumn).setValue(header);
+    headers[header] = lastColumn;
+  });
+
+  sheet.getRange(headerRow, 1, 1, lastColumn)
+    .setBackground(BUSINESS_OPTIMIZATION_PLATFORM_THEME.black)
+    .setFontColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.gold)
+    .setFontWeight('bold');
+  sheet.setFrozenRows(headerRow);
+  sheet.setTabColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.gold);
+
+  return {
+    headerRow: headerRow,
+    headers: headers,
+    lastColumn: lastColumn
+  };
+}
+
+function syncFollowUpForProspectRow_(ss, sheet, headers, selectedRow, status) {
+  if (!sheet || sheet.getName() !== MASTER_PROSPECT_SHEET || !selectedRow || selectedRow <= findBestHeaderRow_(sheet)) {
+    return;
+  }
+
+  const normalizedStatus = normalizePipelineStage_(status) || String(status || '').trim();
+  const rule = getFollowUpRuleForStatus_(normalizedStatus);
+  const values = sheet.getRange(selectedRow, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const company = String(getValueByHeader_(values, headers, 'Company') || '').trim();
+  if (!company) {
+    return;
+  }
+
+  let followUp = null;
+  let existingExpectedFollowUp = null;
+  if (rule && !rule.archive) {
+    const dueDate = getFollowUpDueDateForRule_(rule, values, headers);
+    followUp = {
+      company: company,
+      contact: getValueByHeader_(values, headers, 'Contact'),
+      email: getValueByHeader_(values, headers, 'Email'),
+      relatedProspectId: getValueByHeader_(values, headers, 'Prospect ID') || `MPT-${selectedRow}`,
+      relatedClientId: '', currentStatus: normalizedStatus, followUpType: rule.type, dueDate: dueDate,
+      priority: getValueByHeader_(values, headers, 'Priority Tier') || rule.priority,
+      assignedTo: getRogersContactInfo_().name, notes: rule.notes
+    };
+    const followUpSheet = getOrCreateFollowUpsSheet_(ss);
+    const followUpTable = ensureFollowUpColumns_(followUpSheet);
+    existingExpectedFollowUp = findOpenFollowUp_(followUpSheet, followUpTable.headers, followUp);
+    if (existingExpectedFollowUp) return;
+  }
+
+  const completedCount = completeOpenFollowUpsForCompany_(ss, company);
+  if (completedCount) {
+    logPipelineActivity_(ss, company, 'Follow-Up Completed', `${completedCount} previous open Follow-Up task(s) completed after status changed to ${normalizedStatus}.`);
+  }
+  if (!rule || rule.archive) {
+    if (rule && rule.archive) {
+      logPipelineActivity_(ss, company, 'Follow-Up Archived', 'Open Follow-Ups completed because the record moved to Lost.');
+    }
+    return;
+  }
+
+  const result = upsertOpenFollowUp_(ss, followUp);
+
+  logPipelineActivity_(ss, company, result.created ? 'Follow-Up Created' : 'Follow-Up Updated', `${rule.type} due ${formatDisplayDate_(followUp.dueDate)}.`);
+}
+
+/**
+ * Appends the Follow-Up required by Business Snapshot intake without reconciling
+ * or completing any existing Follow-Up. The caller supplies immutable
+ * identifiers so a failed intake can compensate by exact identity.
+ */
+function appendBusinessSnapshotFollowUp_(ss, followUpSheet, sheet, headers, selectedRow, prospectId, followUpId, activityOperationKey, dateContext) {
+  const values = sheet.getRange(selectedRow, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const exactProspectId = String(prospectId || '').trim();
+  if (!exactProspectId ||
+      String(getValueByHeader_(values, headers, 'Prospect ID') || '').trim() !== exactProspectId) {
+    throw new Error('Business Snapshot Follow-Up requires the exact tracker Prospect ID.');
+  }
+
+  const table = getHeaderTable_(followUpSheet, FOLLOW_UP_COLUMNS);
+  const existingId = findRowsByExactHeaderValue_(followUpSheet, table, 'Follow-Up ID', followUpId);
+  if (existingId.length) {
+    throw new Error('Business Snapshot Follow-Up ID collision.');
+  }
+
+  const company = String(getValueByHeader_(values, headers, 'Company') || '').trim();
+  const dueDate = dateContext && dateContext.dueDate;
+  const daysUntilDue = dateContext && dateContext.daysUntilDue;
+  if (!(dueDate instanceof Date) || Number.isNaN(dueDate.getTime()) || daysUntilDue !== 0) {
+    throw new Error('Business Snapshot Follow-Up requires a normalized date context.');
+  }
+  const rowValues = new Array(table.lastColumn).fill('');
+  setIfHeader_(rowValues, table.headers, 'Follow-Up ID', followUpId);
+  setIfHeader_(rowValues, table.headers, 'Company', company);
+  setIfHeader_(rowValues, table.headers, 'Contact', getValueByHeader_(values, headers, 'Contact'));
+  setIfHeader_(rowValues, table.headers, 'Email', getValueByHeader_(values, headers, 'Email'));
+  setIfHeader_(rowValues, table.headers, 'Related Prospect ID', exactProspectId);
+  setIfHeader_(rowValues, table.headers, 'Related Client ID', '');
+  setIfHeader_(rowValues, table.headers, 'Current Status', 'Lead Found');
+  setIfHeader_(rowValues, table.headers, 'Follow-Up Type', 'Executive Brief');
+  setIfHeader_(rowValues, table.headers, 'Due Date', dueDate);
+  setIfHeader_(rowValues, table.headers, 'Days Until Due', daysUntilDue);
+  setIfHeader_(rowValues, table.headers, 'Priority', 'A - Hot');
+  setIfHeader_(rowValues, table.headers, 'Assigned To', getRogersContactInfo_().name);
+  setIfHeader_(rowValues, table.headers, 'Notes', 'Generate Executive Brief today.');
+  setIfHeader_(rowValues, table.headers, 'Completed', false);
+  setIfHeader_(rowValues, table.headers, 'Completed Date', '');
+
+  const targetRow = Math.max(followUpSheet.getLastRow() + 1, table.headerRow + 1);
+  followUpSheet.getRange(targetRow, 1, 1, table.lastColumn)
+    .setValues([literalizeBusinessSnapshotSheetRow_(rowValues)]);
+
+  logBusinessSnapshotFollowUpActivity_(
+    ss,
+    company,
+    exactProspectId,
+    activityOperationKey
+  );
+
+  return {
+    followUpId: followUpId,
+    prospectId: exactProspectId
+  };
+}
+
+function generateUniqueBusinessSnapshotFollowUpId_(followUpSheet, company) {
+  const table = getHeaderTable_(followUpSheet, ['Follow-Up ID']);
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const clean = String(company || 'FOLLOWUP')
+      .replace(/[^A-Za-z0-9]/g, '')
+      .toUpperCase()
+      .slice(0, 8) || 'FOLLOWUP';
+    const timestamp = Utilities.formatDate(
+      new Date(),
+      BUSINESS_SNAPSHOT_TIME_ZONE,
+      'yyyyMMddHHmmss'
+    );
+    const uniqueSuffix = Utilities.getUuid().replace(/-/g, '').slice(0, 8).toUpperCase();
+    const candidate = `FU-${clean}-${timestamp}-${uniqueSuffix}`;
+    if (!findRowsByExactHeaderValue_(followUpSheet, table, 'Follow-Up ID', candidate).length) {
+      return candidate;
+    }
+  }
+  throw new Error('Unable to generate a unique Business Snapshot Follow-Up ID.');
+}
+
+function logBusinessSnapshotFollowUpActivity_(ss, company, prospectId, operationKey) {
+  const sheet = getRequiredSheet_(ss, ACTIVITY_FEED_SHEET);
+  const table = getHeaderTable_(sheet, [
+    'Date', 'Company', 'Activity Type', 'Activity Notes', 'Prospect ID', 'Operation Key'
+  ]);
+  const rowValues = new Array(table.lastColumn).fill('');
+  setIfHeader_(rowValues, table.headers, 'Date', new Date());
+  setIfHeader_(rowValues, table.headers, 'Company', company);
+  setIfHeader_(rowValues, table.headers, 'Activity Type', 'Follow-Up Created');
+  setIfHeader_(rowValues, table.headers, 'Activity Notes', 'Executive Brief Follow-Up created.');
+  setIfHeader_(rowValues, table.headers, 'Prospect ID', prospectId);
+  setIfHeader_(rowValues, table.headers, 'Operation Key', operationKey);
+  const targetRow = Math.max(sheet.getLastRow() + 1, table.headerRow + 1);
+  sheet.getRange(targetRow, 1, 1, table.lastColumn)
+    .setValues([literalizeBusinessSnapshotSheetRow_(rowValues)]);
+}
+
+function findRowsByExactHeaderValue_(sheet, table, header, expected) {
+  const start = table.headerRow + 1;
+  const count = Math.max(sheet.getLastRow() - table.headerRow, 0);
+  if (!count || !table.headers[header]) return [];
+  const values = sheet.getRange(start, table.headers[header], count, 1).getDisplayValues();
+  return values.reduce(function(rows, row, index) {
+    if (String(row[0] || '').trim() === String(expected || '').trim()) rows.push(start + index);
+    return rows;
+  }, []);
+}
+
+function syncFollowUpForClient_(ss, clientValues, clientHeaders) {
+  const company = firstNonBlank_([
+    getValueByHeader_(clientValues, clientHeaders, 'Company'),
+    getValueByHeader_(clientValues, clientHeaders, 'Client Name')
+  ]);
+  if (!company) {
+    return;
+  }
+
+  const dueDate = startOfDay_(new Date());
+  const followUp = {
+    company: company,
+    contact: getValueByHeader_(clientValues, clientHeaders, 'Contact'),
+    email: getValueByHeader_(clientValues, clientHeaders, 'Email'),
+    relatedProspectId: '',
+    relatedClientId: getValueByHeader_(clientValues, clientHeaders, 'Client ID'),
+    currentStatus: getValueByHeader_(clientValues, clientHeaders, 'Status') || 'Active',
+    followUpType: 'Client Welcome Task',
+    dueDate: dueDate,
+    priority: 'A - Hot',
+    assignedTo: getRogersContactInfo_().name,
+    notes: 'Welcome client and confirm onboarding next steps.'
+  };
+  const followUpSheet = getOrCreateFollowUpsSheet_(ss);
+  const followUpTable = ensureFollowUpColumns_(followUpSheet);
+  if (findOpenFollowUp_(followUpSheet, followUpTable.headers, followUp)) return;
+  const result = upsertOpenFollowUp_(ss, followUp);
+
+  logPipelineActivity_(ss, company, result.created ? 'Follow-Up Created' : 'Follow-Up Updated', `Client Welcome Task due ${formatDisplayDate_(dueDate)}.`);
+}
+
+function getFollowUpRuleForStatus_(status) {
+  const rules = {
+    'Lead Found': { type: 'Executive Brief', days: 0, priority: 'A - Hot', notes: 'Generate Executive Brief today.' },
+    'Executive Brief Sent': { type: 'Discovery Meeting', days: 3, priority: 'A - Hot', notes: 'Schedule discovery meeting.' },
+    'Discovery Meeting Scheduled': { type: 'Discovery Reminder', days: 1, priority: 'A - Hot', notes: 'Reminder one day before discovery meeting.', useDiscoveryDate: true },
+    'Digital Business Assessment': { type: 'Improvement Plan', days: 1, priority: 'A - Hot', notes: 'Generate Improvement Plan after assessment review.' },
+    'Improvement Plan Sent': { type: 'Follow-Up', days: 3, priority: 'A - Hot', notes: 'Follow-Up after Improvement Plan sent.' },
+    'Project Started': { type: 'Project Kickoff', days: 0, priority: 'A - Hot', notes: 'Confirm kickoff details and first project milestone.' },
+    'Client': { type: 'Client Welcome Task', days: 0, priority: 'A - Hot', notes: 'Welcome client and confirm onboarding next steps.' },
+    'No Response': { type: 'Follow-Up', days: 7, priority: 'B - Good', notes: 'Follow-Up after no response.' },
+    'Second No Response': { type: 'Final Follow-Up', days: 14, priority: 'B - Good', notes: 'Send final Follow-Up.' },
+    'Lost': { archive: true }
+  };
+  return rules[status] || null;
+}
+
+function getFollowUpDueDateForRule_(rule, rowValues, headers) {
+  if (rule.useDiscoveryDate) {
+    const discoveryDate = dateValueOrNull_(getValueByHeader_(rowValues, headers, 'Discovery Date'));
+    if (discoveryDate) {
+      const reminderDate = startOfDay_(discoveryDate);
+      reminderDate.setDate(reminderDate.getDate() - 1);
+      return reminderDate;
+    }
+  }
+
+  const dueDate = startOfDay_(new Date());
+  dueDate.setDate(dueDate.getDate() + (rule.days || 0));
+  return dueDate;
+}
+
+function upsertOpenFollowUp_(ss, followUp) {
+  const sheet = getOrCreateFollowUpsSheet_(ss);
+  const table = ensureFollowUpColumns_(sheet);
+  const existing = findOpenFollowUp_(sheet, table.headers, followUp);
+  const targetRow = existing ? existing.rowNumber : Math.max(sheet.getLastRow() + 1, table.headerRow + 1);
+  const rowValues = existing
+    ? existing.values.concat(new Array(Math.max(table.lastColumn - existing.values.length, 0)).fill('')).slice(0, table.lastColumn)
+    : new Array(table.lastColumn).fill('');
+
+  setIfHeader_(rowValues, table.headers, 'Follow-Up ID', getValueByHeader_(rowValues, table.headers, 'Follow-Up ID') || generateFollowUpId_(followUp.company));
+  setIfHeader_(rowValues, table.headers, 'Company', followUp.company);
+  setIfHeader_(rowValues, table.headers, 'Contact', followUp.contact);
+  setIfHeader_(rowValues, table.headers, 'Email', followUp.email);
+  setIfHeader_(rowValues, table.headers, 'Related Prospect ID', followUp.relatedProspectId);
+  setIfHeader_(rowValues, table.headers, 'Related Client ID', followUp.relatedClientId);
+  setIfHeader_(rowValues, table.headers, 'Current Status', followUp.currentStatus);
+  setIfHeader_(rowValues, table.headers, 'Follow-Up Type', followUp.followUpType);
+  setIfHeader_(rowValues, table.headers, 'Due Date', followUp.dueDate);
+  setIfHeader_(rowValues, table.headers, 'Days Until Due', daysUntil_(followUp.dueDate));
+  setIfHeader_(rowValues, table.headers, 'Priority', followUp.priority);
+  setIfHeader_(rowValues, table.headers, 'Assigned To', followUp.assignedTo);
+  setIfHeader_(rowValues, table.headers, 'Notes', followUp.notes);
+  setIfHeader_(rowValues, table.headers, 'Completed', false);
+  setIfHeader_(rowValues, table.headers, 'Completed Date', '');
+
+  sheet.getRange(targetRow, 1, 1, table.lastColumn)
+    .setValues([literalizeBusinessSnapshotSheetRow_(rowValues)]);
+  formatFollowUpsSheet_(sheet, table.headers);
+
+  return {
+    created: !existing,
+    updated: !!existing,
+    rowNumber: targetRow,
+    followUpType: followUp.followUpType
+  };
+}
+
+function findOpenFollowUp_(sheet, headers, followUp) {
+  const dataStartRow = findBestHeaderRow_(sheet) + 1;
+  const rowCount = Math.max(sheet.getLastRow() - dataStartRow + 1, 0);
+  if (rowCount <= 0) {
+    return null;
+  }
+
+  const values = sheet.getRange(dataStartRow, 1, rowCount, sheet.getLastColumn()).getValues();
+  const companyKey = normalizeLookupKey_(followUp.company);
+  const prospectId = String(followUp.relatedProspectId || '').trim();
+  const clientId = String(followUp.relatedClientId || '').trim();
+  const type = String(followUp.followUpType || '').trim();
+
+  for (let index = 0; index < values.length; index += 1) {
+    const row = values[index];
+    const completed = isFollowUpCompletedValue_(getValueByHeader_(row, headers, 'Completed'));
+    if (completed) {
+      continue;
+    }
+
+    const rowCompanyKey = normalizeLookupKey_(getValueByHeader_(row, headers, 'Company'));
+    const rowProspectId = String(getValueByHeader_(row, headers, 'Related Prospect ID') || '').trim();
+    const rowClientId = String(getValueByHeader_(row, headers, 'Related Client ID') || '').trim();
+    const rowType = String(getValueByHeader_(row, headers, 'Follow-Up Type') || '').trim();
+    const sameRecord = (prospectId && rowProspectId === prospectId) ||
+      (clientId && rowClientId === clientId) ||
+      (companyKey && rowCompanyKey === companyKey);
+
+    if (sameRecord && rowType === type) {
+      return {
+        rowNumber: dataStartRow + index,
+        values: row
+      };
+    }
+  }
+
+  return null;
+}
+
+function completeOpenFollowUpsForCompany_(ss, company) {
+  const sheet = getOrCreateFollowUpsSheet_(ss);
+  const table = ensureFollowUpColumns_(sheet);
+  const dataStartRow = table.headerRow + 1;
+  const rowCount = Math.max(sheet.getLastRow() - dataStartRow + 1, 0);
+  if (rowCount <= 0) {
+    return 0;
+  }
+
+  const values = sheet.getRange(dataStartRow, 1, rowCount, table.lastColumn).getValues();
+  const companyKey = normalizeLookupKey_(company);
+  let completed = 0;
+  values.forEach(function(row, index) {
+    if (isFollowUpCompletedValue_(getValueByHeader_(row, table.headers, 'Completed'))) {
+      return;
+    }
+    if (normalizeLookupKey_(getValueByHeader_(row, table.headers, 'Company')) !== companyKey) {
+      return;
+    }
+
+    markFollowUpRowCompleted_(sheet, table.headers, dataStartRow + index);
+    completed += 1;
+  });
+
+  return completed;
+}
+
+function markFollowUpRowCompleted_(sheet, headers, rowNumber) {
+  if (headers.Completed) {
+    sheet.getRange(rowNumber, headers.Completed).setValue(true);
+  }
+  if (headers['Completed Date']) {
+    sheet.getRange(rowNumber, headers['Completed Date']).setValue(new Date()).setNumberFormat('yyyy-mm-dd');
+  }
+}
+
+function refreshFollowUpDaysUntilDue_(sheet, headers) {
+  const dataStartRow = findBestHeaderRow_(sheet) + 1;
+  const rowCount = Math.max(sheet.getLastRow() - dataStartRow + 1, 0);
+  if (rowCount <= 0 || !headers['Due Date'] || !headers['Days Until Due']) {
+    return;
+  }
+
+  const values = sheet.getRange(dataStartRow, 1, rowCount, sheet.getLastColumn()).getValues();
+  const output = values.map(function(row) {
+    return [daysUntil_(getValueByHeader_(row, headers, 'Due Date'))];
+  });
+  sheet.getRange(dataStartRow, headers['Days Until Due'], output.length, 1).setValues(output);
+}
+
+function formatFollowUpsSheet_(sheet, headers) {
+  const headerRow = findBestHeaderRow_(sheet);
+  const lastRow = Math.max(sheet.getLastRow(), headerRow);
+  const lastColumn = Math.max(sheet.getLastColumn(), FOLLOW_UP_COLUMNS.length);
+  sheet.setHiddenGridlines(true);
+  safeSetFrozenRows_(sheet, headerRow);
+  sheet.setTabColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.gold);
+  applyOperatingSystemSheetChrome_(sheet, 'FOLLOW-UPS', headerRow, lastColumn);
+  sheet.getRange(headerRow, 1, 1, lastColumn)
+    .setBackground(BUSINESS_OPTIMIZATION_PLATFORM_THEME.black)
+    .setFontColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.gold)
+    .setFontWeight('bold')
+    .setHorizontalAlignment('center');
+  if (headers['Due Date']) {
+    sheet.getRange(1, headers['Due Date'], Math.max(sheet.getMaxRows(), 1), 1).setNumberFormat('yyyy-mm-dd');
+  }
+  if (headers['Completed Date']) {
+    sheet.getRange(1, headers['Completed Date'], Math.max(sheet.getMaxRows(), 1), 1).setNumberFormat('yyyy-mm-dd');
+  }
+  setColumnWidthIfHeader_(sheet, headers, 'Follow-Up ID', 160);
+  setColumnWidthIfHeader_(sheet, headers, 'Company', 210);
+  setColumnWidthIfHeader_(sheet, headers, 'Contact', 150);
+  setColumnWidthIfHeader_(sheet, headers, 'Email', 220);
+  setColumnWidthIfHeader_(sheet, headers, 'Current Status', 150);
+  setColumnWidthIfHeader_(sheet, headers, 'Follow-Up Type', 180);
+  setColumnWidthIfHeader_(sheet, headers, 'Due Date', 120);
+  setColumnWidthIfHeader_(sheet, headers, 'Days Until Due', 120);
+  setColumnWidthIfHeader_(sheet, headers, 'Priority', 120);
+  setColumnWidthIfHeader_(sheet, headers, 'Assigned To', 170);
+  setColumnWidthIfHeader_(sheet, headers, 'Notes', 360);
+  setColumnWidthIfHeader_(sheet, headers, 'Completed', 110);
+  setColumnWidthIfHeader_(sheet, headers, 'Completed Date', 130);
+  applyAlternatingRows_(sheet, headerRow + 1, lastRow, lastColumn);
+  applyOperatingSystemTableSurface_(sheet, headerRow, lastRow, lastColumn);
+  applyVisualComfortBody_(sheet, headerRow + 1, lastRow, lastColumn, {
+    rowHeight: 34
+  });
+  applyWrapByHeader_(sheet, headers, headerRow, lastRow, ['Notes']);
+  applyColumnFormattingByHeader_(sheet, headers, headerRow, lastRow, {
+    'Due Date': { horizontalAlignment: 'center', numberFormat: 'yyyy-mm-dd' },
+    'Days Until Due': { horizontalAlignment: 'center', numberFormat: '0' },
+    Priority: { horizontalAlignment: 'center' },
+    Completed: { horizontalAlignment: 'center' },
+    'Completed Date': { horizontalAlignment: 'center', numberFormat: 'yyyy-mm-dd' }
+  });
+  applyFollowUpPriorityColors_(sheet, headers, headerRow, lastRow);
+  sheet.setRowHeights(headerRow + 1, Math.max(lastRow - headerRow, 1), 34);
+}
+
+function getFollowUpMetrics_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(FOLLOW_UPS_SHEET);
+  const metrics = {
+    today: 0,
+    overdue: 0,
+    dueThisWeek: 0,
+    completedToday: 0
+  };
+  if (!sheet) {
+    return metrics;
+  }
+
+  const table = ensureFollowUpColumns_(sheet);
+  const dataStartRow = table.headerRow + 1;
+  const rowCount = Math.max(sheet.getLastRow() - dataStartRow + 1, 0);
+  if (rowCount <= 0) {
+    return metrics;
+  }
+
+  const today = startOfDay_(new Date());
+  const weekEnd = startOfDay_(new Date());
+  weekEnd.setDate(weekEnd.getDate() + 7);
+  const values = sheet.getRange(dataStartRow, 1, rowCount, table.lastColumn).getValues();
+  values.forEach(function(row) {
+    const completed = isFollowUpCompletedValue_(getValueByHeader_(row, table.headers, 'Completed'));
+    const dueDate = dateValueOrNull_(getValueByHeader_(row, table.headers, 'Due Date'));
+    const completedDate = dateValueOrNull_(getValueByHeader_(row, table.headers, 'Completed Date'));
+
+    if (completedDate && startOfDay_(completedDate).getTime() === today.getTime()) {
+      metrics.completedToday += 1;
+    }
+    if (completed || !dueDate) {
+      return;
+    }
+
+    const normalizedDue = startOfDay_(dueDate);
+    if (normalizedDue.getTime() === today.getTime()) {
+      metrics.today += 1;
+    }
+    if (normalizedDue.getTime() < today.getTime()) {
+      metrics.overdue += 1;
+    }
+    if (normalizedDue.getTime() >= today.getTime() && normalizedDue.getTime() <= weekEnd.getTime()) {
+      metrics.dueThisWeek += 1;
+    }
+  });
+
+  return metrics;
+}
+
+function getFollowUpsForCompany_(ss, company, limit) {
+  const sheet = ss.getSheetByName(FOLLOW_UPS_SHEET);
+  if (!sheet || !company) {
+    return [];
+  }
+
+  const table = ensureFollowUpColumns_(sheet);
+  const dataStartRow = table.headerRow + 1;
+  const rowCount = Math.max(sheet.getLastRow() - dataStartRow + 1, 0);
+  if (rowCount <= 0) {
+    return [];
+  }
+
+  const companyKey = normalizeLookupKey_(company);
+  const values = sheet.getRange(dataStartRow, 1, rowCount, table.lastColumn).getValues();
+  return values.map(function(row) {
+    return {
+      id: getValueByHeader_(row, table.headers, 'Follow-Up ID'),
+      company: getValueByHeader_(row, table.headers, 'Company'),
+      type: getValueByHeader_(row, table.headers, 'Follow-Up Type'),
+      dueDate: dateValueOrNull_(getValueByHeader_(row, table.headers, 'Due Date')),
+      priority: getValueByHeader_(row, table.headers, 'Priority'),
+      notes: getValueByHeader_(row, table.headers, 'Notes'),
+      completed: isFollowUpCompletedValue_(getValueByHeader_(row, table.headers, 'Completed')),
+      completedDate: dateValueOrNull_(getValueByHeader_(row, table.headers, 'Completed Date'))
+    };
+  }).filter(function(item) {
+    return normalizeLookupKey_(item.company) === companyKey;
+  }).sort(function(a, b) {
+    if (a.completed !== b.completed) {
+      return a.completed ? 1 : -1;
+    }
+    return dateSortValue_(a.dueDate) - dateSortValue_(b.dueDate);
+  }).slice(0, limit || 8);
+}
+
+function generateFollowUpId_(company) {
+  const clean = String(company || 'FOLLOWUP').replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 8) || 'FOLLOWUP';
+  const uniqueSuffix = Utilities.getUuid().replace(/-/g, '').slice(0, 8).toUpperCase();
+  return `FU-${clean}-${Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMddHHmmss')}-${uniqueSuffix}`;
+}
+
+function daysUntil_(dateValue) {
+  const date = dateValueOrNull_(dateValue);
+  if (!date) {
+    return '';
+  }
+  const today = startOfDay_(new Date()).getTime();
+  return Math.round((startOfDay_(date).getTime() - today) / 86400000);
+}
+
+function isFollowUpCompletedValue_(value) {
+  const text = String(value || '').trim().toLowerCase();
+  return value === true || text === 'true' || text === 'yes' || text === 'completed';
+}
+
+function createProject() {
+  const context = getSelectedProjectSourceContext_(true);
+  if (!context) {
+    return;
+  }
+
+  const result = upsertProjectFromClient_(context.ss, context.client, {
+    status: 'Planning',
+    notes: 'Project created manually.'
+  });
+  logPipelineActivity_(context.ss, context.client.company, result.created ? 'Project Created' : 'Project Updated', result.created ? 'Project created from selected client.' : 'Existing project updated from selected client.');
+  refreshSalesOperatingSystem_();
+  SpreadsheetApp.getUi().alert('Business Optimization Platform', result.created ? 'Project created.' : 'Existing project updated.', SpreadsheetApp.getUi().ButtonSet.OK);
+}
+
+function updateProjectStatus() {
+  const context = getSelectedProjectContext_(true);
+  if (!context) {
+    return;
+  }
+
+  const ui = SpreadsheetApp.getUi();
+  const prompt = ui.prompt(
+    'Update Project Status',
+    `Enter status: ${PROJECT_STATUSES.join(', ')}`,
+    ui.ButtonSet.OK_CANCEL
+  );
+  if (prompt.getSelectedButton() !== ui.Button.OK) {
+    return;
+  }
+
+  const status = normalizeProjectStatus_(prompt.getResponseText());
+  if (!status) {
+    ui.alert('Business Optimization Platform', 'Enter a valid project status, then run Update Project Status again.', ui.ButtonSet.OK);
+    return;
+  }
+
+  updateProjectRowStatus_(context.sheet, context.headers, context.rowNumber, status);
+  logProjectStatusActivity_(context.ss, context.company, status);
+  if (status === 'Completed') {
+    logPipelineActivity_(context.ss, context.company, 'Deliverable Completed', getProjectDeliverableActivityNotes_(context.values, context.headers));
+  }
+  refreshSalesOperatingSystem_();
+  ui.alert('Business Optimization Platform', `Project status updated to ${status}.`, ui.ButtonSet.OK);
+}
+
+function completeProject() {
+  const context = getSelectedProjectContext_(true);
+  if (!context) {
+    return;
+  }
+
+  updateProjectRowStatus_(context.sheet, context.headers, context.rowNumber, 'Completed');
+  logPipelineActivity_(context.ss, context.company, 'Project Completed', 'Project marked completed.');
+  logPipelineActivity_(context.ss, context.company, 'Deliverable Completed', getProjectDeliverableActivityNotes_(context.values, context.headers));
+  refreshSalesOperatingSystem_();
+  SpreadsheetApp.getUi().alert('Project Complete', 'The project has been marked complete and the activity record is up to date.', SpreadsheetApp.getUi().ButtonSet.OK);
+}
+
+function refreshProjects() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = getOrCreateProjectsSheet_(ss);
+  const table = ensureProjectColumns_(sheet);
+  createProjectsForActiveClients_(ss);
+  refreshProjectProgressFormatting_(sheet, table.headers);
+  formatProjectsSheet_(sheet, table.headers);
+}
+
+function getOrCreateProjectsSheet_(ss) {
+  let sheet = ss.getSheetByName(PROJECTS_SHEET);
+  if (!sheet) {
+    sheet = ss.insertSheet(PROJECTS_SHEET);
+  }
+
+  ensureProjectColumns_(sheet);
+  return sheet;
+}
+
+function ensureProjectColumns_(sheet) {
+  if (sheet.getMaxColumns() < PROJECT_COLUMNS.length) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), PROJECT_COLUMNS.length - sheet.getMaxColumns());
+  }
+  const headerRow = findBestHeaderRow_(sheet);
+  const headerValues = sheet.getRange(headerRow, 1, 1, Math.max(sheet.getLastColumn(), PROJECT_COLUMNS.length)).getValues()[0];
+  const headers = {};
+
+  headerValues.forEach(function(value, index) {
+    const header = String(value || '').trim();
+    if (header && !headers[header]) {
+      headers[header] = index + 1;
+    }
+  });
+
+  if (!Object.keys(headers).length) {
+    sheet.getRange(headerRow, 1, 1, PROJECT_COLUMNS.length).setValues([PROJECT_COLUMNS]);
+    PROJECT_COLUMNS.forEach(function(header, index) {
+      headers[header] = index + 1;
+    });
+  }
+
+  let lastColumn = Math.max(sheet.getLastColumn(), 1);
+  PROJECT_COLUMNS.forEach(function(header) {
+    if (headers[header]) {
+      return;
+    }
+    lastColumn += 1;
+    sheet.getRange(headerRow, lastColumn).setValue(header);
+    headers[header] = lastColumn;
+  });
+
+  sheet.getRange(headerRow, 1, 1, lastColumn)
+    .setBackground(BUSINESS_OPTIMIZATION_PLATFORM_THEME.black)
+    .setFontColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.gold)
+    .setFontWeight('bold')
+    .setHorizontalAlignment('center');
+  sheet.setFrozenRows(headerRow);
+  sheet.setTabColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.charcoal);
+
+  return {
+    headerRow: headerRow,
+    headers: headers,
+    lastColumn: lastColumn
+  };
+}
+
+function createProjectsForActiveClients_(ss) {
+  const clientsSheet = ss.getSheetByName(CLIENTS_SHEET);
+  if (!clientsSheet) {
+    return;
+  }
+
+  const table = ensureClientColumns_(clientsSheet);
+  const dataStartRow = table.headerRow + 1;
+  const rowCount = Math.max(clientsSheet.getLastRow() - dataStartRow + 1, 0);
+  if (rowCount <= 0) {
+    return;
+  }
+
+  const values = clientsSheet.getRange(dataStartRow, 1, rowCount, table.lastColumn).getValues();
+  values.forEach(function(row) {
+    const status = String(getValueByHeader_(row, table.headers, 'Status') || '').trim();
+    if (status !== 'Active') {
+      return;
+    }
+
+    const client = buildProjectClientModel_(row, table.headers);
+    if (client.company) {
+      const result = upsertProjectFromClient_(ss, client, { status: 'Planning', notes: 'Project verified from active client.' });
+      if (result.created) {
+        logPipelineActivity_(ss, client.company, 'Project Created', 'Project created automatically from active client.');
+      }
+    }
+  });
+}
+
+function upsertProjectFromClient_(ss, client, options) {
+  const sheet = getOrCreateProjectsSheet_(ss);
+  const table = ensureProjectColumns_(sheet);
+  const existing = findExistingProject_(sheet, table.headers, client.clientId, client.company, client.service);
+  const targetRow = existing ? existing.rowNumber : Math.max(sheet.getLastRow() + 1, table.headerRow + 1);
+  const rowValues = existing
+    ? existing.values.concat(new Array(Math.max(table.lastColumn - existing.values.length, 0)).fill('')).slice(0, table.lastColumn)
+    : new Array(table.lastColumn).fill('');
+  const settings = options || {};
+  const now = new Date();
+  const startDate = client.startDate || startOfDay_(new Date());
+  const status = existing ? getValueByHeader_(rowValues, table.headers, 'Status') || settings.status || 'Planning' : settings.status || 'Planning';
+  const projectId = getValueByHeader_(rowValues, table.headers, 'Project ID') || generateProjectId_(client.company);
+
+  setIfHeader_(rowValues, table.headers, 'Project ID', projectId);
+  setIfHeader_(rowValues, table.headers, 'Client ID', client.clientId);
+  setIfHeader_(rowValues, table.headers, 'Client', client.company);
+  setIfHeader_(rowValues, table.headers, 'Service', client.service);
+  setIfHeader_(rowValues, table.headers, 'Package', client.packageName);
+  setIfHeader_(rowValues, table.headers, 'Status', status);
+  setIfHeader_(rowValues, table.headers, 'Priority', client.priority || 'B - Good');
+  setIfHeader_(rowValues, table.headers, 'Start Date', startDate);
+  setIfHeader_(rowValues, table.headers, 'Due Date', client.dueDate || addDaysFromDate_(startDate, 30));
+  setIfHeader_(rowValues, table.headers, 'Progress %', getProjectProgressForStatus_(status));
+  setIfHeader_(rowValues, table.headers, 'Assigned To', client.assignedTo || getRogersContactInfo_().name);
+  setIfHeader_(rowValues, table.headers, 'Current Phase', status);
+  setIfHeader_(rowValues, table.headers, 'Deliverables', inferProjectDeliverables_(client.service));
+  setIfHeader_(rowValues, table.headers, 'Folder', getClientProjectFolderUrl_(client.company));
+  setIfHeader_(rowValues, table.headers, 'Notes', firstNonBlank_([settings.notes, getValueByHeader_(rowValues, table.headers, 'Notes')]));
+  setIfHeader_(rowValues, table.headers, 'Last Updated', now);
+
+  sheet.getRange(targetRow, 1, 1, table.lastColumn).setValues([rowValues]);
+  formatProjectsSheet_(sheet, table.headers);
+
+  return {
+    created: !existing,
+    updated: !!existing,
+    rowNumber: targetRow,
+    projectId: projectId,
+    status: status
+  };
+}
+
+function verifyPersistedProjectRecord_(ss, result, client, expectedStatus) {
+  if (!result || !result.projectId || !result.rowNumber) throw new Error('Project upsert did not return a verifiable identifier and row.');
+  const sheet = getOrCreateProjectsSheet_(ss);
+  const table = ensureProjectColumns_(sheet);
+  const rowCount = Math.max(sheet.getLastRow() - table.headerRow, 0);
+  const rows = rowCount ? sheet.getRange(table.headerRow + 1, 1, rowCount, table.lastColumn).getValues() : [];
+  const expected = {
+    projectId: String(result.projectId), clientId: String(client.clientId || ''),
+    company: normalizeLookupKey_(client.company), service: normalizeLookupKey_(client.service),
+    status: String(expectedStatus || '')
+  };
+  const matches = rows.map(function(values, index) {
+    return { rowNumber: table.headerRow + 1 + index, values: values };
+  }).filter(function(item) {
+    const projectId = String(getValueByHeader_(item.values, table.headers, 'Project ID') || '');
+    const clientId = String(getValueByHeader_(item.values, table.headers, 'Client ID') || '');
+    const company = normalizeLookupKey_(getValueByHeader_(item.values, table.headers, 'Client'));
+    const service = normalizeLookupKey_(getValueByHeader_(item.values, table.headers, 'Service'));
+    const sameLinkage = (expected.clientId && clientId === expected.clientId) || (expected.company && company === expected.company);
+    return projectId === expected.projectId || (sameLinkage && (!expected.service || !service || service === expected.service));
+  });
+  const evaluation = evaluatePersistedProjectMatches_(matches.map(function(item) {
+    return {
+      rowNumber: item.rowNumber,
+      projectId: String(getValueByHeader_(item.values, table.headers, 'Project ID') || ''),
+      clientId: String(getValueByHeader_(item.values, table.headers, 'Client ID') || ''),
+      company: normalizeLookupKey_(getValueByHeader_(item.values, table.headers, 'Client')),
+      service: normalizeLookupKey_(getValueByHeader_(item.values, table.headers, 'Service')),
+      status: String(getValueByHeader_(item.values, table.headers, 'Status') || ''), values: item.values
+    };
+  }), expected);
+  if (!evaluation.verified) throw new Error(evaluation.message);
+  return evaluation.match;
+}
+
+function evaluatePersistedProjectMatches_(matches, expected) {
+  if (!matches || matches.length === 0) return { verified: false, message: 'Project upsert could not be re-read from the persisted sheet.' };
+  if (matches.length !== 1) return { verified: false, message: `Project lookup is ambiguous; ${matches.length} persisted rows match the expected identity.` };
+  const match = matches[0];
+  const linked = expected.clientId ? match.clientId === expected.clientId : match.company === expected.company;
+  const serviceMatches = !expected.service || match.service === expected.service;
+  if (match.projectId !== expected.projectId || !linked || !serviceMatches || match.status !== expected.status) {
+    return { verified: false, message: 'Persisted Project record does not match the expected ID, client linkage, service, or status.' };
+  }
+  return { verified: true, match: match };
+}
+
+function findExistingProject_(sheet, headers, clientId, company, service) {
+  const dataStartRow = findBestHeaderRow_(sheet) + 1;
+  const rowCount = Math.max(sheet.getLastRow() - dataStartRow + 1, 0);
+  if (rowCount <= 0) {
+    return null;
+  }
+
+  const values = sheet.getRange(dataStartRow, 1, rowCount, sheet.getLastColumn()).getValues();
+  const clientKey = String(clientId || '').trim();
+  const companyKey = normalizeLookupKey_(company);
+  const serviceKey = normalizeLookupKey_(service);
+  for (let index = 0; index < values.length; index += 1) {
+    const row = values[index];
+    const rowStatus = String(getValueByHeader_(row, headers, 'Status') || '').trim();
+    if (rowStatus === 'Completed' || rowStatus === 'Cancelled') {
+      continue;
+    }
+    const rowClientId = String(getValueByHeader_(row, headers, 'Client ID') || '').trim();
+    const rowCompanyKey = normalizeLookupKey_(getValueByHeader_(row, headers, 'Client'));
+    const rowServiceKey = normalizeLookupKey_(getValueByHeader_(row, headers, 'Service'));
+    const sameClient = (clientKey && rowClientId === clientKey) || (companyKey && rowCompanyKey === companyKey);
+    if (sameClient && (!serviceKey || !rowServiceKey || rowServiceKey === serviceKey)) {
+      return {
+        rowNumber: dataStartRow + index,
+        values: row
+      };
+    }
+  }
+
+  return null;
+}
+
+function buildProjectClientModel_(row, headers) {
+  const company = firstNonBlank_([
+    getValueByHeader_(row, headers, 'Company'),
+    getValueByHeader_(row, headers, 'Client Name')
+  ]);
+  const service = firstNonBlank_([
+    getValueByHeader_(row, headers, 'Service Package'),
+    getValueByHeader_(row, headers, 'Service'),
+    getValueByHeader_(row, headers, 'Current Project')
+  ]);
+
+  return {
+    clientId: getValueByHeader_(row, headers, 'Client ID'),
+    company: company,
+    service: service || 'Consulting',
+    packageName: service || 'Business Systems',
+    priority: getValueByHeader_(row, headers, 'Priority Tier'),
+    startDate: dateValueOrNull_(getValueByHeader_(row, headers, 'Start Date') || getValueByHeader_(row, headers, 'Client Since')),
+    dueDate: dateValueOrNull_(getValueByHeader_(row, headers, 'Due Date')),
+    assignedTo: getValueByHeader_(row, headers, 'Assigned To')
+  };
+}
+
+function getSelectedProjectSourceContext_(showAlert) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ui = SpreadsheetApp.getUi();
+  const sheet = ss.getActiveSheet();
+  if (!sheet || sheet.getName() !== CLIENTS_SHEET) {
+    if (showAlert) {
+      ui.alert('Business Optimization Platform', 'Select a client row on the Clients sheet before creating a project.', ui.ButtonSet.OK);
+    }
+    return null;
+  }
+
+  const table = ensureClientColumns_(sheet);
+  const rowNumber = sheet.getActiveRange() ? sheet.getActiveRange().getRow() : 0;
+  if (rowNumber <= table.headerRow) {
+    if (showAlert) {
+      ui.alert('Business Optimization Platform', 'Select a client data row below the header.', ui.ButtonSet.OK);
+    }
+    return null;
+  }
+
+  const values = sheet.getRange(rowNumber, 1, 1, table.lastColumn).getValues()[0];
+  const client = buildProjectClientModel_(values, table.headers);
+  if (!client.company) {
+    if (showAlert) {
+      ui.alert('Business Optimization Platform', 'The selected client row is missing Company.', ui.ButtonSet.OK);
+    }
+    return null;
+  }
+
+  return {
+    ss: ss,
+    client: client
+  };
+}
+
+function getSelectedProjectContext_(showAlert) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ui = SpreadsheetApp.getUi();
+  const sheet = ss.getActiveSheet();
+  if (!sheet || sheet.getName() !== PROJECTS_SHEET) {
+    if (showAlert) {
+      ui.alert('Business Optimization Platform', 'Select a project row on the Projects sheet.', ui.ButtonSet.OK);
+    }
+    return null;
+  }
+
+  const table = ensureProjectColumns_(sheet);
+  const rowNumber = sheet.getActiveRange() ? sheet.getActiveRange().getRow() : 0;
+  if (rowNumber <= table.headerRow) {
+    if (showAlert) {
+      ui.alert('Business Optimization Platform', 'Select a project data row below the header.', ui.ButtonSet.OK);
+    }
+    return null;
+  }
+
+  const values = sheet.getRange(rowNumber, 1, 1, table.lastColumn).getValues()[0];
+  const company = getValueByHeader_(values, table.headers, 'Client');
+  return {
+    ss: ss,
+    sheet: sheet,
+    headers: table.headers,
+    rowNumber: rowNumber,
+    values: values,
+    company: company
+  };
+}
+
+function updateProjectRowStatus_(sheet, headers, rowNumber, status) {
+  setIfHeaderCell_(sheet, headers, rowNumber, 'Status', status);
+  setIfHeaderCell_(sheet, headers, rowNumber, 'Current Phase', status);
+  setIfHeaderCell_(sheet, headers, rowNumber, 'Progress %', getProjectProgressForStatus_(status));
+  setIfHeaderCell_(sheet, headers, rowNumber, 'Last Updated', new Date());
+}
+
+function logProjectStatusActivity_(ss, company, status) {
+  if (status === 'Completed') {
+    logPipelineActivity_(ss, company, 'Project Completed', 'Project marked completed.');
+  } else if (status === 'Cancelled') {
+    logPipelineActivity_(ss, company, 'Project Cancelled', 'Project marked cancelled.');
+  } else {
+    logPipelineActivity_(ss, company, 'Project Updated', `Project status updated to ${status}.`);
+  }
+}
+
+function getProjectMetrics_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(PROJECTS_SHEET);
+  const metrics = {
+    activeProjects: 0,
+    dueThisWeek: 0,
+    overdueProjects: 0,
+    completedThisMonth: 0,
+    averageCompletionTime: 0
+  };
+  if (!sheet) {
+    return metrics;
+  }
+
+  const table = ensureProjectColumns_(sheet);
+  const dataStartRow = table.headerRow + 1;
+  const rowCount = Math.max(sheet.getLastRow() - dataStartRow + 1, 0);
+  if (rowCount <= 0) {
+    return metrics;
+  }
+
+  const today = startOfDay_(new Date());
+  const weekEnd = startOfDay_(new Date());
+  weekEnd.setDate(weekEnd.getDate() + 7);
+  const currentMonth = today.getMonth();
+  const currentYear = today.getFullYear();
+  let completionDaysTotal = 0;
+  let completionCount = 0;
+
+  const values = sheet.getRange(dataStartRow, 1, rowCount, table.lastColumn).getValues();
+  values.forEach(function(row) {
+    const status = String(getValueByHeader_(row, table.headers, 'Status') || '').trim();
+    const dueDate = dateValueOrNull_(getValueByHeader_(row, table.headers, 'Due Date'));
+    const startDate = dateValueOrNull_(getValueByHeader_(row, table.headers, 'Start Date'));
+    const lastUpdated = dateValueOrNull_(getValueByHeader_(row, table.headers, 'Last Updated'));
+    const isActive = status && status !== 'Completed' && status !== 'Cancelled' && status !== 'Maintenance';
+    if (isActive) {
+      metrics.activeProjects += 1;
+    }
+    if (isActive && dueDate) {
+      const due = startOfDay_(dueDate);
+      if (due.getTime() < today.getTime()) {
+        metrics.overdueProjects += 1;
+      }
+      if (due.getTime() >= today.getTime() && due.getTime() <= weekEnd.getTime()) {
+        metrics.dueThisWeek += 1;
+      }
+    }
+    if (status === 'Completed' && lastUpdated && lastUpdated.getMonth() === currentMonth && lastUpdated.getFullYear() === currentYear) {
+      metrics.completedThisMonth += 1;
+      if (startDate) {
+        completionDaysTotal += Math.max(Math.round((startOfDay_(lastUpdated).getTime() - startOfDay_(startDate).getTime()) / 86400000), 0);
+        completionCount += 1;
+      }
+    }
+  });
+
+  metrics.averageCompletionTime = completionCount ? completionDaysTotal / completionCount : 0;
+  return metrics;
+}
+
+function getProjectsForClient_(ss, clientId, company, limit) {
+  const sheet = ss.getSheetByName(PROJECTS_SHEET);
+  if (!sheet) {
+    return [];
+  }
+  const table = ensureProjectColumns_(sheet);
+  const dataStartRow = table.headerRow + 1;
+  const rowCount = Math.max(sheet.getLastRow() - dataStartRow + 1, 0);
+  if (rowCount <= 0) {
+    return [];
+  }
+
+  const clientKey = String(clientId || '').trim();
+  const companyKey = normalizeLookupKey_(company);
+  const values = sheet.getRange(dataStartRow, 1, rowCount, table.lastColumn).getValues();
+  return values.map(function(row) {
+    return {
+      projectId: getValueByHeader_(row, table.headers, 'Project ID'),
+      clientId: getValueByHeader_(row, table.headers, 'Client ID'),
+      client: getValueByHeader_(row, table.headers, 'Client'),
+      service: getValueByHeader_(row, table.headers, 'Service'),
+      packageName: getValueByHeader_(row, table.headers, 'Package'),
+      status: getValueByHeader_(row, table.headers, 'Status'),
+      priority: getValueByHeader_(row, table.headers, 'Priority'),
+      startDate: dateValueOrNull_(getValueByHeader_(row, table.headers, 'Start Date')),
+      dueDate: dateValueOrNull_(getValueByHeader_(row, table.headers, 'Due Date')),
+      progress: getValueByHeader_(row, table.headers, 'Progress %'),
+      currentPhase: getValueByHeader_(row, table.headers, 'Current Phase'),
+      deliverables: getValueByHeader_(row, table.headers, 'Deliverables'),
+      folder: getValueByHeader_(row, table.headers, 'Folder'),
+      notes: getValueByHeader_(row, table.headers, 'Notes'),
+      lastUpdated: dateValueOrNull_(getValueByHeader_(row, table.headers, 'Last Updated'))
+    };
+  }).filter(function(project) {
+    return (clientKey && String(project.clientId || '').trim() === clientKey) ||
+      (companyKey && normalizeLookupKey_(project.client) === companyKey);
+  }).sort(function(a, b) {
+    return dateSortValue_(b.lastUpdated) - dateSortValue_(a.lastUpdated);
+  }).slice(0, limit || 5);
+}
+
+function formatProjectsSheet_(sheet, headers) {
+  const headerRow = findBestHeaderRow_(sheet);
+  const lastRow = Math.max(sheet.getLastRow(), headerRow);
+  const lastColumn = Math.max(sheet.getLastColumn(), PROJECT_COLUMNS.length);
+  sheet.setHiddenGridlines(true);
+  safeSetFrozenRows_(sheet, headerRow);
+  sheet.setTabColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.charcoal);
+  applyOperatingSystemSheetChrome_(sheet, 'PROJECTS', headerRow, lastColumn);
+  sheet.getRange(headerRow, 1, 1, lastColumn)
+    .setBackground(BUSINESS_OPTIMIZATION_PLATFORM_THEME.black)
+    .setFontColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.gold)
+    .setFontWeight('bold')
+    .setHorizontalAlignment('center');
+  setColumnWidthIfHeader_(sheet, headers, 'Project ID', 160);
+  setColumnWidthIfHeader_(sheet, headers, 'Client ID', 150);
+  setColumnWidthIfHeader_(sheet, headers, 'Client', 220);
+  setColumnWidthIfHeader_(sheet, headers, 'Service', 170);
+  setColumnWidthIfHeader_(sheet, headers, 'Package', 190);
+  setColumnWidthIfHeader_(sheet, headers, 'Status', 150);
+  setColumnWidthIfHeader_(sheet, headers, 'Priority', 120);
+  setColumnWidthIfHeader_(sheet, headers, 'Start Date', 120);
+  setColumnWidthIfHeader_(sheet, headers, 'Due Date', 120);
+  setColumnWidthIfHeader_(sheet, headers, 'Progress %', 110);
+  setColumnWidthIfHeader_(sheet, headers, 'Assigned To', 170);
+  setColumnWidthIfHeader_(sheet, headers, 'Current Phase', 160);
+  setColumnWidthIfHeader_(sheet, headers, 'Deliverables', 260);
+  setColumnWidthIfHeader_(sheet, headers, 'Folder', 240);
+  setColumnWidthIfHeader_(sheet, headers, 'Notes', 340);
+  setColumnWidthIfHeader_(sheet, headers, 'Last Updated', 150);
+  applyColumnFormattingByHeader_(sheet, headers, headerRow, lastRow, {
+    'Start Date': { horizontalAlignment: 'center', numberFormat: 'yyyy-mm-dd' },
+    'Due Date': { horizontalAlignment: 'center', numberFormat: 'yyyy-mm-dd' },
+    'Progress %': { horizontalAlignment: 'center', numberFormat: '0%' },
+    Status: { horizontalAlignment: 'center' },
+    Priority: { horizontalAlignment: 'center' },
+    'Last Updated': { horizontalAlignment: 'center', numberFormat: 'yyyy-mm-dd hh:mm' }
+  });
+  applyAlternatingRows_(sheet, headerRow + 1, lastRow, lastColumn);
+  applyOperatingSystemTableSurface_(sheet, headerRow, lastRow, lastColumn);
+  applyVisualComfortBody_(sheet, headerRow + 1, lastRow, lastColumn, {
+    rowHeight: 36
+  });
+  applyProjectStatusColors_(sheet, headers, headerRow, lastRow);
+  applyWrapByHeader_(sheet, headers, headerRow, lastRow, ['Deliverables', 'Folder', 'Notes']);
+  applyProjectValidation_(sheet, headers, headerRow);
+  sheet.setRowHeights(headerRow + 1, Math.max(lastRow - headerRow, 1), 36);
+}
+
+function applyFollowUpPriorityColors_(sheet, headers, headerRow, lastRow) {
+  if (!headers.Priority || lastRow <= headerRow) {
+    return;
+  }
+  const rowCount = lastRow - headerRow;
+  const values = sheet.getRange(headerRow + 1, headers.Priority, rowCount, 1).getValues();
+  const colors = values.map(function(row) {
+    const value = String(row[0] || '').toLowerCase();
+    if (value.indexOf('hot') !== -1 || value === 'a') {
+      return ['#f4cccc'];
+    }
+    if (value.indexOf('good') !== -1 || value === 'b') {
+      return ['#fff2cc'];
+    }
+    return ['#d9ead3'];
+  });
+  sheet.getRange(headerRow + 1, headers.Priority, rowCount, 1).setBackgrounds(colors);
+}
+
+function applyProjectStatusColors_(sheet, headers, headerRow, lastRow) {
+  if (!headers.Status || lastRow <= headerRow) {
+    return;
+  }
+  const rowCount = lastRow - headerRow;
+  const values = sheet.getRange(headerRow + 1, headers.Status, rowCount, 1).getValues();
+  const colors = values.map(function(row) {
+    const status = String(row[0] || '').trim();
+    if (status === 'Completed' || status === 'Maintenance') {
+      return ['#d9ead3'];
+    }
+    if (status === 'Cancelled') {
+      return ['#f4cccc'];
+    }
+    if (status === 'Waiting on Client' || status === 'Review') {
+      return ['#fff2cc'];
+    }
+    return ['#d9eaf7'];
+  });
+  sheet.getRange(headerRow + 1, headers.Status, rowCount, 1).setBackgrounds(colors);
+}
+
+function applyProjectValidation_(sheet, headers, headerRow) {
+  const rowCount = Math.max(sheet.getMaxRows() - headerRow, 1);
+  if (headers.Status) {
+    const statusRule = SpreadsheetApp.newDataValidation()
+      .requireValueInList(PROJECT_STATUSES, true)
+      .setAllowInvalid(false)
+      .build();
+    sheet.getRange(headerRow + 1, headers.Status, rowCount, 1).setDataValidation(statusRule);
+  }
+  if (headers.Deliverables) {
+    const deliverableRule = SpreadsheetApp.newDataValidation()
+      .requireValueInList(PROJECT_DELIVERABLE_TYPES, true)
+      .setAllowInvalid(true)
+      .build();
+    sheet.getRange(headerRow + 1, headers.Deliverables, rowCount, 1).setDataValidation(deliverableRule);
+  }
+}
+
+function getProjectDeliverableActivityNotes_(values, headers) {
+  const deliverables = getValueByHeader_(values, headers, 'Deliverables') || 'Project deliverables';
+  return `${deliverables} marked complete.`;
+}
+
+function refreshProjectProgressFormatting_(sheet, headers) {
+  const headerRow = findBestHeaderRow_(sheet);
+  const dataStartRow = headerRow + 1;
+  const rowCount = Math.max(sheet.getLastRow() - dataStartRow + 1, 0);
+  if (rowCount <= 0 || !headers.Status || !headers['Progress %']) {
+    return;
+  }
+  const statuses = sheet.getRange(dataStartRow, headers.Status, rowCount, 1).getValues();
+  const progressValues = statuses.map(function(row) {
+    return [getProjectProgressForStatus_(row[0])];
+  });
+  sheet.getRange(dataStartRow, headers['Progress %'], progressValues.length, 1).setValues(progressValues);
+}
+
+function normalizeProjectStatus_(value) {
+  const text = String(value || '').trim().toLowerCase();
+  return PROJECT_STATUSES.filter(function(status) {
+    return status.toLowerCase() === text;
+  })[0] || '';
+}
+
+function getProjectProgressForStatus_(status) {
+  const progress = {
+    Planning: 0.05,
+    Discovery: 0.15,
+    'In Progress': 0.5,
+    'Waiting on Client': 0.65,
+    Review: 0.85,
+    Completed: 1,
+    Maintenance: 1,
+    Cancelled: 0
+  };
+  return progress[normalizeProjectStatus_(status) || status] || 0.05;
+}
+
+function inferProjectDeliverables_(service) {
+  const text = String(service || '').toLowerCase();
+  const deliverables = [];
+  if (text.indexOf('website') !== -1) {
+    deliverables.push('Website');
+  }
+  if (text.indexOf('seo') !== -1 || text.indexOf('google') !== -1) {
+    deliverables.push(text.indexOf('google') !== -1 ? 'Google Business' : 'SEO');
+  }
+  if (text.indexOf('automation') !== -1 || text.indexOf('system') !== -1) {
+    deliverables.push('Automation');
+  }
+  if (text.indexOf('consult') !== -1) {
+    deliverables.push('Consulting');
+  }
+  return deliverables.length ? deliverables.join(', ') : 'Consulting';
+}
+
+function getClientProjectFolderUrl_(company) {
+  const folderName = sanitizeDriveFileName_(company || '');
+  if (!folderName) {
+    return '';
+  }
+  const folders = DriveApp.getFoldersByName(folderName);
+  return folders.hasNext() ? folders.next().getUrl() : '';
+}
+
+function generateProjectId_(company) {
+  const clean = String(company || 'PROJECT').replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 8) || 'PROJECT';
+  return `PRJ-${clean}-${Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMddHHmmss')}`;
+}
+
+function runNextAction() {
+  const context = getSelectedProspectContextOrAlert_([
+    'Company',
+    'Status'
+  ]);
+  if (!context) {
+    return;
+  }
+
+  const ui = SpreadsheetApp.getUi();
+  const company = String(getValueByHeader_(context.values, context.table.headers, 'Company') || '').trim();
+  const rawStatus = String(getValueByHeader_(context.values, context.table.headers, 'Status') || '').trim();
+  const status = normalizePipelineStage_(rawStatus) || rawStatus || 'Lead Found';
+  let completedAction = '';
+
+  try {
+    logPipelineActivity_(context.ss, company, 'Next Action Started', `Next Action Engine started from status: ${status}.`);
+
+    if (status === 'Lead Found') {
+      completedAction = runLeadFoundNextAction_(context);
+    } else if (status === 'Executive Brief Sent') {
+      completedAction = runExecutiveSnapshotSentNextAction_(context);
+    } else if (status === 'Discovery Meeting Scheduled') {
+      completedAction = runDiscoveryMeetingNextAction_(context);
+    } else if (status === 'Digital Business Assessment') {
+      completedAction = runDigitalBusinessAssessmentNextAction_(context);
+    } else if (status === 'Improvement Plan Sent') {
+      completedAction = promptImprovementPlanOutcome_(context);
+    } else if (status === 'Project Started' || status === 'Client') {
+      completedAction = openOrCreateClientFromNextAction_(context);
+    } else if (status === 'Lost') {
+      completedAction = archiveLostProspectFromNextAction_(context);
+    } else if (status === 'Nurture') {
+      completedAction = scheduleNextActionFollowUp_(context);
+    } else {
+      completedAction = runDefaultNextAction_(context, status);
+    }
+
+    logPipelineActivity_(context.ss, company, 'Next Action Complete', completedAction);
+    refreshNextActionDashboards_();
+
+    ui.alert(
+      'Business Optimization Platform',
+      `Next Action complete for ${company}.\n\n${completedAction}`,
+      ui.ButtonSet.OK
+    );
+  } catch (error) {
+    const message = error && error.message ? error.message : String(error);
+    try {
+      logPipelineActivity_(context.ss, company, 'Next Action Failed', `Status: ${status}. Error: ${message}`);
+      refreshNextActionDashboards_();
+    } catch (logError) {
+      console.warn('Next Action failure could not be logged: ' + (logError && logError.message ? logError.message : String(logError)));
+    }
+
+    ui.alert('Business Optimization Platform', `Run Next Action failed.\n\n${message}`, ui.ButtonSet.OK);
+  }
+}
+
+function getSelectedProspectContextOrAlert_(requiredHeaders) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ui = SpreadsheetApp.getUi();
+  const sheet = ss.getActiveSheet();
+
+  if (!sheet || sheet.getName() !== MASTER_PROSPECT_SHEET) {
+    ui.alert('Business Optimization Platform', 'Run Next Action from a selected row on Master Prospect Tracker.', ui.ButtonSet.OK);
+    return null;
+  }
+
+  const activeRange = sheet.getActiveRange();
+  if (!activeRange) {
+    ui.alert('Business Optimization Platform', 'Select one prospect row before running Next Action.', ui.ButtonSet.OK);
+    return null;
+  }
+
+  const table = getHeaderTable_(sheet, requiredHeaders || ['Company', 'Status']);
+  const selectedRow = activeRange.getRow();
+  if (selectedRow <= table.headerRow) {
+    ui.alert('Business Optimization Platform', 'Select a prospect data row below the header row.', ui.ButtonSet.OK);
+    return null;
+  }
+
+  const values = sheet.getRange(selectedRow, 1, 1, table.lastColumn).getValues()[0];
+  const company = String(getValueByHeader_(values, table.headers, 'Company') || '').trim();
+  if (!company) {
+    ui.alert('Business Optimization Platform', 'The selected prospect row is blank or missing Company.', ui.ButtonSet.OK);
+    return null;
+  }
+
+  return {
+    ss: ss,
+    sheet: sheet,
+    table: table,
+    selectedRow: selectedRow,
+    values: values,
+    prospect: {
+      company: company,
+      status: getValueByHeader_(values, table.headers, 'Status')
+    }
+  };
+}
+
+function runLeadFoundNextAction_(context) {
+  generateExecutiveSnapshot();
+  return 'Generated the Executive Brief.';
+}
+
+function runExecutiveSnapshotSentNextAction_(context) {
+  if (isHeaderMarkedYesForNextAction_(context, 'Gmail Draft Created')) {
+    return promptScheduleDiscoveryFromNextAction_(context);
+  }
+
+  createOutreachGmailDraft();
+  return 'Created the outreach draft.';
+}
+
+function runDigitalBusinessAssessmentNextAction_(context) {
+  generateProposal();
+  return 'Generated the Improvement Plan.';
+}
+
+function runDiscoveryMeetingNextAction_(context) {
+  if (isAuditPackageAlreadyGeneratedForNextAction_(context)) {
+    return 'Digital Business Assessment already existed. Present it during the discovery meeting.';
+  }
+
+  generateAuditPackage();
+  return 'Generated the Digital Business Assessment.';
+}
+
+function runDefaultNextAction_(context, status) {
+  throw new Error(`Status "${status}" is not an approved CRM lifecycle stage. Select a valid confirmed stage before running Next Action.`);
+}
+
+function promptReviewGmailDraft_(context) {
+  const company = String(getValueByHeader_(context.values, context.table.headers, 'Company') || '').trim();
+  const html = HtmlService.createHtmlOutput(
+    '<div style="font-family:Arial,sans-serif;padding:18px;color:#202020;">' +
+      '<h2 style="margin:0 0 10px;color:#111;">Review Gmail Draft</h2>' +
+      '<p style="line-height:1.5;">Open Gmail Drafts, review the outreach email for <strong>' + escapeHtml_(company) + '</strong>, then send it manually when ready.</p>' +
+      '<p><a href="https://mail.google.com/mail/u/0/#drafts" target="_blank" style="display:inline-block;background:#111;color:#fff;text-decoration:none;padding:10px 14px;border-radius:4px;">Open Gmail Drafts</a></p>' +
+      '<p style="font-size:12px;color:#6f6a60;">Apps Script cannot reliably open a specific Gmail draft, so this opens the Gmail Drafts folder.</p>' +
+    '</div>'
+  ).setWidth(420).setHeight(260);
+
+  SpreadsheetApp.getUi().showModalDialog(html, 'Business Optimization Platform');
+  logPipelineActivity_(context.ss, company, 'Gmail Draft Review Prompted', 'Prompted user to review and send the Gmail draft.');
+  return 'Opened a Gmail Draft review prompt.';
+}
+
+function scheduleNextActionFollowUp_(context) {
+  const headers = context.table.headers;
+  const company = String(getValueByHeader_(context.values, headers, 'Company') || '').trim();
+
+  setProspectStatusIfHeader_(context.ss, context.sheet, headers, context.selectedRow, 'Nurture');
+  setIfHeaderCell_(context.sheet, headers, context.selectedRow, 'Next Action', 'Follow Up');
+  updateSelectedProspectFollowUpDate_(context.sheet, headers, context.selectedRow, 7);
+  updateSelectedProspectLastActivity_(context.sheet, headers, context.selectedRow);
+  logPipelineActivity_(context.ss, company, 'Follow-Up Scheduled', 'Follow-Up scheduled 7 days after email sent.');
+  return 'Scheduled Follow-Up for 7 days from today.';
+}
+
+function promptFollowUpOutcome_(context) {
+  const ui = SpreadsheetApp.getUi();
+  const headers = context.table.headers;
+  const company = String(getValueByHeader_(context.values, headers, 'Company') || '').trim();
+  const history = buildNextActionFollowUpHistory_(context.ss, company);
+  const response = ui.prompt(
+    'Follow-Up Outcome',
+    history + '\n\nEnter next outcome: Snapshot, Discovery, Assessment, Improvement Plan, Client, Lost, Nurture, or Follow-Up',
+    ui.ButtonSet.OK_CANCEL
+  );
+
+  if (response.getSelectedButton() !== ui.Button.OK) {
+    return 'Follow-Up history displayed. No outcome was selected.';
+  }
+
+  const outcome = String(response.getResponseText() || '').trim().toLowerCase();
+  if (outcome === 'snapshot') {
+    createOutreachGmailDraft();
+    return 'Created a new outreach draft from Follow-Up outcome.';
+  }
+  if (outcome === 'assessment') {
+    applyConfirmedProspectTransition_(context, 'Digital Business Assessment', 'Digital Business Assessment', 'Operator confirmed the Digital Business Assessment through Follow-Up Outcome.');
+    return 'Marked Digital Business Assessment as completed.';
+  }
+  if (outcome === 'improvement plan' || outcome === 'plan') {
+    applyConfirmedProspectTransition_(context, 'Improvement Plan Sent', 'Improvement Plan Sent', 'Operator confirmed sending through Follow-Up Outcome.');
+    return 'Marked Improvement Plan as sent.';
+  }
+  if (outcome === 'discovery' || outcome === 'meeting') {
+    createDiscoveryCall();
+    return 'Started Discovery Meeting scheduling.';
+  }
+  if (outcome === 'client' || outcome === 'won') {
+    markProspectWon();
+    return 'Converted prospect to Client.';
+  }
+  if (outcome === 'lost') {
+    markProspectLost();
+    return 'Marked prospect as Lost.';
+  }
+  if (outcome === 'nurture') {
+    applyConfirmedProspectTransition_(context, 'Nurture', 'Prospect Nurture', 'Operator moved prospect to Nurture through Follow-Up Outcome.');
+    return 'Moved prospect to Nurture.';
+  }
+
+  scheduleNextActionFollowUp_(context);
+  return 'Scheduled the next Follow-Up.';
+}
+
+function promptScheduleDiscoveryFromNextAction_(context) {
+  const ui = SpreadsheetApp.getUi();
+  const company = String(getValueByHeader_(context.values, context.table.headers, 'Company') || '').trim();
+  const response = ui.alert(
+    'Schedule Discovery Meeting',
+    `Schedule a discovery meeting for ${company}?`,
+    ui.ButtonSet.YES_NO
+  );
+
+  if (response !== ui.Button.YES) {
+    return 'Discovery Meeting scheduling prompt displayed. No meeting was scheduled.';
+  }
+
+  createDiscoveryCall();
+  return 'Started Discovery Meeting scheduling.';
+}
+
+function promptImprovementPlanOutcome_(context) {
+  const ui = SpreadsheetApp.getUi();
+  const company = String(getValueByHeader_(context.values, context.table.headers, 'Company') || '').trim();
+  const response = ui.alert(
+    'Improvement Plan Outcome',
+    `Convert ${company} to Client?\n\nChoose No to mark Lost, or Cancel to leave unchanged.`,
+    ui.ButtonSet.YES_NO_CANCEL
+  );
+
+  if (response === ui.Button.YES) {
+    markProspectWon();
+    return 'Converted prospect to Client after Improvement Plan review.';
+  }
+  if (response === ui.Button.NO) {
+    markProspectLost();
+    return 'Marked prospect as Lost after Improvement Plan review.';
+  }
+
+  return 'Improvement Plan outcome prompt displayed. No status change was made.';
+}
+
+function openOrCreateClientFromNextAction_(context) {
+  const status = normalizePipelineStage_(getValueByHeader_(context.values, context.table.headers, 'Status'));
+  if (status === 'Project Started') {
+    completeClientOnboarding();
+    return 'Opened the explicit Client Onboarding completion confirmation.';
+  }
+  openClientWorkspace();
+  return 'Opened the Client Workspace.';
+}
+
+function archiveLostProspectFromNextAction_(context) {
+  const headers = context.table.headers;
+  const company = String(getValueByHeader_(context.values, headers, 'Company') || '').trim();
+
+  setIfHeaderCell_(context.sheet, headers, context.selectedRow, 'Next Action', 'Archived');
+  setIfHeaderCell_(context.sheet, headers, context.selectedRow, 'Archived', 'Yes');
+  updateSelectedProspectLastActivity_(context.sheet, headers, context.selectedRow);
+  logPipelineActivity_(context.ss, company, 'Prospect Archived', 'Archived lost prospect.');
+  return 'Archived the lost prospect.';
+}
+
+function hasAuditDataForNextAction_(context) {
+  const headers = context.table.headers;
+  const auditScore = getValueByHeader_(context.values, headers, 'Audit Score');
+  const auditOutcome = getValueByHeader_(context.values, headers, 'Audit Outcome');
+
+  return String(auditScore || '').trim() !== '' && String(auditOutcome || '').trim() !== '';
+}
+
+function isAuditPackageAlreadyGeneratedForNextAction_(context) {
+  if (typeof isAuditPackageGenerated_ === 'function' && isAuditPackageGenerated_(context.values, context.table.headers)) {
+    return true;
+  }
+
+  return isHeaderMarkedYesForNextAction_(context, 'Audit Package Generated');
+}
+
+function isHeaderMarkedYesForNextAction_(context, header) {
+  const value = getValueByHeader_(context.values, context.table.headers, header);
+  return String(value || '').trim().toLowerCase() === 'yes';
+}
+
+function buildNextActionFollowUpHistory_(ss, company) {
+  const activities = getRecentActivityForCompany_(ss, company, 5);
+  if (!activities.length) {
+    return 'No Follow-Up history is available yet.';
+  }
+
+  return 'Recent activity:\n' + activities.map(function(activity) {
+    return '- ' + formatDisplayDate_(activity.date) + ': ' + activity.activityType + (activity.notes ? ' - ' + activity.notes : '');
+  }).join('\n');
+}
+
+function refreshNextActionDashboards_() {
+  updatePipelineDashboardMetrics_();
+  refreshExecutiveDashboard();
+}
+
+function validateProspectStageTransition_(currentStage, requestedStage, options) {
+  const settings = options || {};
+  const current = normalizePipelineStage_(currentStage) || String(currentStage || '').trim() || 'Lead Found';
+  const requested = normalizePipelineStage_(requestedStage) || String(requestedStage || '').trim();
+  if (PIPELINE_STAGES.indexOf(requested) === -1) {
+    return { allowed: false, idempotent: false, message: `Invalid CRM Status: ${requested || '(blank)'}. Use an approved lifecycle stage.` };
+  }
+  if (current === requested) {
+    return { allowed: true, idempotent: true, message: '' };
+  }
+  const allowed = {
+    'Lead Found': ['Executive Brief Sent', 'Nurture', 'Lost'],
+    'Executive Brief Sent': ['Discovery Meeting Scheduled', 'Nurture', 'Lost'],
+    'Discovery Meeting Scheduled': ['Digital Business Assessment', 'Nurture', 'Lost'],
+    'Digital Business Assessment': ['Improvement Plan Sent', 'Nurture', 'Lost'],
+    'Improvement Plan Sent': ['Project Started', 'Nurture', 'Lost'],
+    'Project Started': ['Client'],
+    'Client': [],
+    'Nurture': settings.allowNurtureReentry ? ['Lead Found'] : [],
+    'Lost': []
+  };
+  if ((allowed[current] || []).indexOf(requested) !== -1) {
+    return { allowed: true, idempotent: false, message: '' };
+  }
+  return {
+    allowed: false,
+    idempotent: false,
+    message: `Invalid CRM lifecycle transition from ${current} to ${requested}. Complete the next confirmed event before advancing.`
+  };
+}
+
+function buildLifecycleOperationKey_(context, requestedStage) {
+  const values = context.sheet.getRange(context.selectedRow, 1, 1, context.sheet.getLastColumn()).getValues()[0];
+  const prospectId = getValueByHeader_(values, context.table.headers, 'Prospect ID');
+  const identity = String(prospectId || `${context.sheet.getSheetId()}-ROW-${context.selectedRow}`).trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  return `LIFECYCLE:${identity}:${String(requestedStage || '').toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+}
+
+function ensureLifecycleReconciliationColumns_(context) {
+  const table = ensureSheetColumns_(context.sheet, LIFECYCLE_RECONCILIATION_COLUMNS);
+  context.table.headers = table.headers;
+  context.table.lastColumn = table.lastColumn;
+  return table.headers;
+}
+
+function getLifecycleOperationState_(context) {
+  const headers = ensureLifecycleReconciliationColumns_(context);
+  const values = context.sheet.getRange(context.selectedRow, 1, 1, context.table.lastColumn).getValues()[0];
+  return {
+    key: String(getValueByHeader_(values, headers, 'Lifecycle Operation Key') || ''),
+    state: String(getValueByHeader_(values, headers, 'Lifecycle Operation State') || ''),
+    details: String(getValueByHeader_(values, headers, 'Lifecycle Operation Details') || '')
+  };
+}
+
+function setLifecycleOperationMarker_(context, key, state, details) {
+  const headers = ensureLifecycleReconciliationColumns_(context);
+  setIfHeaderCell_(context.sheet, headers, context.selectedRow, 'Lifecycle Operation Key', key);
+  setIfHeaderCell_(context.sheet, headers, context.selectedRow, 'Lifecycle Operation State', state);
+  setIfHeaderCell_(context.sheet, headers, context.selectedRow, 'Lifecycle Operation Details', details || '');
+}
+
+function markLifecycleReconciliationRequired_(sheet, headers, selectedRow, details) {
+  const table = ensureSheetColumns_(sheet, LIFECYCLE_RECONCILIATION_COLUMNS);
+  setIfHeaderCell_(sheet, table.headers, selectedRow, 'Lifecycle Operation State', 'Reconciliation Required');
+  setIfHeaderCell_(sheet, table.headers, selectedRow, 'Lifecycle Operation Details', details || 'Review this lifecycle operation before continuing.');
+}
+
+function lifecycleStatusSnapshotKey_(sheet, row) {
+  return `CRM_STATUS:${sheet.getSheetId()}:${row}`;
+}
+
+function getLifecycleStatusSnapshot_(sheet, row) {
+  return PropertiesService.getDocumentProperties().getProperty(lifecycleStatusSnapshotKey_(sheet, row)) || '';
+}
+
+function setLifecycleStatusSnapshot_(sheet, row, status) {
+  PropertiesService.getDocumentProperties().setProperty(lifecycleStatusSnapshotKey_(sheet, row), String(status || ''));
+}
+
+function lifecycleActivityExists_(ss, operationKey) {
+  const sheet = ss.getSheetByName(ACTIVITY_FEED_SHEET);
+  if (!sheet || !operationKey) return false;
+  const match = sheet.createTextFinder(`[Operation ${operationKey}]`).matchCase(true).findNext();
+  return !!match;
+}
+
+function reconcileConfirmedProspectTransition_(context, requestedStage, activityType, activityNotes, operationKey) {
+  try {
+    syncFollowUpForProspectRow_(context.ss, context.sheet, context.table.headers, context.selectedRow, requestedStage);
+    if (!lifecycleActivityExists_(context.ss, operationKey)) {
+      logPipelineActivity_(context.ss, context.prospect.company, activityType, `${activityNotes} [Operation ${operationKey}]`);
+    }
+    setLifecycleOperationMarker_(context, operationKey, 'Complete', `Confirmed ${requestedStage}; Follow-Up and activity evidence reconciled.`);
+    return { reconciled: true };
+  } catch (error) {
+    const message = error && error.message ? error.message : String(error);
+    setLifecycleOperationMarker_(context, operationKey, 'Reconciliation Required', `CRM Status is ${requestedStage}; downstream reconciliation failed: ${message}`);
+    throw new Error(`CRM Status is ${requestedStage}, but reconciliation is required: ${message}`);
+  }
+}
+
+function commitProspectLifecycleRow_(context, currentStage, requestedStage, operationKey, options) {
+  const settings = options || {};
+  const headers = ensureLifecycleReconciliationColumns_(context);
+  const range = context.sheet.getRange(context.selectedRow, 1, 1, context.table.lastColumn);
+  const before = range.getValues()[0];
+  if (settings.previousStage) setIfHeader_(before, headers, 'Status', currentStage);
+  const after = before.slice();
+  const now = new Date();
+  setIfHeader_(after, headers, 'Status', requestedStage);
+  const nextActions = {
+    'Lead Found': 'Generate Executive Brief', 'Executive Brief Sent': 'Schedule Discovery Meeting',
+    'Discovery Meeting Scheduled': 'Present Digital Business Assessment', 'Digital Business Assessment': 'Generate Improvement Plan',
+    'Improvement Plan Sent': 'Record Improvement Plan Outcome', 'Project Started': 'Complete Client Onboarding',
+    'Client': 'Follow Up', 'Nurture': 'Follow Up', 'Lost': 'Archived'
+  };
+  setIfHeader_(after, headers, 'Next Action', nextActions[requestedStage] || 'Follow Up');
+  setIfHeader_(after, headers, 'Last Activity', now);
+  setIfHeader_(after, headers, 'Lifecycle Operation Key', operationKey);
+  setIfHeader_(after, headers, 'Lifecycle Operation State', 'Committed; Reconciliation Pending');
+  setIfHeader_(after, headers, 'Lifecycle Operation Details', `Confirmed transition from ${currentStage} to ${requestedStage}.`);
+  setIfHeader_(after, headers, 'Lifecycle Confirmed At', now);
+  Object.keys(settings.extraRowValues || {}).forEach(function(header) {
+    setIfHeader_(after, headers, header, settings.extraRowValues[header]);
+  });
+  try {
+    range.setValues([after]);
+    const persisted = normalizePipelineStage_(context.sheet.getRange(context.selectedRow, headers.Status).getValue());
+    if (persisted !== requestedStage) throw new Error(`Status verification failed; expected ${requestedStage}, found ${persisted || '(blank)'}.`);
+    setLifecycleStatusSnapshot_(context.sheet, context.selectedRow, requestedStage);
+  } catch (error) {
+    let restored = false;
+    try {
+      range.setValues([before]);
+      const restoredStatus = normalizePipelineStage_(context.sheet.getRange(context.selectedRow, headers.Status).getValue()) || String(context.sheet.getRange(context.selectedRow, headers.Status).getValue() || '').trim();
+      restored = restoredStatus === currentStage;
+    } catch (restoreError) {
+      console.error(restoreError);
+    }
+    if (!restored) {
+      markLifecycleReconciliationRequired_(context.sheet, headers, context.selectedRow, `Final lifecycle write failed and prior values could not be verified: ${error && error.message ? error.message : String(error)}`);
+    }
+    throw new Error(restored
+      ? `Lifecycle commit failed; the prior Status ${currentStage} was restored and verified.`
+      : 'Lifecycle commit failed and rollback could not be verified. Reconciliation is required.');
+  }
+}
+
+function setNextActionForConfirmedStage_(sheet, headers, selectedRow, status) {
+  const nextActions = {
+    'Lead Found': 'Generate Executive Brief',
+    'Executive Brief Sent': 'Schedule Discovery Meeting',
+    'Discovery Meeting Scheduled': 'Present Digital Business Assessment',
+    'Digital Business Assessment': 'Generate Improvement Plan',
+    'Improvement Plan Sent': 'Record Improvement Plan Outcome',
+    'Project Started': 'Complete Client Onboarding',
+    'Client': 'Follow Up',
+    'Nurture': 'Follow Up',
+    'Lost': 'Archived'
+  };
+  setIfHeaderCell_(sheet, headers, selectedRow, 'Next Action', nextActions[status] || 'Follow Up');
+}
+
+function applyConfirmedProspectTransition_(context, requestedStage, activityType, activityNotes, options) {
+  const settings = options || {};
+  let lock = null;
+  if (!settings.lockHeld) {
+    lock = LockService.getDocumentLock();
+    lock.waitLock(30000);
+  }
+  try {
+  const headers = ensureLifecycleReconciliationColumns_(context);
+  const persistedCurrent = normalizePipelineStage_(getValueByHeader_(context.sheet.getRange(context.selectedRow, 1, 1, context.sheet.getLastColumn()).getValues()[0], headers, 'Status')) || 'Lead Found';
+  const current = settings.previousStage || persistedCurrent;
+  const validation = validateProspectStageTransition_(current, requestedStage, settings);
+  if (!validation.allowed) {
+    throw new Error(validation.message);
+  }
+  const operationKey = settings.operationKey || buildLifecycleOperationKey_(context, requestedStage);
+  if (validation.idempotent) {
+    const marker = getLifecycleOperationState_(context);
+    if (marker.key === operationKey && marker.state === 'Complete') return { changed: false, stage: requestedStage, reconciled: true };
+    reconcileConfirmedProspectTransition_(context, requestedStage, activityType, activityNotes, operationKey);
+    return { changed: false, stage: requestedStage, reconciled: true };
+  }
+  commitProspectLifecycleRow_(context, current, requestedStage, operationKey, settings);
+  reconcileConfirmedProspectTransition_(context, requestedStage, activityType, activityNotes, operationKey);
+  return { changed: true, stage: requestedStage, reconciled: true };
+  } finally {
+    if (lock) lock.releaseLock();
+  }
+}
+
+function confirmSelectedProspectTransition_(requestedStage, title, activityType, activityNotes) {
+  const context = getSelectedProspectContext_(['Company', 'Status']);
+  if (!context) return null;
+  const current = normalizePipelineStage_(getValueByHeader_(context.values, context.table.headers, 'Status')) || 'Lead Found';
+  const validation = validateProspectStageTransition_(current, requestedStage);
+  const ui = SpreadsheetApp.getUi();
+  if (!validation.allowed) {
+    ui.alert('Business Optimization Platform', validation.message, ui.ButtonSet.OK);
+    return null;
+  }
+  const marker = getLifecycleOperationState_(context);
+  if (!validation.idempotent && ui.alert(title, `Confirm the real-world event for ${context.prospect.company}?`, ui.ButtonSet.YES_NO) !== ui.Button.YES) return null;
+  applyConfirmedProspectTransition_(context, requestedStage, activityType, activityNotes);
+  refreshSalesOperatingSystem_();
+  ui.alert('Business Optimization Platform', validation.idempotent
+    ? `${requestedStage} was already confirmed. Reconciliation was checked${marker.state === 'Complete' ? '; no repair was needed.' : ' and incomplete downstream work was repaired.'}`
+    : `CRM Status updated to ${requestedStage}.`, ui.ButtonSet.OK);
+  return context;
+}
+
+function confirmExecutiveSnapshotSent() {
+  return confirmSelectedProspectTransition_('Executive Brief Sent', 'Confirm Executive Brief Sent', 'Executive Brief Sent', 'Operator confirmed the Executive Brief was sent.');
+}
+
+function confirmAssessmentPresented() {
+  return confirmSelectedProspectTransition_('Digital Business Assessment', 'Confirm Digital Business Assessment', 'Digital Business Assessment', 'Operator confirmed the Digital Business Assessment was completed.');
+}
+
+function confirmImprovementPlanSent() {
+  return confirmSelectedProspectTransition_('Improvement Plan Sent', 'Confirm Improvement Plan Sent', 'Improvement Plan Sent', 'Operator confirmed the Improvement Plan was sent.');
+}
+
+function moveProspectToNurture() {
+  return confirmSelectedProspectTransition_('Nurture', 'Move to Nurture', 'Prospect Nurture', 'Operator moved the prospect to Nurture.');
+}
+
+function reactivateNurturedProspect() {
+  const context = getSelectedProspectContext_(['Company', 'Status']);
+  if (!context) return null;
+  const current = normalizePipelineStage_(getValueByHeader_(context.values, context.table.headers, 'Status'));
+  const ui = SpreadsheetApp.getUi();
+  if (current !== 'Nurture') {
+    ui.alert('Business Optimization Platform', 'Only a Nurture prospect can be explicitly reactivated.', ui.ButtonSet.OK);
+    return null;
+  }
+  if (ui.alert('Reactivate Nurtured Prospect', `Confirm ${context.prospect.company} should re-enter the active lifecycle at Lead Found?`, ui.ButtonSet.YES_NO) !== ui.Button.YES) return null;
+  applyConfirmedProspectTransition_(context, 'Lead Found', 'Nurtured Prospect Reactivated', 'Operator explicitly confirmed re-entry at Lead Found.', { allowNurtureReentry: true });
+  refreshSalesOperatingSystem_();
+  return context;
+}
+
+function advanceProspectStage() {
+  SpreadsheetApp.getUi().alert('Business Optimization Platform', 'Automatic stage advancement is disabled. Use the explicit confirmation action for the real-world event that occurred.', SpreadsheetApp.getUi().ButtonSet.OK);
 }
 
 function markProspectWon() {
-  setSelectedProspectTerminalStage_('Won', 'Deal Won', 'Marked prospect as Won.');
+  recordImprovementPlanAccepted();
 }
 
 function markProspectLost() {
-  setSelectedProspectTerminalStage_('Lost', 'Deal Lost', 'Marked prospect as Lost.');
+  return confirmSelectedProspectTransition_('Lost', 'Mark Lost', 'Deal Lost', 'Operator confirmed the prospect was lost.');
 }
 
 function markEmailSent() {
-  updateSelectedProspectFollowUpStage_(
-    'Email Sent',
-    'Email Sent',
-    'Intro email sent',
-    'Intro email sent'
-  );
+  confirmExecutiveSnapshotSent();
 }
 
 function markFollowUpComplete() {
-  updateSelectedProspectFollowUpStage_(
-    'Follow Up Due',
-    'Follow-Up Completed',
-    'Follow-up completed; next follow-up scheduled',
-    'Follow-up completed'
-  );
+  completeFollowUp();
 }
 
 function updateSelectedProspectFollowUpStage_(status, activityType, activityNotes, successMessage) {
@@ -81,7 +2359,7 @@ function updateSelectedProspectFollowUpStage_(status, activityType, activityNote
     return;
   }
 
-  setProspectStatus_(context.sheet, context.table.headers, context.selectedRow, status);
+  setProspectStatus_(context.ss, context.sheet, context.table.headers, context.selectedRow, status);
   updateSelectedProspectLastActivity_(context.sheet, context.table.headers, context.selectedRow);
   updateSelectedProspectFollowUpDate_(context.sheet, context.table.headers, context.selectedRow, 7);
   logPipelineActivity_(context.ss, context.prospect.company, activityType, activityNotes);
@@ -92,6 +2370,277 @@ function updateSelectedProspectFollowUpStage_(status, activityType, activityNote
 
 function normalizeDropdownValue_(value) {
   return String(value || '').trim().toLowerCase();
+}
+
+function normalizeProspectDropdownWriteValue_(sheet, headers, header, value) {
+  if (!sheet || sheet.getName() !== MASTER_PROSPECT_SHEET) {
+    return value;
+  }
+
+  return normalizeProspectDropdownValue_(sheet, headers, header, value);
+}
+
+function normalizeProspectDropdownValue_(sheet, headers, header, value) {
+  if (value === null || value === undefined || String(value).trim() === '') {
+    return value;
+  }
+
+  if (header === 'Audit Outcome') {
+    return normalizeAuditOutcome_(value, getApprovedProspectDropdownValues_(sheet, headers, header));
+  }
+  if (header === 'Priority Tier' || header === 'Opportunity Level') {
+    return normalizePriorityTier_(value, getApprovedProspectDropdownValues_(sheet, headers, 'Priority Tier'));
+  }
+  if (header === 'Status') {
+    return normalizeProspectStatus_(value, getApprovedProspectDropdownValues_(sheet, headers, header));
+  }
+  if (header === 'Next Action') {
+    return normalizeNextAction_(value, getApprovedProspectDropdownValues_(sheet, headers, header));
+  }
+  if (header === 'Offer / Service') {
+    return normalizeOfferService_(value, getApprovedProspectDropdownValues_(sheet, headers, header));
+  }
+  if (header === 'Moved to CRM') {
+    return normalizeMovedToCrm_(value, getApprovedProspectDropdownValues_(sheet, headers, header));
+  }
+
+  return value;
+}
+
+function normalizeAuditOutcome_(value, allowedValues) {
+  const text = String(value || '').trim();
+  const key = normalizeDropdownValue_(text);
+  const candidatesByKey = {
+    'high opportunity': ['Strong Fit', 'Good Fit'],
+    high: ['Strong Fit', 'Good Fit'],
+    'strong digital foundation': ['Strong Fit', 'Good Fit'],
+    'very strong': ['Strong Fit', 'Good Fit'],
+    'good foundation with visibility and conversion opportunities': ['Good Fit'],
+    'basic visibility opportunity with trust improvements needed': ['Needs Nurture', 'Good Fit'],
+    medium: ['Good Fit', 'Needs Nurture'],
+    moderate: ['Good Fit', 'Needs Nurture'],
+    low: ['Needs Nurture', 'Poor Fit'],
+    nurture: ['Needs Nurture'],
+    'needs nurture': ['Needs Nurture'],
+    'poor fit': ['Poor Fit'],
+    'not audited': ['Not Audited']
+  };
+  return chooseAllowedValue_(
+    approvedProspectDropdownValues_(allowedValues, 'Audit Outcome'),
+    (candidatesByKey[key] || [text]).concat(['Good Fit', 'Needs Nurture', 'Not Audited']),
+    inferAllowedDropdownValue_(allowedValues, text) || text
+  );
+}
+
+function normalizePriorityTier_(value, allowedValues) {
+  const text = String(value || '').trim();
+  const key = normalizeDropdownValue_(text);
+  const candidatesByKey = {
+    high: ['A - Hot'],
+    'high opportunity': ['A - Hot'],
+    hot: ['A - Hot'],
+    a: ['A - Hot'],
+    'a - hot': ['A - Hot'],
+    medium: ['B - Good'],
+    moderate: ['B - Good'],
+    good: ['B - Good'],
+    b: ['B - Good'],
+    'b - good': ['B - Good'],
+    low: ['C - Later'],
+    later: ['C - Later'],
+    c: ['C - Later'],
+    'c - later': ['C - Later'],
+    d: ['D - Nurture'],
+    nurture: ['D - Nurture'],
+    'd - nurture': ['D - Nurture']
+  };
+  return chooseAllowedValue_(
+    approvedProspectDropdownValues_(allowedValues, 'Priority Tier'),
+    (candidatesByKey[key] || [text]).concat(['B - Good', 'A - Hot', 'C - Later', 'D - Nurture']),
+    inferAllowedDropdownValue_(allowedValues, text) || text
+  );
+}
+
+function normalizeProspectStatus_(value, allowedValues) {
+  const text = String(value || '').trim();
+  const key = normalizeDropdownValue_(text);
+  const candidatesByKey = {
+    'executive snapshot sent': ['Executive Brief Sent'],
+    'executive brief sent': ['Executive Brief Sent'],
+    'digital business assessment presented': ['Digital Business Assessment'],
+    'digital business assessment': ['Digital Business Assessment'],
+    discovery: ['Discovery Meeting Scheduled'],
+    'discovery scheduled': ['Discovery Meeting Scheduled'],
+    'discovery meeting scheduled': ['Discovery Meeting Scheduled'],
+    'improvement plan sent': ['Improvement Plan Sent'],
+    client: ['Client'],
+    'project started': ['Project Started'],
+    nurture: ['Nurture'],
+    lost: ['Lost']
+  };
+  const allowed = approvedProspectDropdownValues_(allowedValues, 'Status');
+  const exact = inferAllowedDropdownValue_(allowed, text);
+  if (exact) return exact;
+  const candidates = candidatesByKey[key] || [];
+  for (let index = 0; index < candidates.length; index += 1) {
+    const matched = inferAllowedDropdownValue_(allowed, candidates[index]);
+    if (matched) return matched;
+  }
+  return text;
+}
+
+function normalizeNextAction_(value, allowedValues) {
+  const text = String(value || '').trim();
+  const key = normalizeDropdownValue_(text);
+  if (key === 'convert to client' || key === 'start project') {
+    return 'Record Improvement Plan Outcome';
+  }
+  const candidatesByKey = {
+    'generate executive snapshot': ['Generate Executive Brief'],
+    'generate executive brief': ['Generate Executive Brief'],
+    snapshot: ['Generate Executive Brief'],
+    'review email': ['Create Outreach Draft', 'Follow Up'],
+    'review gmail draft': ['Create Outreach Draft', 'Follow Up'],
+    'review outreach': ['Review Outreach', 'Create Outreach Draft'],
+    'confirm executive snapshot sent': ['Confirm Executive Brief Sent'],
+    'confirm executive brief sent': ['Confirm Executive Brief Sent'],
+    'send email': ['Create Outreach Draft'],
+    'send intro': ['Create Outreach Draft'],
+    'send intro email': ['Create Outreach Draft'],
+    'create outreach draft': ['Create Outreach Draft'],
+    'send proposal': ['Generate Improvement Plan'],
+    proposal: ['Generate Improvement Plan'],
+    'generate improvement plan': ['Generate Improvement Plan'],
+    'schedule discovery': ['Schedule Discovery Meeting', 'Follow Up'],
+    'schedule discovery call': ['Schedule Discovery Meeting', 'Follow Up'],
+    'schedule discovery meeting': ['Schedule Discovery Meeting', 'Follow Up'],
+    'conduct discovery call': ['Present Digital Business Assessment'],
+    'present digital business assessment': ['Present Digital Business Assessment'],
+    discovery: ['Schedule Discovery Meeting'],
+    'follow-up': ['Follow Up'],
+    'follow up': ['Follow Up'],
+    archived: ['Nurture', 'Follow Up'],
+    nurture: ['Nurture']
+  };
+  return chooseAllowedValue_(
+    approvedProspectDropdownValues_(allowedValues, 'Next Action'),
+    (candidatesByKey[key] || [text]).concat(['Follow Up', 'Send Intro Email']),
+    inferAllowedDropdownValue_(allowedValues, text) || text
+  );
+}
+
+function normalizeOfferService_(value, allowedValues) {
+  const text = String(value || '').trim();
+  const key = normalizeDropdownValue_(text);
+  const candidatesByKey = {
+    'website audit': ['Business Snapshot'],
+    'business snapshot': ['Business Snapshot'],
+    'website and local visibility review': ['Business Snapshot', 'Local SEO'],
+    'website trust and visibility cleanup': ['Business Snapshot', 'Local SEO'],
+    'digital visibility & conversion improvement package': ['Client Website', 'Local SEO', 'Business Snapshot'],
+    'digital visibility and conversion improvement package': ['Client Website', 'Local SEO', 'Business Snapshot'],
+    'growth & optimization review': ['Consulting', 'Local SEO'],
+    'growth and optimization review': ['Consulting', 'Local SEO'],
+    'google business': ['Google Business Optimization'],
+    gbp: ['Google Business Optimization'],
+    seo: ['Local SEO'],
+    website: ['Client Website', 'Business Snapshot'],
+    automation: ['AI Automation'],
+    systems: ['Business Systems'],
+    support: ['Monthly Support'],
+    project: ['One-Time Project']
+  };
+  return chooseAllowedValue_(
+    approvedProspectDropdownValues_(allowedValues, 'Offer / Service'),
+    (candidatesByKey[key] || [text]).concat(['Business Snapshot', 'Consulting']),
+    inferAllowedDropdownValue_(allowedValues, text) || text
+  );
+}
+
+function normalizeMovedToCrm_(value, allowedValues) {
+  const text = String(value || '').trim();
+  const key = normalizeDropdownValue_(text);
+  const candidates = ['yes', 'y', 'true', '1', 'moved', 'converted'].indexOf(key) !== -1
+    ? ['Yes']
+    : ['No'];
+  return chooseAllowedValue_(
+    approvedProspectDropdownValues_(allowedValues, 'Moved to CRM'),
+    candidates.concat([text]),
+    inferAllowedDropdownValue_(allowedValues, text) || text
+  );
+}
+
+function approvedProspectDropdownValues_(allowedValues, header) {
+  return (allowedValues && allowedValues.length)
+    ? allowedValues
+    : ((PROSPECT_DROPDOWN_DEFAULTS && PROSPECT_DROPDOWN_DEFAULTS[header]) || []);
+}
+
+function inferAllowedDropdownValue_(allowedValues, value) {
+  const allowed = allowedValues || [];
+  const key = normalizeDropdownValue_(value);
+  for (let index = 0; index < allowed.length; index += 1) {
+    if (normalizeDropdownValue_(allowed[index]) === key) {
+      return allowed[index];
+    }
+  }
+  return '';
+}
+
+function getApprovedProspectDropdownValues_(sheet, headers, header) {
+  if (!sheet || !headers || !headers[header]) {
+    return approvedProspectDropdownValues_([], header);
+  }
+
+  const table = {
+    headerRow: findBestHeaderRow_(sheet),
+    headers: headers
+  };
+  const validationValues = getDropdownAllowedValuesForHeader_(sheet, table, header);
+  if (validationValues.length) {
+    return validationValues;
+  }
+
+  const settingsValues = getSettingsDropdownValuesForHeader_(SpreadsheetApp.getActiveSpreadsheet(), header);
+  return settingsValues.length
+    ? settingsValues
+    : approvedProspectDropdownValues_([], header);
+}
+
+function getSettingsDropdownValuesForHeader_(ss, header) {
+  const sheet = ss && ss.getSheetByName('Settings');
+  if (!sheet) {
+    return [];
+  }
+
+  const values = sheet.getDataRange().getDisplayValues();
+  const targetKey = normalizeDropdownValue_(header);
+  for (let row = 0; row < values.length; row += 1) {
+    for (let column = 0; column < values[row].length; column += 1) {
+      if (normalizeDropdownValue_(values[row][column]) !== targetKey) {
+        continue;
+      }
+
+      const collected = [];
+      for (let nextRow = row + 1; nextRow < values.length; nextRow += 1) {
+        const nextValue = String(values[nextRow][column] || '').trim();
+        if (!nextValue) {
+          break;
+        }
+        collected.push(nextValue);
+      }
+      for (let nextColumn = column + 1; nextColumn < values[row].length; nextColumn += 1) {
+        const nextValue = String(values[row][nextColumn] || '').trim();
+        if (!nextValue) {
+          break;
+        }
+        collected.push(nextValue);
+      }
+      return uniqueNonBlankValues_(collected);
+    }
+  }
+
+  return [];
 }
 
 function getDemoProspectHeaders_() {
@@ -108,6 +2657,7 @@ function getDemoProspectHeaders_() {
     'Audit Score',
     'Audit Outcome',
     'Priority Tier',
+    'Audit Source',
     'Status',
     'Next Action',
     'Follow-Up Date',
@@ -136,7 +2686,7 @@ function setIfHeaderCell_(sheet, headers, row, header, value) {
     return;
   }
 
-  sheet.getRange(row, headers[header]).setValue(value);
+  sheet.getRange(row, headers[header]).setValue(normalizeProspectDropdownWriteValue_(sheet, headers, header, value));
 }
 
 function openProspectWorkspace() {
@@ -151,6 +2701,428 @@ function openProspectWorkspace() {
     .setTitle('Prospect Workspace');
 
   SpreadsheetApp.getUi().showSidebar(html);
+}
+
+function openClientWorkspace() {
+  const context = getActiveClientWorkspaceContext_(true);
+  if (!context) {
+    return;
+  }
+
+  refreshClientWorkspaceForClientRow_(context.ss, context.clientSheet, context.headers, context.rowNumber, {
+    logOpen: true
+  });
+  context.ss.setActiveSheet(context.ss.getSheetByName(CLIENT_WORKSPACE_SHEET));
+}
+
+function refreshClientWorkspace() {
+  const context = getActiveClientWorkspaceContext_(true);
+  if (!context) {
+    return;
+  }
+
+  refreshClientWorkspaceForClientRow_(context.ss, context.clientSheet, context.headers, context.rowNumber, {
+    logOpen: false
+  });
+
+  SpreadsheetApp.getUi().alert('Business Optimization Platform', 'Client Workspace refreshed.', SpreadsheetApp.getUi().ButtonSet.OK);
+}
+
+function getOrCreateClientWorkspaceSheet_(ss) {
+  let sheet = ss.getSheetByName(CLIENT_WORKSPACE_SHEET);
+  if (!sheet) {
+    sheet = ss.insertSheet(CLIENT_WORKSPACE_SHEET);
+  }
+
+  return sheet;
+}
+
+function getActiveClientWorkspaceContext_(showAlert) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ui = SpreadsheetApp.getUi();
+  const activeSheet = ss.getActiveSheet();
+  const clientSheet = getOrCreateClientsSheet_(ss);
+  const table = ensureClientColumns_(clientSheet);
+  let clientRow = null;
+
+  if (activeSheet && activeSheet.getName() === CLIENTS_SHEET) {
+    const selectedRow = activeSheet.getActiveRange() ? activeSheet.getActiveRange().getRow() : 0;
+    if (selectedRow > table.headerRow) {
+      clientRow = selectedRow;
+    }
+  }
+
+  if (!clientRow && activeSheet && activeSheet.getName() === MASTER_PROSPECT_SHEET) {
+    const prospectContext = getSelectedProspectContext_(['Company']);
+    if (prospectContext) {
+      const company = getValueByHeader_(prospectContext.values, prospectContext.table.headers, 'Company');
+      const website = getValueByHeader_(prospectContext.values, prospectContext.table.headers, 'Website');
+      const existing = findExistingClientRow_(clientSheet, table.headers, company, website);
+      if (existing) {
+        clientRow = existing.rowNumber;
+      }
+    }
+  }
+
+  if (!clientRow && activeSheet && activeSheet.getName() === CLIENT_WORKSPACE_SHEET) {
+    const clientId = String(activeSheet.getRange(4, 2).getValue() || '').trim();
+    const existingById = findClientRowById_(clientSheet, table.headers, clientId);
+    if (existingById) {
+      clientRow = existingById.rowNumber;
+    }
+  }
+
+  if (!clientRow) {
+    if (showAlert) {
+      ui.alert('Business Optimization Platform', 'Select a client row on the Clients sheet, or select a prospect that has already been converted to a client.', ui.ButtonSet.OK);
+    }
+    return null;
+  }
+
+  return {
+    ss: ss,
+    clientSheet: clientSheet,
+    headers: table.headers,
+    rowNumber: clientRow,
+    values: clientSheet.getRange(clientRow, 1, 1, table.lastColumn).getValues()[0]
+  };
+}
+
+function findClientRowById_(sheet, headers, clientId) {
+  const key = String(clientId || '').trim();
+  if (!key || !headers['Client ID']) {
+    return null;
+  }
+
+  const dataStartRow = findBestHeaderRow_(sheet) + 1;
+  const rowCount = Math.max(sheet.getLastRow() - dataStartRow + 1, 0);
+  if (rowCount <= 0) {
+    return null;
+  }
+
+  const values = sheet.getRange(dataStartRow, 1, rowCount, sheet.getLastColumn()).getValues();
+  for (let index = 0; index < values.length; index += 1) {
+    if (String(getValueByHeader_(values[index], headers, 'Client ID') || '').trim() === key) {
+      return {
+        rowNumber: dataStartRow + index,
+        values: values[index]
+      };
+    }
+  }
+
+  return null;
+}
+
+function refreshClientWorkspaceForClientRow_(ss, clientSheet, headers, rowNumber, options) {
+  const settings = options || {};
+  const table = ensureClientColumns_(clientSheet);
+  const values = clientSheet.getRange(rowNumber, 1, 1, table.lastColumn).getValues()[0];
+  const model = buildClientWorkspaceModel_(ss, values, table.headers);
+  const workspaceSheet = getOrCreateClientWorkspaceSheet_(ss);
+
+  renderClientWorkspace_(workspaceSheet, model);
+  if (settings.logOpen) {
+    logPipelineActivity_(ss, model.company, 'Workspace Opened', 'Client Workspace opened.');
+  }
+}
+
+function buildClientWorkspaceModel_(ss, values, headers) {
+  const company = firstNonBlank_([
+    getValueByHeader_(values, headers, 'Company'),
+    getValueByHeader_(values, headers, 'Client Name')
+  ]);
+  const folderInfo = getClientWorkspaceFolderInfo_(company);
+
+  return {
+    clientId: getValueByHeader_(values, headers, 'Client ID'),
+    company: company,
+    contact: getValueByHeader_(values, headers, 'Contact'),
+    email: getValueByHeader_(values, headers, 'Email'),
+    phone: getValueByHeader_(values, headers, 'Phone'),
+    website: getValueByHeader_(values, headers, 'Website'),
+    industry: getValueByHeader_(values, headers, 'Industry'),
+    servicePackage: firstNonBlank_([
+      getValueByHeader_(values, headers, 'Service Package'),
+      getValueByHeader_(values, headers, 'Service')
+    ]),
+    startDate: getValueByHeader_(values, headers, 'Start Date') || getValueByHeader_(values, headers, 'Client Since'),
+    renewalDate: getValueByHeader_(values, headers, 'Renewal Date'),
+    status: getValueByHeader_(values, headers, 'Status'),
+    assignedTo: getValueByHeader_(values, headers, 'Assigned To'),
+    currentProject: getValueByHeader_(values, headers, 'Current Project'),
+    projectStatus: getValueByHeader_(values, headers, 'Project Status'),
+    dueDate: getValueByHeader_(values, headers, 'Due Date'),
+    lastActivity: getValueByHeader_(values, headers, 'Last Activity'),
+    notes: getValueByHeader_(values, headers, 'Notes'),
+    folderUrl: folderInfo.url,
+    documents: folderInfo.documents,
+    activity: getRecentActivityForCompany_(ss, company, 8),
+    followUps: getFollowUpsForCompany_(ss, company, 8),
+    projects: getProjectsForClient_(ss, getValueByHeader_(values, headers, 'Client ID'), company, 5)
+  };
+}
+
+function getClientWorkspaceFolderInfo_(company) {
+  const folderName = sanitizeDriveFileName_(company || '');
+  const result = {
+    url: '',
+    documents: []
+  };
+  if (!folderName) {
+    return result;
+  }
+
+  const folders = DriveApp.getFoldersByName(folderName);
+  if (!folders.hasNext()) {
+    return result;
+  }
+
+  const folder = folders.next();
+  result.url = folder.getUrl();
+  const files = folder.getFiles();
+  let count = 0;
+  while (files.hasNext() && count < 8) {
+    const file = files.next();
+    result.documents.push(file.getName());
+    count += 1;
+  }
+
+  return result;
+}
+
+function renderClientWorkspace_(sheet, model) {
+  ensureExecutiveDashboardSize_(sheet, 70, 10);
+  sheet.getRange(1, 1, 70, 10).breakApart().clearContent().clearFormat();
+  sheet.setHiddenGridlines(true);
+  sheet.setTabColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.black);
+  safeSetFrozenRows_(sheet, 3);
+
+  const black = BUSINESS_OPTIMIZATION_PLATFORM_THEME.black;
+  const gold = BUSINESS_OPTIMIZATION_PLATFORM_THEME.gold;
+  const white = BUSINESS_OPTIMIZATION_PLATFORM_THEME.white;
+  const neutral = BUSINESS_OPTIMIZATION_PLATFORM_THEME.softNeutral;
+  const border = BUSINESS_OPTIMIZATION_PLATFORM_THEME.border;
+
+  sheet.setColumnWidths(1, 10, 135);
+  sheet.setColumnWidth(1, 150);
+  sheet.setColumnWidth(2, 215);
+  sheet.setColumnWidth(3, 26);
+  sheet.setColumnWidth(4, 150);
+  sheet.setColumnWidth(5, 215);
+  sheet.setColumnWidth(6, 26);
+  sheet.setColumnWidth(7, 150);
+  sheet.setColumnWidth(8, 215);
+  sheet.setColumnWidth(9, 26);
+  sheet.setColumnWidth(10, 26);
+  sheet.setRowHeights(1, 70, 30);
+  sheet.setRowHeight(1, 42);
+  sheet.setRowHeight(2, 34);
+
+  sheet.getRange(1, 1, 1, 10).merge().setValue('BUSINESS OPTIMIZATION PLATFORM | CLIENT WORKSPACE')
+    .setBackground(black)
+    .setFontColor(gold)
+    .setFontWeight('bold')
+    .setFontSize(16)
+    .setHorizontalAlignment('center')
+    .setVerticalAlignment('middle');
+  sheet.getRange(2, 1, 1, 10).merge().setValue(model.company || 'No Client Selected')
+    .setBackground(black)
+    .setFontColor(white)
+    .setFontWeight('bold')
+    .setFontSize(20)
+    .setHorizontalAlignment('center')
+    .setVerticalAlignment('middle');
+
+  writeClientWorkspaceSection_(sheet, 4, 1, 2, 'Client Overview', [
+    ['Client ID', model.clientId],
+    ['Company', model.company],
+    ['Status', model.status],
+    ['Industry', model.industry],
+    ['Service Package', model.servicePackage]
+  ]);
+  writeClientWorkspaceSection_(sheet, 4, 4, 2, 'Contact Information', [
+    ['Contact', model.contact],
+    ['Email', model.email],
+    ['Phone', model.phone],
+    ['Website', model.website],
+    ['Assigned To', model.assignedTo]
+  ]);
+  writeClientWorkspaceSection_(sheet, 4, 7, 2, 'Current Project', [
+    ['Project', clientCurrentProjectSummary_(model)],
+    ['Project Status', clientCurrentProjectStatus_(model)],
+    ['Progress', clientCurrentProjectProgress_(model)],
+    ['Due Date', clientCurrentProjectDueDate_(model)],
+    ['Deliverables', clientCurrentProjectDeliverables_(model)]
+  ]);
+
+  writeClientWorkspaceSection_(sheet, 13, 1, 5, 'Timeline / Recent Activity', clientActivityRows_(model.activity));
+  writeClientWorkspaceSection_(sheet, 13, 7, 3, 'Documents', clientDocumentRows_(model));
+  writeClientWorkspaceSection_(sheet, 22, 1, 9, 'Project Delivery', clientProjectRows_(model.projects));
+  writeClientWorkspaceSection_(sheet, 28, 1, 3, 'Quick Actions', [
+    ['Open Client Workspace', 'Use Business Optimization Platform > Open Client Workspace'],
+    ['Refresh Client Workspace', 'Use Business Optimization Platform > Refresh Client Workspace'],
+    ['Open Projects', 'Use Business Optimization Platform > Open Projects'],
+    ['Next Action', 'Use Business Optimization Platform > Run Next Action']
+  ]);
+  writeClientWorkspaceSection_(sheet, 28, 5, 5, 'Next Steps', [
+    ['Next Follow-Up', clientNextFollowUpSummary_(model.followUps)],
+    ['Last Follow-Up', clientLastFollowUpSummary_(model.followUps)],
+    ['Current Project', model.currentProject],
+    ['Project Status', model.projectStatus],
+    ['Due Date', formatDisplayDate_(model.dueDate)],
+    ['Last Activity', formatDisplayDate_(model.lastActivity)],
+    ['Notes', model.notes]
+  ]);
+  writeClientWorkspaceSection_(sheet, 39, 1, 9, 'Upcoming Tasks', clientUpcomingTaskRows_(model.followUps));
+
+  sheet.getRange(1, 1, 70, 10)
+    .setFontFamily('Arial')
+    .setVerticalAlignment('middle')
+    .setWrap(true);
+  sheet.getRange(4, 1, 32, 10)
+    .setBorder(true, true, true, true, true, true, border, SpreadsheetApp.BorderStyle.SOLID);
+  sheet.getRange(5, 1, 8, 10).setBackground(neutral);
+}
+
+function writeClientWorkspaceSection_(sheet, startRow, startColumn, valueColumnSpan, title, rows) {
+  const width = valueColumnSpan + 1;
+  sheet.getRange(startRow, startColumn, 1, width).merge().setValue(title)
+    .setBackground(BUSINESS_OPTIMIZATION_PLATFORM_THEME.charcoal)
+    .setFontColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.gold)
+    .setFontWeight('bold')
+    .setFontSize(11)
+    .setHorizontalAlignment('center')
+    .setVerticalAlignment('middle');
+
+  const output = (rows || []).map(function(row) {
+    return [row[0] || '', clientWorkspaceDisplayValue_(row[1])];
+  });
+  if (!output.length) {
+    return;
+  }
+
+  sheet.getRange(startRow + 1, startColumn, output.length, 2).setValues(output);
+  sheet.getRange(startRow + 1, startColumn, output.length, 1)
+    .setFontWeight('bold')
+    .setFontColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.muted)
+    .setHorizontalAlignment('right')
+    .setVerticalAlignment('middle');
+  sheet.getRange(startRow + 1, startColumn + 1, output.length, Math.max(valueColumnSpan, 1))
+    .setBackground(BUSINESS_OPTIMIZATION_PLATFORM_THEME.softNeutral)
+    .setHorizontalAlignment('left')
+    .setVerticalAlignment('middle');
+}
+
+function clientWorkspaceDisplayValue_(value) {
+  if (value instanceof Date) {
+    return value;
+  }
+
+  if (value === 0) {
+    return 0;
+  }
+
+  const text = String(value || '').trim();
+  return text ? value : 'Not set yet';
+}
+
+function clientActivityRows_(activities) {
+  const values = (activities || []).slice(0, 8).map(function(activity) {
+    return [
+      formatDisplayDate_(activity.date),
+      `${activity.activityType || ''}${activity.notes ? ' - ' + activity.notes : ''}`
+    ];
+  });
+  return values.length ? values : [['Activity', 'Client activity will appear here as work is completed.']];
+}
+
+function clientDocumentRows_(model) {
+  const rows = [];
+  if (model.folderUrl) {
+    rows.push(['Drive Folder', model.folderUrl]);
+  }
+  (model.documents || []).slice(0, 7).forEach(function(fileName) {
+    rows.push(['File', fileName]);
+  });
+  return rows.length ? rows : [['Documents', 'Client documents will appear here when they are available.']];
+}
+
+function clientCurrentProject_(model) {
+  return (model.projects || []).filter(function(project) {
+    return project.status !== 'Completed' && project.status !== 'Cancelled';
+  })[0] || (model.projects || [])[0] || null;
+}
+
+function clientCurrentProjectSummary_(model) {
+  const project = clientCurrentProject_(model);
+  return project ? `${project.service || project.packageName || 'Project'} (${project.projectId || 'No ID'})` : model.currentProject;
+}
+
+function clientCurrentProjectStatus_(model) {
+  const project = clientCurrentProject_(model);
+  return project ? project.status : model.projectStatus;
+}
+
+function clientCurrentProjectProgress_(model) {
+  const project = clientCurrentProject_(model);
+  if (!project) {
+    return 'Not set yet';
+  }
+  return `${Math.round((Number(project.progress) || 0) * 100)}%`;
+}
+
+function clientCurrentProjectDueDate_(model) {
+  const project = clientCurrentProject_(model);
+  return project ? formatDisplayDate_(project.dueDate) : formatDisplayDate_(model.dueDate);
+}
+
+function clientCurrentProjectDeliverables_(model) {
+  const project = clientCurrentProject_(model);
+  return project ? project.deliverables : 'Not set yet';
+}
+
+function clientProjectRows_(projects) {
+  const rows = (projects || []).slice(0, 5).map(function(project) {
+    return [
+      `${project.service || 'Project'} | ${project.status || 'Planning'} | ${Math.round((Number(project.progress) || 0) * 100)}%`,
+      `${project.deliverables || 'Deliverables not set'} | Due ${formatDisplayDate_(project.dueDate)}`
+    ];
+  });
+  return rows.length ? rows : [['Projects', 'No Active Projects — create a project when client work is ready to begin.']];
+}
+
+function clientNextFollowUpSummary_(followUps) {
+  const next = (followUps || []).filter(function(item) {
+    return !item.completed;
+  })[0];
+  if (!next) {
+    return 'No open Follow-Up scheduled.';
+  }
+  return `${next.type || 'Follow-Up'} due ${formatDisplayDate_(next.dueDate)}`;
+}
+
+function clientLastFollowUpSummary_(followUps) {
+  const completed = (followUps || []).filter(function(item) {
+    return item.completed;
+  }).sort(function(a, b) {
+    return dateSortValue_(b.completedDate) - dateSortValue_(a.completedDate);
+  })[0];
+  if (!completed) {
+    return 'No completed Follow-Ups yet.';
+  }
+  return `${completed.type || 'Follow-Up'} completed ${formatDisplayDate_(completed.completedDate)}`;
+}
+
+function clientUpcomingTaskRows_(followUps) {
+  const rows = (followUps || []).filter(function(item) {
+    return !item.completed;
+  }).slice(0, 6).map(function(item) {
+    return [
+      `${item.type || 'Follow-Up'} | ${formatDisplayDate_(item.dueDate)}`,
+      item.notes || item.priority || 'Follow-Up task'
+    ];
+  });
+  return rows.length ? rows : [['Upcoming Tasks', 'No open Follow-Up tasks.']];
 }
 
 function openBulkProspectImport() {
@@ -238,6 +3210,15 @@ function buildBulkProspectImportHtml_() {
             font-weight: 700;
             text-transform: uppercase;
           }
+          button.secondary {
+            border-color: rgba(216, 173, 77, .65);
+            background: transparent;
+            color: #f7f3ea;
+          }
+          button:disabled {
+            cursor: wait;
+            opacity: .55;
+          }
           .result {
             border: 1px solid rgba(184, 135, 40, .45);
             background: #181818;
@@ -272,14 +3253,14 @@ function buildBulkProspectImportHtml_() {
           <label for="industry">Industry</label>
           <input id="industry" placeholder="Roofing">
 
-          <button onclick="addSingleLine()">Add To Paste Area</button>
+          <button id="addButton" class="secondary" onclick="addSingleLine()">Add to Paste Area</button>
 
           <label for="bulk">Paste Prospects</label>
           <textarea id="bulk" placeholder="Company | Website | City | State | Industry"></textarea>
           <div class="hint">One prospect per line. Format: Company | Website | City | State | Industry</div>
 
-          <button onclick="importProspects()">Import Prospects</button>
-          <div id="result" class="result">Imported: 0\\nSkipped Duplicates: 0\\nErrors: 0</div>
+          <button id="importButton" onclick="importProspects()">Import Prospects</button>
+          <div id="result" class="result">Ready to import prospects.</div>
         </div>
 
         <script>
@@ -297,18 +3278,31 @@ function buildBulkProspectImportHtml_() {
 
           function importProspects() {
             const result = document.getElementById('result');
-            result.textContent = 'Importing...';
+            const importButton = document.getElementById('importButton');
+            const addButton = document.getElementById('addButton');
+            importButton.disabled = true;
+            addButton.disabled = true;
+            importButton.textContent = 'Importing…';
+            result.textContent = 'Importing prospects…';
             google.script.run
               .withSuccessHandler(function(summary) {
+                importButton.disabled = false;
+                addButton.disabled = false;
+                importButton.textContent = 'Import Prospects';
                 result.textContent = [
-                  'Imported: ' + summary.imported,
-                  'Skipped Duplicates: ' + summary.skippedDuplicates,
-                  'Errors: ' + summary.errors.length,
+                  summary.errors.length ? 'Import completed with items to review.' : 'Prospect import completed successfully.',
+                  '',
+                  'Prospects imported: ' + summary.imported,
+                  'Duplicates skipped: ' + summary.skippedDuplicates,
+                  'Items to review: ' + summary.errors.length,
                   summary.errors.length ? '\\nErrors:\\n- ' + summary.errors.join('\\n- ') : ''
                 ].join('\\n');
               })
               .withFailureHandler(function(error) {
-                result.textContent = error && error.message ? error.message : String(error);
+                importButton.disabled = false;
+                addButton.disabled = false;
+                importButton.textContent = 'Import Prospects';
+                result.textContent = 'The import could not be completed. Review the prospect data and try again.';
               })
               .bulkImportProspects(document.getElementById('bulk').value);
           }
@@ -453,7 +3447,16 @@ function buildProspectWorkspaceData_(context) {
     status: getValueByHeader_(values, headers, 'Status'),
     lastActivity: getValueByHeader_(values, headers, 'Last Activity'),
     followUpDate: getValueByHeader_(values, headers, 'Follow-Up Date'),
-    nextAction: getValueByHeader_(values, headers, 'Next Action')
+    nextAction: getValueByHeader_(values, headers, 'Next Action'),
+    prospectId: getValueByHeader_(values, headers, 'Prospect ID'),
+    validationStatus: getValueByHeader_(values, headers, 'Validation Status'),
+    validationDetails: getValueByHeader_(values, headers, 'Validation Details'),
+    inspectionStatus: getValueByHeader_(values, headers, 'Inspection Status'),
+    workflowStatus: getValueByHeader_(values, headers, 'Workflow Status'),
+    workflowDetails: getValueByHeader_(values, headers, 'Workflow Details'),
+    reviewStatus: getValueByHeader_(values, headers, 'Review Status'),
+    reviewedAt: getValueByHeader_(values, headers, 'Reviewed At'),
+    reviewNotes: getValueByHeader_(values, headers, 'Review Notes')
   };
 
   return {
@@ -534,6 +3537,12 @@ function getRecentActivityForCompany_(ss, company, limit) {
 function buildProspectWorkspaceHtml_(workspace) {
   const prospect = workspace.prospect;
   const client = workspace.client;
+  const developmentActionsHtml = typeof isDeveloperModeEnabled_ === 'function' && isDeveloperModeEnabled_()
+    ? `
+      <button onclick="runAction('workspaceRunRealWebsiteAudit')">Run Website Inspection</button>
+      <button onclick="runAction('workspaceRunWebsiteAudit')">Quick Internal Audit</button>
+    `
+    : '';
   const activityRows = workspace.activity.length
     ? workspace.activity.map(function(activity) {
       return `
@@ -546,7 +3555,7 @@ function buildProspectWorkspaceHtml_(workspace) {
         </div>
       `;
     }).join('')
-    : '<p class="muted">No activity recorded yet.</p>';
+    : '<p class="muted">No Activity Yet — completed actions will appear here.</p>';
 
   const clientHtml = client
     ? `
@@ -556,7 +3565,7 @@ function buildProspectWorkspaceHtml_(workspace) {
         ${workspaceFieldHtml_('Client Status', client.status)}
       </div>
     `
-    : '<p class="muted">No active client record found.</p>';
+    : '<p class="muted">No Active Client Record — convert the prospect after the Improvement Plan is accepted.</p>';
 
   return `
     <!doctype html>
@@ -566,17 +3575,18 @@ function buildProspectWorkspaceHtml_(workspace) {
         <style>
           body {
             margin: 0;
-            background: #111111;
-            color: #f7f3ea;
+            background: #f7f3ea;
+            color: #202020;
             font-family: Arial, Helvetica, sans-serif;
           }
           .wrap {
             padding: 18px;
           }
           .brand {
+            background: #111111;
             border-bottom: 2px solid #b88728;
-            margin-bottom: 16px;
-            padding-bottom: 12px;
+            margin: -18px -18px 16px;
+            padding: 18px 18px 14px;
           }
           .brand span {
             color: #d8ad4d;
@@ -601,7 +3611,7 @@ function buildProspectWorkspaceHtml_(workspace) {
           }
           .section {
             border: 1px solid rgba(184, 135, 40, .45);
-            background: #181818;
+            background: #ffffff;
             padding: 12px;
             margin-bottom: 12px;
           }
@@ -610,17 +3620,17 @@ function buildProspectWorkspaceHtml_(workspace) {
             gap: 8px;
           }
           .field {
-            border-bottom: 1px solid rgba(255,255,255,.09);
+            border-bottom: 1px solid #eee6d5;
             padding-bottom: 7px;
           }
           .label {
-            color: #a8a8a8;
+            color: #6f6a60;
             font-size: 10px;
             font-weight: 700;
             text-transform: uppercase;
           }
           .value {
-            color: #ffffff;
+            color: #202020;
             font-size: 13px;
             margin-top: 3px;
             overflow-wrap: anywhere;
@@ -642,11 +3652,11 @@ function buildProspectWorkspaceHtml_(workspace) {
           }
           button.secondary {
             background: transparent;
-            color: #f7f3ea;
+            color: #111111;
           }
           .activity {
             border-left: 3px solid #b88728;
-            background: #202020;
+            background: #ffffff;
             margin-bottom: 8px;
             padding: 9px 10px;
           }
@@ -654,16 +3664,16 @@ function buildProspectWorkspaceHtml_(workspace) {
             display: flex;
             justify-content: space-between;
             gap: 8px;
-            color: #ffffff;
+            color: #202020;
             font-size: 12px;
           }
           .activity-top span {
-            color: #bfb6a4;
+            color: #6f6a60;
             white-space: nowrap;
           }
           .activity p,
           .muted {
-            color: #d6d0c6;
+            color: #6f6a60;
             font-size: 12px;
             line-height: 1.45;
             margin: 6px 0 0;
@@ -678,14 +3688,18 @@ function buildProspectWorkspaceHtml_(workspace) {
           </div>
 
           <div class="actions">
-            <button onclick="runAction('workspaceRunRealWebsiteAudit')">Run Real Website Audit</button>
-            <button onclick="runAction('workspaceRunWebsiteAudit')">Quick Internal Audit</button>
-            <button onclick="runAction('workspaceGenerateAuditPackage')">Generate Audit Package</button>
-            <button onclick="runAction('workspaceCreateGmailDraft')">Create Gmail Draft</button>
-            <button onclick="runAction('workspaceGenerateProposal')" class="secondary">Generate Proposal</button>
-            <button onclick="runAction('workspaceMarkEmailSent')" class="secondary">Mark Email Sent</button>
-            <button onclick="runAction('workspaceMarkFollowUpComplete')" class="secondary">Mark Follow-Up Complete</button>
-            <button onclick="runAction('workspaceConvertToClient')" class="secondary">Convert To Client</button>
+            <button onclick="runAction('validateSelectedProspectForRevenue')">Validate Selected Prospect</button>
+            <button onclick="runAction('prepareProspectForOutreach')">Prepare Prospect for Outreach</button>
+            <button onclick="runAction('resumeProspectRevenueWorkflow')" class="secondary">Resume Prospect Workflow</button>
+            <button onclick="runAction('approveProspectForManualOutreach')" class="secondary">Approve for Manual Outreach</button>
+            <button onclick="runAction('requestProspectRevenueChanges')" class="secondary">Request Changes</button>
+            ${developmentActionsHtml}
+            <button onclick="runAction('workspaceGenerateAuditPackage')">Generate Digital Business Assessment</button>
+            <button onclick="runAction('workspaceCreateGmailDraft')">Create Outreach Gmail Draft</button>
+            <button onclick="runAction('workspaceGenerateProposal')" class="secondary">Generate Improvement Plan</button>
+            <button onclick="runAction('workspaceMarkEmailSent')" class="secondary">Confirm Executive Brief Sent</button>
+            <button onclick="runAction('workspaceMarkFollowUpComplete')" class="secondary">Complete Follow-Up</button>
+            <button onclick="runAction('workspaceConvertToClient')" class="secondary">Continue Client Conversion</button>
           </div>
 
           <h2>Company</h2>
@@ -710,10 +3724,23 @@ function buildProspectWorkspaceHtml_(workspace) {
 
           <h2>Pipeline</h2>
           <div class="section grid">
+            ${workspaceFieldHtml_('Prospect ID', prospect.prospectId)}
             ${workspaceFieldHtml_('Status', prospect.status)}
             ${workspaceFieldHtml_('Last Activity', formatDisplayDate_(prospect.lastActivity))}
             ${workspaceFieldHtml_('Follow-Up Date', formatDisplayDate_(prospect.followUpDate))}
             ${workspaceFieldHtml_('Next Action', prospect.nextAction)}
+          </div>
+
+          <h2>Prospect-to-Revenue Readiness</h2>
+          <div class="section grid">
+            ${workspaceFieldHtml_('Validation Status', prospect.validationStatus)}
+            ${workspaceFieldHtml_('Validation Details', prospect.validationDetails)}
+            ${workspaceFieldHtml_('Inspection Status', prospect.inspectionStatus)}
+            ${workspaceFieldHtml_('Workflow Status', prospect.workflowStatus)}
+            ${workspaceFieldHtml_('Workflow Details', prospect.workflowDetails)}
+            ${workspaceFieldHtml_('Review Status', prospect.reviewStatus)}
+            ${workspaceFieldHtml_('Reviewed At', formatDisplayDate_(prospect.reviewedAt))}
+            ${workspaceFieldHtml_('Review Notes', prospect.reviewNotes)}
           </div>
 
           <h2>Client Info</h2>
@@ -788,6 +3815,92 @@ function ensureAuditPackageColumns_() {
     'Audit Package Generated',
     'Audit Package Date'
   ]).headers;
+}
+
+function ensureMasterProspectAuditSourceColumn_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(MASTER_PROSPECT_SHEET);
+  if (!sheet) {
+    return {
+      changed: false,
+      error: `Required sheet not found: "${MASTER_PROSPECT_SHEET}".`
+    };
+  }
+
+  const table = getHealthHeaderTable_(sheet);
+  if (table.headers['Audit Source']) {
+    const validationRepaired = ensureAuditSourceColumnValidation_(sheet, table.headerRow, table.headers['Audit Source']);
+    return {
+      changed: false,
+      column: table.headers['Audit Source'],
+      validationRepaired: validationRepaired
+    };
+  }
+
+  if (!table.headers['Priority Tier']) {
+    const appendedTable = ensureSheetColumns_(sheet, ['Audit Source']);
+    const validationRepaired = ensureAuditSourceColumnValidation_(sheet, appendedTable.headerRow, appendedTable.headers['Audit Source']);
+    return {
+      changed: true,
+      column: appendedTable.headers['Audit Source'],
+      appended: true,
+      validationRepaired: validationRepaired
+    };
+  }
+
+  const auditSourceColumn = table.headers['Priority Tier'] + 1;
+  sheet.insertColumnAfter(table.headers['Priority Tier']);
+  sheet.getRange(table.headerRow, auditSourceColumn).setValue('Audit Source');
+  const validationRepaired = ensureAuditSourceColumnValidation_(sheet, table.headerRow, auditSourceColumn);
+  return {
+    changed: true,
+    column: auditSourceColumn,
+    appended: false,
+    validationRepaired: validationRepaired
+  };
+}
+
+function ensureAuditSourceColumnValidation_(sheet, headerRow, column) {
+  const rowCount = Math.max(sheet.getMaxRows() - headerRow, 1);
+  const range = sheet.getRange(headerRow + 1, column, rowCount, 1);
+  const validations = range.getDataValidations();
+  const alreadyApproved = validations.every(function(row) {
+    return isApprovedAuditSourceValidationRule_(row[0]);
+  });
+
+  if (alreadyApproved) {
+    return false;
+  }
+
+  const rule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(AUDIT_SOURCE_VALUES, true)
+    .setAllowInvalid(false)
+    .build();
+  range.setDataValidation(rule);
+  return true;
+}
+
+function isApprovedAuditSourceValidationRule_(rule) {
+  if (!rule || rule.getCriteriaType() !== SpreadsheetApp.DataValidationCriteria.VALUE_IN_LIST) {
+    return false;
+  }
+
+  if (typeof rule.getAllowInvalid === 'function' && rule.getAllowInvalid()) {
+    return false;
+  }
+
+  const criteriaValues = rule.getCriteriaValues();
+  const allowedValues = criteriaValues && criteriaValues[0] || [];
+  if (!criteriaValues || criteriaValues[1] !== true) {
+    return false;
+  }
+  if (allowedValues.length !== AUDIT_SOURCE_VALUES.length) {
+    return false;
+  }
+
+  return AUDIT_SOURCE_VALUES.every(function(value, index) {
+    return allowedValues[index] === value;
+  });
 }
 
 function standardizeMasterProspectTrackerColumns_() {
@@ -958,6 +4071,167 @@ function ensureSheetColumns_(sheet, columns) {
   };
 }
 
+function getOrCreateDailyFrictionLogSheet_(ss) {
+  let sheet = ss.getSheetByName(DAILY_FRICTION_LOG_SHEET);
+  if (!sheet) {
+    sheet = ss.insertSheet(DAILY_FRICTION_LOG_SHEET);
+  }
+
+  const table = ensureSheetColumns_(sheet, DAILY_FRICTION_LOG_COLUMNS);
+  formatDailyFrictionLogSheet_(sheet, table.headers);
+  return sheet;
+}
+
+function getOrCreateProductFeedbackSheet_(ss) {
+  let sheet = ss.getSheetByName(PRODUCT_FEEDBACK_SHEET);
+  if (!sheet) {
+    sheet = ss.insertSheet(PRODUCT_FEEDBACK_SHEET);
+  }
+
+  const table = ensureSheetColumns_(sheet, PRODUCT_FEEDBACK_COLUMNS);
+  formatProductFeedbackSheet_(sheet, table.headers);
+  return sheet;
+}
+
+function formatProductFeedbackSheet_(sheet, headers) {
+  if (!sheet) {
+    return;
+  }
+
+  const headerRow = findBestHeaderRow_(sheet);
+  const lastRow = Math.max(sheet.getLastRow(), headerRow);
+  const lastColumn = Math.max(sheet.getLastColumn(), PRODUCT_FEEDBACK_COLUMNS.length);
+
+  runSheetFormattingStep_(sheet, 'Product Feedback tab color', function() {
+    sheet.setTabColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.charcoal);
+  });
+  safeSetFrozenRows_(sheet, headerRow);
+  runSheetFormattingStep_(sheet, 'Product Feedback gridlines', function() {
+    sheet.setHiddenGridlines(true);
+  });
+  applyOperatingSystemSheetChrome_(sheet, 'PRODUCT FEEDBACK', headerRow, lastColumn);
+  formatTableHeader_(sheet, headerRow, lastColumn);
+  applyAlternatingRows_(sheet, headerRow + 1, lastRow, lastColumn);
+  applyOperatingSystemTableSurface_(sheet, headerRow, lastRow, lastColumn);
+  applyVisualComfortBody_(sheet, headerRow + 1, lastRow, lastColumn, {
+    rowHeight: 40,
+    wrap: true,
+    verticalAlignment: 'top'
+  });
+  runSheetFormattingStep_(sheet, 'Product Feedback column widths', function() {
+    setColumnWidthIfHeader_(sheet, headers, 'Feedback ID', 145);
+    setColumnWidthIfHeader_(sheet, headers, 'Date Logged', 130);
+    setColumnWidthIfHeader_(sheet, headers, 'Source', 170);
+    setColumnWidthIfHeader_(sheet, headers, 'Priority', 130);
+    setColumnWidthIfHeader_(sheet, headers, 'Type', 150);
+    setColumnWidthIfHeader_(sheet, headers, 'Area', 170);
+    setColumnWidthIfHeader_(sheet, headers, 'Description', 360);
+    setColumnWidthIfHeader_(sheet, headers, 'Business Impact', 300);
+    setColumnWidthIfHeader_(sheet, headers, 'Status', 130);
+    setColumnWidthIfHeader_(sheet, headers, 'Target Version', 145);
+    setColumnWidthIfHeader_(sheet, headers, 'Notes', 300);
+  });
+  runSheetFormattingStep_(sheet, 'Product Feedback validation', function() {
+    const rowCount = Math.max(sheet.getMaxRows() - headerRow, 1);
+    if (headers.Priority) {
+      sheet.getRange(headerRow + 1, headers.Priority, rowCount, 1)
+        .setDataValidation(buildDropdownValidation_(PRODUCT_FEEDBACK_PRIORITIES));
+    }
+    if (headers.Type) {
+      sheet.getRange(headerRow + 1, headers.Type, rowCount, 1)
+        .setDataValidation(buildDropdownValidation_(PRODUCT_FEEDBACK_TYPES));
+    }
+    if (headers.Status) {
+      sheet.getRange(headerRow + 1, headers.Status, rowCount, 1)
+        .setDataValidation(buildDropdownValidation_(PRODUCT_FEEDBACK_STATUSES));
+    }
+  });
+  applyColumnFormattingByHeader_(sheet, headers, headerRow, lastRow, {
+    'Date Logged': { horizontalAlignment: 'center', numberFormat: 'yyyy-mm-dd' },
+    Priority: { horizontalAlignment: 'center' },
+    Type: { horizontalAlignment: 'center' },
+    Status: { horizontalAlignment: 'center' },
+    'Target Version': { horizontalAlignment: 'center' }
+  });
+  applyWrapByHeader_(sheet, headers, headerRow, lastRow, [
+    'Description',
+    'Business Impact',
+    'Notes'
+  ]);
+}
+
+function formatDailyFrictionLogSheet_(sheet, headers) {
+  if (!sheet) {
+    return;
+  }
+
+  const headerRow = findBestHeaderRow_(sheet);
+  const lastRow = Math.max(sheet.getLastRow(), headerRow);
+  const lastColumn = Math.max(sheet.getLastColumn(), DAILY_FRICTION_LOG_COLUMNS.length);
+
+  runSheetFormattingStep_(sheet, 'Daily Friction Log tab color', function() {
+    sheet.setTabColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.gold);
+  });
+  safeSetFrozenRows_(sheet, headerRow);
+  runSheetFormattingStep_(sheet, 'Daily Friction Log gridlines', function() {
+    sheet.setHiddenGridlines(true);
+  });
+  applyOperatingSystemSheetChrome_(sheet, "BRIAN'S DAILY FRICTION LOG", headerRow, lastColumn);
+  formatTableHeader_(sheet, headerRow, lastColumn);
+  applyAlternatingRows_(sheet, headerRow + 1, lastRow, lastColumn);
+  applyOperatingSystemTableSurface_(sheet, headerRow, lastRow, lastColumn);
+  applyVisualComfortBody_(sheet, headerRow + 1, lastRow, lastColumn, {
+    rowHeight: 40,
+    wrap: true,
+    verticalAlignment: 'top'
+  });
+  runSheetFormattingStep_(sheet, 'Daily Friction Log column widths', function() {
+    setColumnWidthIfHeader_(sheet, headers, 'Date', 120);
+    setColumnWidthIfHeader_(sheet, headers, 'Area', 170);
+    setColumnWidthIfHeader_(sheet, headers, 'Issue / Observation', 360);
+    setColumnWidthIfHeader_(sheet, headers, 'Type', 160);
+    setColumnWidthIfHeader_(sheet, headers, 'Priority', 135);
+    setColumnWidthIfHeader_(sheet, headers, 'Impact', 260);
+    setColumnWidthIfHeader_(sheet, headers, 'Possible Fix', 300);
+    setColumnWidthIfHeader_(sheet, headers, 'Status', 130);
+    setColumnWidthIfHeader_(sheet, headers, 'Notes', 300);
+  });
+  runSheetFormattingStep_(sheet, 'Daily Friction Log validation', function() {
+    const rowCount = Math.max(sheet.getMaxRows() - headerRow, 1);
+    if (headers.Type) {
+      sheet.getRange(headerRow + 1, headers.Type, rowCount, 1)
+        .setDataValidation(buildDropdownValidation_(DAILY_FRICTION_LOG_TYPES));
+    }
+    if (headers.Priority) {
+      sheet.getRange(headerRow + 1, headers.Priority, rowCount, 1)
+        .setDataValidation(buildDropdownValidation_(DAILY_FRICTION_LOG_PRIORITIES));
+    }
+    if (headers.Status) {
+      sheet.getRange(headerRow + 1, headers.Status, rowCount, 1)
+        .setDataValidation(buildDropdownValidation_(DAILY_FRICTION_LOG_STATUSES));
+    }
+  });
+  applyColumnFormattingByHeader_(sheet, headers, headerRow, lastRow, {
+    Date: { horizontalAlignment: 'center', numberFormat: 'yyyy-mm-dd' },
+    Type: { horizontalAlignment: 'center' },
+    Priority: { horizontalAlignment: 'center' },
+    Status: { horizontalAlignment: 'center' }
+  });
+  applyWrapByHeader_(sheet, headers, headerRow, lastRow, [
+    'Issue / Observation',
+    'Impact',
+    'Possible Fix',
+    'Notes'
+  ]);
+}
+
+function buildDropdownValidation_(values) {
+  return SpreadsheetApp.newDataValidation()
+    .requireValueInList(values, true)
+    .setAllowInvalid(false)
+    .build();
+}
+
 function findBestHeaderRow_(sheet) {
   const maxRowsToScan = Math.min(10, sheet.getMaxRows());
   const maxColumns = Math.max(sheet.getLastColumn(), 1);
@@ -990,20 +4264,6 @@ function normalizeWebsiteKey_(value) {
     .replace(/^www\./, '')
     .replace(/\/+$/, '')
     .trim();
-}
-
-function setSelectedProspectTerminalStage_(stage, activityType, activityNotes) {
-  const context = getSelectedProspectContext_(['Company', 'Status']);
-  if (!context) {
-    return;
-  }
-
-  setProspectStatus_(context.sheet, context.table.headers, context.selectedRow, stage);
-  updateSelectedProspectLastActivity_(context.sheet, context.table.headers, context.selectedRow);
-  logPipelineActivity_(context.ss, context.prospect.company, activityType, activityNotes);
-  refreshSalesOperatingSystem_();
-
-  SpreadsheetApp.getUi().alert('Business Optimization Platform', `Prospect marked ${stage}.`, SpreadsheetApp.getUi().ButtonSet.OK);
 }
 
 function getSelectedProspectContext_(requiredHeaders) {
@@ -1045,10 +4305,88 @@ function getSelectedProspectContext_(requiredHeaders) {
   };
 }
 
+function getSelectedFollowUpSourceContext_(showAlert) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ui = SpreadsheetApp.getUi();
+  const sheet = ss.getActiveSheet();
+  if (!sheet) {
+    if (showAlert) {
+      ui.alert('Business Optimization Platform', 'Select a prospect or client row before creating a Follow-Up.', ui.ButtonSet.OK);
+    }
+    return null;
+  }
+
+  if (sheet.getName() === MASTER_PROSPECT_SHEET) {
+    const context = getSelectedProspectContext_(['Company']);
+    if (!context) {
+      return null;
+    }
+    const headers = context.table.headers;
+    return {
+      ss: ss,
+      source: 'Prospect',
+      company: getValueByHeader_(context.values, headers, 'Company'),
+      contact: getValueByHeader_(context.values, headers, 'Contact'),
+      email: getValueByHeader_(context.values, headers, 'Email'),
+      prospectId: getValueByHeader_(context.values, headers, 'Prospect ID') || `MPT-${context.selectedRow}`,
+      clientId: '',
+      status: getValueByHeader_(context.values, headers, 'Status'),
+      priority: getValueByHeader_(context.values, headers, 'Priority Tier')
+    };
+  }
+
+  if (sheet.getName() === CLIENTS_SHEET) {
+    const table = ensureClientColumns_(sheet);
+    const selectedRow = sheet.getActiveRange() ? sheet.getActiveRange().getRow() : 0;
+    if (selectedRow <= table.headerRow) {
+      if (showAlert) {
+        ui.alert('Business Optimization Platform', 'Select a client data row below the Clients header row.', ui.ButtonSet.OK);
+      }
+      return null;
+    }
+
+    const values = sheet.getRange(selectedRow, 1, 1, table.lastColumn).getValues()[0];
+    const company = firstNonBlank_([
+      getValueByHeader_(values, table.headers, 'Company'),
+      getValueByHeader_(values, table.headers, 'Client Name')
+    ]);
+    if (!company) {
+      if (showAlert) {
+        ui.alert('Business Optimization Platform', 'The selected client row is missing Company.', ui.ButtonSet.OK);
+      }
+      return null;
+    }
+
+    return {
+      ss: ss,
+      source: 'Client',
+      company: company,
+      contact: getValueByHeader_(values, table.headers, 'Contact'),
+      email: getValueByHeader_(values, table.headers, 'Email'),
+      prospectId: '',
+      clientId: getValueByHeader_(values, table.headers, 'Client ID'),
+      status: getValueByHeader_(values, table.headers, 'Status'),
+      priority: 'A - Hot'
+    };
+  }
+
+  if (showAlert) {
+    ui.alert('Business Optimization Platform', 'Select a row on Master Prospect Tracker or Clients before creating a Follow-Up.', ui.ButtonSet.OK);
+  }
+  return null;
+}
+
 function normalizePipelineStage_(stage) {
   const value = String(stage || '').trim().toLowerCase();
+  const aliases = {
+    'discovery scheduled': 'Discovery Meeting Scheduled',
+    'discovery call scheduled': 'Discovery Meeting Scheduled',
+    'executive snapshot sent': 'Executive Brief Sent',
+    'digital business assessment presented': 'Digital Business Assessment'
+  };
+  const normalizedValue = String(aliases[value] || value).toLowerCase();
   const match = PIPELINE_STAGES.filter(function(candidate) {
-    return candidate.toLowerCase() === value;
+    return candidate.toLowerCase() === normalizedValue;
   })[0];
   return match || '';
 }
@@ -1058,7 +4396,7 @@ function getNextPipelineStage_(currentStage) {
     return PIPELINE_STAGES[0];
   }
 
-  if (currentStage === 'Won' || currentStage === 'Lost') {
+  if (currentStage === 'Client' || currentStage === 'Won' || currentStage === 'Lost') {
     return currentStage;
   }
 
@@ -1070,20 +4408,42 @@ function getNextPipelineStage_(currentStage) {
   return PIPELINE_STAGES[index + 1];
 }
 
-function setProspectStatus_(sheet, headers, selectedRow, status) {
+function setProspectStatus_(ss, sheet, headers, selectedRow, status) {
   if (!headers.Status) {
     throw new Error('Status header not found on Master Prospect Tracker.');
   }
 
-  sheet.getRange(selectedRow, headers.Status).setValue(status);
+  const normalizedStatus = normalizeProspectDropdownWriteValue_(sheet, headers, 'Status', status);
+  const currentStatus = normalizePipelineStage_(sheet.getRange(selectedRow, headers.Status).getValue()) || 'Lead Found';
+  const validation = validateProspectStageTransition_(currentStatus, normalizedStatus);
+  if (!validation.allowed) {
+    throw new Error(validation.message);
+  }
+  if (validation.idempotent) {
+    return false;
+  }
+  sheet.getRange(selectedRow, headers.Status).setValue(normalizedStatus);
+  syncFollowUpForProspectRow_(ss, sheet, headers, selectedRow, normalizedStatus);
+  return true;
 }
 
-function setProspectStatusIfHeader_(sheet, headers, selectedRow, status) {
+function setProspectStatusIfHeader_(ss, sheet, headers, selectedRow, status) {
   if (!headers.Status) {
     return;
   }
 
-  sheet.getRange(selectedRow, headers.Status).setValue(status);
+  const normalizedStatus = normalizeProspectDropdownWriteValue_(sheet, headers, 'Status', status);
+  const currentStatus = normalizePipelineStage_(sheet.getRange(selectedRow, headers.Status).getValue()) || 'Lead Found';
+  const validation = validateProspectStageTransition_(currentStatus, normalizedStatus);
+  if (!validation.allowed) {
+    throw new Error(validation.message);
+  }
+  if (validation.idempotent) {
+    return false;
+  }
+  sheet.getRange(selectedRow, headers.Status).setValue(normalizedStatus);
+  syncFollowUpForProspectRow_(ss, sheet, headers, selectedRow, normalizedStatus);
+  return true;
 }
 
 function logPipelineActivity_(ss, company, activityType, activityNotes) {
@@ -1102,10 +4462,66 @@ function logPipelineActivity_(ss, company, activityType, activityNotes) {
   setIfHeader_(rowValues, table.headers, 'Activity Notes', activityNotes);
 
   const targetRow = Math.max(sheet.getLastRow() + 1, table.headerRow + 1);
-  sheet.getRange(targetRow, 1, 1, table.lastColumn).setValues([rowValues]);
+  sheet.getRange(targetRow, 1, 1, table.lastColumn)
+    .setValues([literalizeBusinessSnapshotSheetRow_(rowValues)]);
+}
+
+function resolveActivityFeedHeaderTable_(sheet, requiredHeaders) {
+  const headersToResolve = requiredHeaders && requiredHeaders.length
+    ? requiredHeaders
+    : ['Date', 'Company', 'Activity Type', 'Activity Notes'];
+  const maxRowsToScan = Math.min(10, sheet.getMaxRows());
+  const lastColumn = Math.max(sheet.getLastColumn(), 1);
+  const rows = sheet.getRange(1, 1, maxRowsToScan, lastColumn).getDisplayValues();
+  const matches = [];
+
+  rows.forEach(function(values, rowIndex) {
+    const headers = {};
+    values.forEach(function(value, colIndex) {
+      const header = String(value || '').trim();
+      if (header && !headers[header]) {
+        headers[header] = colIndex + 1;
+      }
+    });
+    if (headersToResolve.every(function(header) { return !!headers[header]; })) {
+      matches.push({ headerRow: rowIndex + 1, headers: headers, lastColumn: lastColumn });
+    }
+  });
+
+  if (matches.length > 1) {
+    throw new Error(`Ambiguous Activity Feed header rows found: ${matches.map(function(table) { return table.headerRow; }).join(', ')}. Keep one valid header row before continuing.`);
+  }
+  if (matches.length === 1) {
+    return matches[0];
+  }
+
+  const headerRow = findBestHeaderRow_(sheet);
+  const headers = {};
+  rows[headerRow - 1].forEach(function(value, colIndex) {
+    const header = String(value || '').trim();
+    if (header && !headers[header]) {
+      headers[header] = colIndex + 1;
+    }
+  });
+  return { headerRow: headerRow, headers: headers, lastColumn: lastColumn };
+}
+
+function getActivityFeedHeaderTable_(sheet, requiredHeaders) {
+  const headersToRequire = requiredHeaders && requiredHeaders.length
+    ? requiredHeaders
+    : ['Date', 'Company', 'Activity Type', 'Activity Notes'];
+  const table = resolveActivityFeedHeaderTable_(sheet, headersToRequire);
+  const missing = headersToRequire.filter(function(header) { return !table.headers[header]; });
+  if (missing.length) {
+    throw new Error(`Required headers not found on sheet "${sheet.getName()}": ${missing.join(', ')}`);
+  }
+  return table;
 }
 
 function getHeaderTable_(sheet, requiredHeaders) {
+  if (sheet.getName() === ACTIVITY_FEED_SHEET) {
+    return getActivityFeedHeaderTable_(sheet, requiredHeaders);
+  }
   const maxRowsToScan = Math.min(10, sheet.getMaxRows());
   const maxColumns = sheet.getLastColumn();
   const rows = sheet.getRange(1, 1, maxRowsToScan, maxColumns).getDisplayValues();
@@ -1197,47 +4613,57 @@ function updatePipelineDashboardMetrics_() {
   }
 
   const followUpsCompleted = countActivityTypes_(['Follow-Up Completed', 'Follow Up Completed']);
-  const discoveryCallsScheduled = countActivityType_('Discovery Call Scheduled');
-  const auditPackagesGenerated = countActivityType_('Audit Package Generated');
-  const auditPackagesSent = countActivityType_('Audit Package Sent');
-  const auditsCompletedToday = countActivityTypesToday_(['Website Audit Tool', 'Website Audit']);
-  const packagesGeneratedToday = countActivityTypeToday_('Audit Package Generated');
+  const discoveryCallsScheduled = countActivityTypes_(['Discovery Meeting Scheduled', 'Discovery Call Scheduled']);
+  const auditPackagesGenerated = countActivityTypes_(['Digital Business Assessment Generated', 'Audit Package Generated']);
+  const auditPackagesSent = countActivityTypes_(['Digital Business Assessment', 'Digital Business Assessment Presented']);
+  const auditsCompletedToday = countActivityTypesToday_(['Website Audit Tool API', 'Website Audit Tool', 'Website Audit']);
+  const packagesGeneratedToday = countActivityTypesToday_(['Digital Business Assessment Generated', 'Audit Package Generated']);
   const clientMetrics = getClientRevenueMetrics_();
-  const wonDeals = statusCounts.Won || 0;
+  const followUpMetrics = getFollowUpMetrics_();
+  const projectMetrics = getProjectMetrics_();
+  const wonDeals = statusCounts.Client || 0;
   const lostDeals = statusCounts.Lost || 0;
   const decidedDeals = wonDeals + lostDeals;
   const winRate = decidedDeals ? wonDeals / decidedDeals : 0;
   const rows = [
     ['Metric', 'Value', 'Updated At'],
     ['Total Leads', totalLeads, new Date()],
-    ['Audits Completed', statusCounts['Audit Complete'], new Date()],
+    ['Digital Business Assessments', statusCounts['Digital Business Assessment'] || 0, new Date()],
     ['Audits Completed Today', auditsCompletedToday, new Date()],
-    ['Drafts Created', statusCounts['Draft Created'], new Date()],
-    ['Emails Sent', statusCounts['Email Sent'], new Date()],
-    ['Proposals Sent', statusCounts['Proposal Sent'], new Date()],
-    ['Won Deals', wonDeals, new Date()],
+    ['Outreach Drafts Created', countActivityTypes_(['Outreach Draft File Created', 'Outreach Gmail Draft Created', 'Outreach Draft Created']), new Date()],
+    ['Executive Briefs Sent', statusCounts['Executive Brief Sent'] || 0, new Date()],
+    ['Improvement Plans Sent', statusCounts['Improvement Plan Sent'] || 0, new Date()],
+    ['Clients', wonDeals, new Date()],
     ['Lost Deals', lostDeals, new Date()],
     ['Win Rate %', winRate, new Date()],
-    ['Follow-Ups Due Today', followUpsDueToday, new Date()],
-    ['Overdue Follow-Ups', overdueFollowUps, new Date()],
+    ["Today's Follow-Ups", followUpMetrics.today || followUpsDueToday, new Date()],
+    ['Overdue Follow-Ups', followUpMetrics.overdue || overdueFollowUps, new Date()],
+    ['Follow-Ups Due This Week', followUpMetrics.dueThisWeek, new Date()],
+    ['Completed Today', followUpMetrics.completedToday, new Date()],
     ['Follow-Ups Completed', followUpsCompleted, new Date()],
-    ['Discovery Calls Scheduled', discoveryCallsScheduled, new Date()],
-    ['Audit Packages Generated', auditPackagesGenerated, new Date()],
+    ['Discovery Meetings Scheduled', discoveryCallsScheduled, new Date()],
+    ['Digital Business Assessments Generated', auditPackagesGenerated, new Date()],
     ['Packages Generated Today', packagesGeneratedToday, new Date()],
-    ['Audit Packages Sent', auditPackagesSent, new Date()],
+    ['Digital Business Assessments Sent', auditPackagesSent, new Date()],
     ['Total Clients', clientMetrics.totalClients, new Date()],
     ['Active Clients', clientMetrics.activeClients, new Date()],
     ['Total Revenue', clientMetrics.totalRevenue, new Date()],
     ['Average Deal Size', clientMetrics.averageDealSize, new Date()],
     ['Clients This Month', clientMetrics.clientsThisMonth, new Date()],
-    ['Revenue This Month', clientMetrics.revenueThisMonth, new Date()]
+    ['Revenue This Month', clientMetrics.revenueThisMonth, new Date()],
+    ['Active Projects', projectMetrics.activeProjects, new Date()],
+    ['Projects Due This Week', projectMetrics.dueThisWeek, new Date()],
+    ['Overdue Projects', projectMetrics.overdueProjects, new Date()],
+    ['Completed This Month', projectMetrics.completedThisMonth, new Date()],
+    ['Average Completion Time', projectMetrics.averageCompletionTime, new Date()]
   ];
 
   metricsSheet.getRange(1, 1, rows.length, rows[0].length).setValues(rows);
   metricsSheet.getRange(10, 2).setNumberFormat('0.00%');
-  metricsSheet.getRange(20, 2, 1, 1).setNumberFormat('$#,##0.00');
-  metricsSheet.getRange(21, 2, 1, 1).setNumberFormat('$#,##0.00');
+  metricsSheet.getRange(22, 2, 1, 1).setNumberFormat('$#,##0.00');
   metricsSheet.getRange(23, 2, 1, 1).setNumberFormat('$#,##0.00');
+  metricsSheet.getRange(25, 2, 1, 1).setNumberFormat('$#,##0.00');
+  metricsSheet.getRange(30, 2, 1, 1).setNumberFormat('0.0');
 }
 
 function refreshExecutiveDashboard() {
@@ -1274,7 +4700,10 @@ function buildExecutiveDashboardData_(ss) {
     totalProspects: 0,
     followUpsDueToday: 0,
     overdueFollowUps: 0,
-    averageAuditScore: 0
+    averageAuditScore: 0,
+    clientMetrics: getClientRevenueMetrics_(),
+    followUpMetrics: getFollowUpMetrics_(),
+    projectMetrics: getProjectMetrics_()
   };
 
   PIPELINE_STAGES.forEach(function(stage) {
@@ -1368,7 +4797,12 @@ function buildExecutiveDashboardData_(ss) {
 
 function prepareExecutiveDashboardSheet_(sheet) {
   ensureExecutiveDashboardSize_(sheet, 80, 12);
-  sheet.getRange(1, 1, 80, 12).clearContent().clearFormat();
+  sheet.getRange(1, 1, 80, 12)
+    .breakApart()
+    .clearContent()
+    .clearFormat()
+    .clearDataValidations()
+    .clearNote();
   sheet.setHiddenGridlines(true);
   safeSetFrozenRows_(sheet, 2);
   sheet.setTabColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.black);
@@ -1388,9 +4822,9 @@ function prepareExecutiveDashboardSheet_(sheet) {
   sheet.setRowHeights(1, 80, 30);
   sheet.setRowHeight(1, 38);
   sheet.setRowHeight(2, 32);
-  sheet.setRowHeights(3, 6, 36);
-  sheet.setRowHeights(10, 18, 30);
-  sheet.setRowHeights(30, 16, 32);
+  sheet.setRowHeights(3, 8, 36);
+  sheet.setRowHeights(14, 18, 30);
+  sheet.setRowHeights(34, 16, 32);
 }
 
 function ensureExecutiveDashboardSize_(sheet, minRows, minColumns) {
@@ -1406,37 +4840,55 @@ function ensureExecutiveDashboardSize_(sheet, minRows, minColumns) {
 
 function updateDashboardKPIs_(data) {
   const sheet = data.dashboardSheet;
+  const followUpMetrics = data.followUpMetrics || {
+    today: data.followUpsDueToday || 0,
+    overdue: data.overdueFollowUps || 0,
+    dueThisWeek: 0,
+    completedToday: 0
+  };
+  const projectMetrics = data.projectMetrics || {
+    activeProjects: data.clientMetrics.activeProjects || 0,
+    dueThisWeek: 0,
+    overdueProjects: 0,
+    completedThisMonth: 0,
+    averageCompletionTime: 0
+  };
   const rows = [
     ['BUSINESS OPTIMIZATION PLATFORM', '', '', '', '', '', '', '', '', '', '', ''],
-    ['EXECUTIVE DASHBOARD', 'Last Refresh', data.generatedAt, '', '', '', '', '', '', '', '', ''],
-    ['Total Prospects', '', '', 'Leads Found', '', '', 'Draft Created', '', '', 'Proposal Sent', '', ''],
-    [data.totalProspects, '', '', data.statusCounts['Lead Found'] || 0, '', '', data.statusCounts['Draft Created'] || 0, '', '', data.statusCounts['Proposal Sent'] || 0, '', ''],
-    ['Audit Package Sent', '', '', 'Discovery Scheduled', '', '', 'Won', '', '', 'Lost', '', ''],
-    [data.statusCounts['Audit Package Sent'] || 0, '', '', data.statusCounts['Discovery Scheduled'] || 0, '', '', data.statusCounts.Won || 0, '', '', data.statusCounts.Lost || 0, '', ''],
-    ['Follow-Ups Due Today', '', '', 'Overdue Follow-Ups', '', '', 'Average Audit Score', '', '', '', '', ''],
-    [data.followUpsDueToday, '', '', data.overdueFollowUps, '', '', data.averageAuditScore, '', '', '', '', '']
+    ['EXECUTIVE DASHBOARD', '', '', '', '', '', '', '', '', 'Last Refresh', data.generatedAt, ''],
+    ['Total Prospects', '', '', 'Leads Found', '', '', 'Executive Brief Sent', '', '', 'Improvement Plan Sent', '', ''],
+    [data.totalProspects, '', '', data.statusCounts['Lead Found'] || 0, '', '', data.statusCounts['Executive Brief Sent'] || 0, '', '', data.statusCounts['Improvement Plan Sent'] || 0, '', ''],
+    ['Digital Business Assessment', '', '', 'Discovery Meeting Scheduled', '', '', 'Client', '', '', 'Lost', '', ''],
+    [data.statusCounts['Digital Business Assessment'] || 0, '', '', data.statusCounts['Discovery Meeting Scheduled'] || 0, '', '', data.statusCounts.Client || 0, '', '', data.statusCounts.Lost || 0, '', ''],
+    ["Today's Follow-Ups", '', '', 'Overdue Follow-Ups', '', '', 'Follow-Ups Due This Week', '', '', 'Completed Today', '', ''],
+    [followUpMetrics.today || 0, '', '', followUpMetrics.overdue || 0, '', '', followUpMetrics.dueThisWeek || 0, '', '', followUpMetrics.completedToday || 0, '', ''],
+    ['Average Audit Score', '', '', 'Total Clients', '', '', 'Active Clients', '', '', 'Active Projects', '', ''],
+    [data.averageAuditScore, '', '', data.clientMetrics.totalClients || 0, '', '', data.clientMetrics.activeClients || 0, '', '', projectMetrics.activeProjects || data.clientMetrics.activeProjects || 0, '', ''],
+    ['Projects Due This Week', '', '', 'Overdue Projects', '', '', 'Completed This Month', '', '', 'Avg Completion Days', '', ''],
+    [projectMetrics.dueThisWeek || 0, '', '', projectMetrics.overdueProjects || 0, '', '', projectMetrics.completedThisMonth || 0, '', '', projectMetrics.averageCompletionTime || 0, '', '']
   ];
 
   sheet.getRange(1, 1, rows.length, rows[0].length).setValues(rows);
-  sheet.getRange(2, 3).setNumberFormat('yyyy-mm-dd hh:mm');
+  sheet.getRange(2, 11).setNumberFormat('yyyy-mm-dd hh:mm');
   sheet.getRange(4, 1, 1, 12).setNumberFormat('0');
   sheet.getRange(6, 1, 1, 12).setNumberFormat('0');
   sheet.getRange(8, 1, 1, 12).setNumberFormat('0');
-  sheet.getRange(8, 7).setNumberFormat('0.0');
+  sheet.getRange(10, 1, 1, 12).setNumberFormat('0');
+  sheet.getRange(10, 1).setNumberFormat('0.0');
+  sheet.getRange(12, 1, 1, 12).setNumberFormat('0');
+  sheet.getRange(12, 10).setNumberFormat('0.0');
 }
 
 function updatePipelineSummary_(data) {
   const sheet = data.dashboardSheet;
   const stages = [
     'Lead Found',
-    'Audit Complete',
-    'Draft Created',
-    'Email Sent',
-    'Follow Up Due',
-    'Proposal Sent',
-    'Discovery Scheduled',
-    'Won',
-    'Lost'
+    'Executive Brief Sent',
+    'Discovery Meeting Scheduled',
+    'Digital Business Assessment',
+    'Improvement Plan Sent',
+    'Project Started',
+    'Client'
   ];
   const rows = [
     ['SALES PIPELINE', '', ''],
@@ -1446,33 +4898,43 @@ function updatePipelineSummary_(data) {
     return [stage, count, data.totalProspects ? count / data.totalProspects : 0];
   }));
 
-  sheet.getRange(10, 1, rows.length, rows[0].length).setValues(rows);
-  sheet.getRange(12, 2, stages.length, 1).setNumberFormat('0');
-  sheet.getRange(12, 3, stages.length, 1).setNumberFormat('0.0%');
+  sheet.getRange(14, 1, rows.length, rows[0].length).setValues(rows);
+  sheet.getRange(16, 2, stages.length, 1).setNumberFormat('0');
+  sheet.getRange(16, 3, stages.length, 1).setNumberFormat('0.0%');
 }
 
 function updateRecentActivity_(data) {
   const sheet = data.dashboardSheet;
+  const activityRows = data.activities.length
+    ? data.activities.slice(0, 15).map(function(activity) {
+      return [
+        activity.timestamp || '',
+        activity.company || '',
+        activity.activity || '',
+        activity.user || ''
+      ];
+    })
+    : [['No recent activity yet.', '', '', '']];
   const rows = [
     ['RECENT ACTIVITY', '', '', ''],
     ['Timestamp', 'Company', 'Activity', 'User']
-  ].concat(data.activities.slice(0, 15).map(function(activity) {
-    return [
-      activity.timestamp || '',
-      activity.company || '',
-      activity.activity || '',
-      activity.user || ''
-    ];
-  }));
+  ].concat(activityRows);
 
-  sheet.getRange(10, 5, rows.length, rows[0].length).setValues(rows);
-  sheet.getRange(12, 5, Math.max(rows.length - 2, 1), 1).setNumberFormat('yyyy-mm-dd hh:mm');
+  sheet.getRange(14, 5, rows.length, rows[0].length).setValues(rows);
+  sheet.getRange(16, 5, Math.max(rows.length - 2, 1), 1).setNumberFormat('yyyy-mm-dd hh:mm');
+  if (!data.activities.length) {
+    sheet.getRange(16, 5, 1, 4)
+      .setFontColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.muted)
+      .setFontStyle('italic')
+      .setHorizontalAlignment('center');
+  }
 }
 
 function updateFollowUpQueue_(data) {
   const sheet = data.dashboardSheet;
   const today = data.today.getTime();
-  const queue = data.prospects.filter(function(prospect) {
+  const followUpQueue = getOpenFollowUpQueue_(data.ss, 12);
+  const queue = followUpQueue.length ? followUpQueue : data.prospects.filter(function(prospect) {
     return prospect.followUpDate;
   }).map(function(prospect) {
     const followUpTime = startOfDay_(prospect.followUpDate).getTime();
@@ -1492,22 +4954,75 @@ function updateFollowUpQueue_(data) {
   const rows = [
     ['FOLLOW-UP QUEUE', '', '', '', '', '', ''],
     ['Company', 'Contact', 'Email', 'Status', 'Follow-Up Date', 'Next Action', 'Last Activity']
-  ].concat(queue.slice(0, 12).map(function(item) {
+  ].concat(queue.length ? queue.slice(0, 12).map(function(item) {
     return [
       item.company,
       item.contact,
       item.email,
       item.status,
-      item.followUpDate || '',
-      item.nextAction,
+      item.followUpDate || item.dueDate || '',
+      item.nextAction || item.followUpType || '',
       item.lastActivity || ''
     ];
-  }));
+  }) : [['No open Follow-Ups. Create one from the Follow-Ups menu when needed.', '', '', '', '', '', '']]);
 
-  sheet.getRange(30, 1, rows.length, rows[0].length).setValues(rows);
-  sheet.getRange(32, 5, Math.max(rows.length - 2, 1), 1).setNumberFormat('yyyy-mm-dd');
-  sheet.getRange(32, 7, Math.max(rows.length - 2, 1), 1).setNumberFormat('yyyy-mm-dd');
-  applyFollowUpQueueStatusColors_(sheet, queue.slice(0, 12), 32, 1, 7);
+  sheet.getRange(34, 1, rows.length, rows[0].length).setValues(rows);
+  sheet.getRange(36, 5, Math.max(rows.length - 2, 1), 1).setNumberFormat('yyyy-mm-dd');
+  sheet.getRange(36, 7, Math.max(rows.length - 2, 1), 1).setNumberFormat('yyyy-mm-dd');
+  if (!queue.length) {
+    sheet.getRange(36, 1, 1, 7)
+      .setFontColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.muted)
+      .setFontStyle('italic')
+      .setHorizontalAlignment('center');
+  }
+  applyFollowUpQueueStatusColors_(sheet, queue.slice(0, 12), 36, 1, 7);
+}
+
+function getOpenFollowUpQueue_(ss, limit) {
+  const sheet = ss.getSheetByName(FOLLOW_UPS_SHEET);
+  if (!sheet) {
+    return [];
+  }
+
+  const table = ensureFollowUpColumns_(sheet);
+  const dataStartRow = table.headerRow + 1;
+  const rowCount = Math.max(sheet.getLastRow() - dataStartRow + 1, 0);
+  if (rowCount <= 0) {
+    return [];
+  }
+
+  const today = startOfDay_(new Date()).getTime();
+  const values = sheet.getRange(dataStartRow, 1, rowCount, table.lastColumn).getValues();
+  return values.map(function(row) {
+    const dueDate = dateValueOrNull_(getValueByHeader_(row, table.headers, 'Due Date'));
+    const dueTime = dueDate ? startOfDay_(dueDate).getTime() : Number.MAX_SAFE_INTEGER;
+    let bucket = 2;
+    if (dueTime < today) {
+      bucket = 0;
+    } else if (dueTime === today) {
+      bucket = 1;
+    }
+    return {
+      company: getValueByHeader_(row, table.headers, 'Company'),
+      contact: getValueByHeader_(row, table.headers, 'Contact'),
+      email: getValueByHeader_(row, table.headers, 'Email'),
+      status: getValueByHeader_(row, table.headers, 'Current Status'),
+      followUpType: getValueByHeader_(row, table.headers, 'Follow-Up Type'),
+      dueDate: dueDate,
+      followUpDate: dueDate,
+      lastActivity: '',
+      bucket: bucket,
+      followUpTime: dueTime,
+      completed: isFollowUpCompletedValue_(getValueByHeader_(row, table.headers, 'Completed'))
+    };
+  }).filter(function(item) {
+    return item.company && !item.completed;
+  }).sort(function(a, b) {
+    if (a.bucket !== b.bucket) {
+      return a.bucket - b.bucket;
+    }
+    return a.followUpTime - b.followUpTime;
+  }).slice(0, limit || 12);
 }
 
 function updateTopOpportunities_(data) {
@@ -1520,10 +5035,7 @@ function updateTopOpportunities_(data) {
     'C - Later': 3,
     C: 3
   };
-  const rows = [
-    ['TOP OPPORTUNITIES', '', '', '', ''],
-    ['Company', 'Priority', 'Audit Score', 'Status', 'Last Activity']
-  ].concat(data.prospects.slice().sort(function(a, b) {
+  const opportunities = data.prospects.slice().sort(function(a, b) {
     const rankA = priorityRank[String(a.priorityTier || '').trim()] || 9;
     const rankB = priorityRank[String(b.priorityTier || '').trim()] || 9;
     if (rankA !== rankB) {
@@ -1534,28 +5046,70 @@ function updateTopOpportunities_(data) {
       return scoreDiff;
     }
     return dateSortValue_(b.lastActivity) - dateSortValue_(a.lastActivity);
-  }).slice(0, 10).map(function(item) {
+  }).filter(function(item) {
+    return item.company && (item.priorityTier || item.auditScore || item.status || item.lastActivity);
+  }).slice(0, 10);
+  const rows = [
+    ['TOP OPPORTUNITIES', '', '', '', ''],
+    ['Company', 'Priority', 'Audit Score', 'Status', 'Last Activity']
+  ].concat(opportunities.length ? opportunities.map(function(item) {
     return [item.company, item.priorityTier, item.auditScore, item.status, item.lastActivity || ''];
-  }));
+  }) : [['No priority opportunities yet. Add prospects or run audits to populate this panel.', '', '', '', '']]);
 
-  sheet.getRange(30, 8, rows.length, rows[0].length).setValues(rows);
-  sheet.getRange(32, 10, Math.max(rows.length - 2, 1), 1).setNumberFormat('0.0');
-  sheet.getRange(32, 12, Math.max(rows.length - 2, 1), 1).setNumberFormat('yyyy-mm-dd');
+  sheet.getRange(34, 8, rows.length, rows[0].length).setValues(rows);
+  sheet.getRange(36, 10, Math.max(rows.length - 2, 1), 1).setNumberFormat('0.0');
+  sheet.getRange(36, 12, Math.max(rows.length - 2, 1), 1).setNumberFormat('yyyy-mm-dd');
+  if (!opportunities.length) {
+    sheet.getRange(36, 8, 1, 5)
+      .setFontColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.muted)
+      .setFontStyle('italic')
+      .setHorizontalAlignment('center');
+  }
 }
 
 function updateQuickActions_(data) {
   const sheet = data.dashboardSheet;
   const rows = [
     ['QUICK ACTIONS', '', ''],
-    ['Run Full Prospect Package', 'Create Gmail Draft', 'Generate Audit Package'],
-    ['Run Website Audit', 'System Health Check', 'Refresh Dashboard']
+    ['Open Prospects', 'Open Clients', 'Open Follow-Ups'],
+    ['Open Projects', 'System Health Check', 'Refresh Dashboard']
   ];
 
-  sheet.getRange(50, 1, rows.length, rows[0].length).setValues(rows);
-  sheet.getRange(51, 1, 2, 3).setNotes([
-    ['Use Business Optimization Platform > Run Full Prospect Package', 'Use Business Optimization Platform > Create Outreach Gmail Draft', 'Use Business Optimization Platform > Generate Audit Package'],
-    ['Use Business Optimization Platform > Run Real Website Audit', 'Use Business Optimization Platform > System Health Check', 'Use Business Optimization Platform > Refresh Executive Dashboard']
+  sheet.getRange(56, 1, rows.length, rows[0].length).setValues(rows);
+  sheet.getRange(57, 1, 2, 3).setNotes([
+    ['Click to open Master Prospect Tracker', 'Click to open Clients', 'Click to open Follow-Ups'],
+    ['Click to open Projects', 'Click to run System Health Check', 'Click to refresh Executive Dashboard']
   ]);
+}
+
+function handleExecutiveDashboardQuickActionSelection_(e) {
+  if (!e || !e.range) {
+    return;
+  }
+
+  const range = e.range;
+  const sheet = range.getSheet();
+  if (!sheet || sheet.getName() !== 'Executive Dashboard') {
+    return;
+  }
+
+  const row = range.getRow();
+  const column = range.getColumn();
+  const actionMap = {
+    '57:1': openMasterProspectTracker,
+    '57:2': openClientsSheet,
+    '57:3': openFollowUpsSheet,
+    '58:1': openProjectsSheet,
+    '58:2': runSystemHealthCheck,
+    '58:3': refreshExecutiveDashboard
+  };
+  const action = actionMap[row + ':' + column];
+  if (!action) {
+    return;
+  }
+
+  SpreadsheetApp.getActiveSpreadsheet().toast('Running dashboard action...', 'Business Optimization Platform', 3);
+  action();
 }
 
 function updateSystemStatus_(data) {
@@ -1575,10 +5129,10 @@ function updateSystemStatus_(data) {
     ['PDF Engine Status', pdfStatus, pdfStatus]
   ];
 
-  sheet.getRange(50, 5, rows.length, rows[0].length).setValues(rows);
-  sheet.getRange(51, 6, 1, 1).setNumberFormat('yyyy-mm-dd hh:mm');
-  sheet.getRange(52, 6, 1, 1).setNumberFormat('yyyy-mm-dd hh:mm');
-  applySystemStatusColors_(sheet, 51, 7, rows.slice(1).map(function(row) { return row[2]; }));
+  sheet.getRange(56, 5, rows.length, rows[0].length).setValues(rows);
+  sheet.getRange(57, 6, 1, 1).setNumberFormat('yyyy-mm-dd hh:mm');
+  sheet.getRange(58, 6, 1, 1).setNumberFormat('yyyy-mm-dd hh:mm');
+  applySystemStatusColors_(sheet, 57, 7, rows.slice(1).map(function(row) { return row[2]; }));
 }
 
 function applyExecutiveDashboardBranding_(sheet) {
@@ -1601,20 +5155,38 @@ function applyExecutiveDashboardBranding_(sheet) {
     .setBorder(false, false, true, false, false, false, gold, SpreadsheetApp.BorderStyle.SOLID_THICK);
   sheet.getRange(1, 1).setFontSize(18);
   sheet.getRange(2, 1, 1, 12).setFontColor(white);
+  sheet.getRange(1, 1, 1, 12).breakApart().merge()
+    .setHorizontalAlignment('center')
+    .setVerticalAlignment('middle');
+  sheet.getRange(2, 1, 1, 9).breakApart().merge()
+    .setFontColor(white)
+    .setFontSize(15)
+    .setFontWeight('bold')
+    .setHorizontalAlignment('center')
+    .setVerticalAlignment('middle');
+  sheet.getRange(2, 10, 1, 2)
+    .setFontColor(white)
+    .setFontSize(10)
+    .setHorizontalAlignment('right')
+    .setVerticalAlignment('middle');
 
   [
-    [10, 1, 1, 3],
-    [10, 5, 1, 4],
-    [30, 1, 1, 7],
-    [30, 8, 1, 5],
-    [50, 1, 1, 3],
-    [50, 5, 1, 3]
+    [14, 1, 1, 3],
+    [14, 5, 1, 4],
+    [34, 1, 1, 7],
+    [34, 8, 1, 5],
+    [56, 1, 1, 3],
+    [56, 5, 1, 3]
   ].forEach(function(rangeSpec) {
     sheet.getRange(rangeSpec[0], rangeSpec[1], rangeSpec[2], rangeSpec[3])
+      .breakApart()
+      .merge()
       .setBackground(black)
       .setFontColor(gold)
       .setFontWeight('bold')
       .setFontSize(11)
+      .setHorizontalAlignment('center')
+      .setVerticalAlignment('middle')
       .setBorder(false, false, true, false, false, false, gold, SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
   });
 
@@ -1629,7 +5201,16 @@ function applyExecutiveDashboardBranding_(sheet) {
     [5, 10, 2, 3],
     [7, 1, 2, 3],
     [7, 4, 2, 3],
-    [7, 7, 2, 3]
+    [7, 7, 2, 3],
+    [7, 10, 2, 3],
+    [9, 1, 2, 3],
+    [9, 4, 2, 3],
+    [9, 7, 2, 3],
+    [9, 10, 2, 3],
+    [11, 1, 2, 3],
+    [11, 4, 2, 3],
+    [11, 7, 2, 3],
+    [11, 10, 2, 3]
   ].forEach(function(rangeSpec) {
     sheet.getRange(rangeSpec[0], rangeSpec[1], rangeSpec[2], rangeSpec[3])
       .setBackground(neutral)
@@ -1639,25 +5220,41 @@ function applyExecutiveDashboardBranding_(sheet) {
       .setBorder(true, true, true, true, false, false, border, SpreadsheetApp.BorderStyle.SOLID);
   });
 
-  [3, 5, 7].forEach(function(row) {
+  [3, 5, 7, 9, 11].forEach(function(row) {
     sheet.getRange(row, 1, 1, 12)
       .setFontSize(9)
       .setFontColor('#5f5b52')
       .setHorizontalAlignment('center');
   });
-  [4, 6, 8].forEach(function(row) {
+  [4, 6, 8, 10, 12].forEach(function(row) {
     sheet.getRange(row, 1, 1, 12)
       .setFontSize(18)
       .setFontColor(black)
       .setHorizontalAlignment('center')
       .setVerticalAlignment('middle');
   });
+  [
+    [3, 1], [3, 4], [3, 7], [3, 10],
+    [5, 1], [5, 4], [5, 7], [5, 10],
+    [7, 1], [7, 4], [7, 7], [7, 10],
+    [9, 1], [9, 4], [9, 7], [9, 10],
+    [11, 1], [11, 4], [11, 7], [11, 10]
+  ].forEach(function(cardSpec) {
+    sheet.getRange(cardSpec[0], cardSpec[1], 1, 3).breakApart().merge()
+      .setHorizontalAlignment('center')
+      .setVerticalAlignment('middle');
+    sheet.getRange(cardSpec[0] + 1, cardSpec[1], 1, 3).breakApart().merge()
+      .setHorizontalAlignment('center')
+      .setVerticalAlignment('middle');
+  });
 
   [
-    [11, 1, 1, 3],
-    [11, 5, 1, 4],
-    [31, 1, 1, 7],
-    [31, 8, 1, 5]
+    [15, 1, 1, 3],
+    [15, 5, 1, 4],
+    [35, 1, 1, 7],
+    [35, 8, 1, 5],
+    [57, 1, 1, 3],
+    [57, 5, 1, 3]
   ].forEach(function(rangeSpec) {
     sheet.getRange(rangeSpec[0], rangeSpec[1], rangeSpec[2], rangeSpec[3])
       .setFontWeight('bold')
@@ -1666,34 +5263,44 @@ function applyExecutiveDashboardBranding_(sheet) {
       .setBorder(true, true, true, true, false, false, border, SpreadsheetApp.BorderStyle.SOLID);
   });
 
-  sheet.getRange(12, 1, 9, 3)
+  sheet.getRange(16, 1, 9, 3)
     .setBackground(neutral)
     .setBorder(true, true, true, true, true, true, border, SpreadsheetApp.BorderStyle.SOLID);
-  sheet.getRange(12, 5, 15, 4)
+  sheet.getRange(16, 5, 15, 4)
     .setBackground(white)
     .setBorder(true, true, true, true, true, true, border, SpreadsheetApp.BorderStyle.SOLID);
-  sheet.getRange(32, 1, 12, 7)
+  sheet.getRange(36, 1, 12, 7)
     .setBorder(true, true, true, true, true, true, border, SpreadsheetApp.BorderStyle.SOLID);
-  sheet.getRange(32, 8, 10, 5)
+  sheet.getRange(36, 8, 10, 5)
     .setBackground(white)
     .setBorder(true, true, true, true, true, true, border, SpreadsheetApp.BorderStyle.SOLID);
+  sheet.getRange(36, 1, 12, 7)
+    .setVerticalAlignment('middle')
+    .setWrap(true);
+  sheet.getRange(36, 8, 10, 5)
+    .setVerticalAlignment('middle')
+    .setWrap(true);
 
-  sheet.getRange(51, 1, 2, 3)
+  sheet.getRange(57, 1, 2, 3)
     .setBackground(black)
     .setFontColor(white)
     .setFontWeight('bold')
     .setHorizontalAlignment('center')
+    .setVerticalAlignment('middle')
     .setBorder(true, true, true, true, true, true, gold, SpreadsheetApp.BorderStyle.SOLID);
-  sheet.getRange(51, 5, 5, 3)
+  sheet.getRange(56, 1, 3, 3)
+    .setHorizontalAlignment('center')
+    .setVerticalAlignment('middle');
+  sheet.getRange(57, 5, 5, 3)
     .setBackground(white)
     .setBorder(true, true, true, true, true, true, border, SpreadsheetApp.BorderStyle.SOLID);
-  sheet.getRange(51, 7, 5, 1).setFontWeight('bold').setHorizontalAlignment('center');
+  sheet.getRange(57, 7, 5, 1).setFontWeight('bold').setHorizontalAlignment('center');
 
-  sheet.getRange(12, 2, 9, 2).setHorizontalAlignment('center');
-  sheet.getRange(32, 5, 12, 1).setHorizontalAlignment('center');
-  sheet.getRange(32, 7, 12, 1).setHorizontalAlignment('center');
-  sheet.getRange(32, 10, 10, 1).setHorizontalAlignment('center');
-  sheet.getRange(32, 12, 10, 1).setHorizontalAlignment('center');
+  sheet.getRange(16, 2, 9, 2).setHorizontalAlignment('center');
+  sheet.getRange(36, 5, 12, 1).setHorizontalAlignment('center');
+  sheet.getRange(36, 7, 12, 1).setHorizontalAlignment('center');
+  sheet.getRange(36, 10, 10, 1).setHorizontalAlignment('center');
+  sheet.getRange(36, 12, 10, 1).setHorizontalAlignment('center');
 }
 
 function applyFollowUpQueueStatusColors_(sheet, queue, startRow, startColumn, columnCount) {
@@ -1797,6 +5404,12 @@ function applyRogersHoldingsVisualDesign_() {
   });
   runVisualFormattingStep_(ss.getSheetByName(ACTIVITY_FEED_SHEET), 'Format Activity Feed', function(sheet) {
     formatActivityFeedSheet_(sheet);
+  });
+  runVisualFormattingStep_(ss.getSheetByName(FOLLOW_UPS_SHEET), 'Format Follow-Ups', function(sheet) {
+    formatFollowUpsSheet_(sheet, ensureFollowUpColumns_(sheet).headers);
+  });
+  runVisualFormattingStep_(ss.getSheetByName(PROJECTS_SHEET), 'Format Projects', function(sheet) {
+    formatProjectsSheet_(sheet, ensureProjectColumns_(sheet).headers);
   });
   runVisualFormattingStep_(ss.getSheetByName('Settings'), 'Format Settings', function(sheet) {
     formatSettingsSheet_(sheet);
@@ -1907,9 +5520,9 @@ function formatExecutiveDashboardSheet_(sheet) {
     sheet.setRowHeights(1, Math.min(sheet.getMaxRows(), 80), 30);
     sheet.setRowHeight(1, 38);
     sheet.setRowHeight(2, 32);
-    sheet.setRowHeights(3, 6, 36);
-    sheet.setRowHeights(10, 18, 30);
-    sheet.setRowHeights(30, 16, 32);
+    sheet.setRowHeights(3, 8, 36);
+    sheet.setRowHeights(14, 18, 30);
+    sheet.setRowHeights(34, 16, 32);
   });
   runSheetFormattingStep_(sheet, 'Executive dashboard branding', function() {
     applyExecutiveDashboardBranding_(sheet);
@@ -1952,6 +5565,9 @@ function formatDashboardMetricsSheet_(sheet) {
     }
   });
   applyAlternatingRows_(sheet, table.headerRow + 1, lastRow, lastColumn);
+  applyVisualComfortBody_(sheet, table.headerRow + 1, lastRow, lastColumn, {
+    rowHeight: 28
+  });
 }
 
 function formatMasterProspectTrackerSheet_(sheet) {
@@ -1971,6 +5587,7 @@ function formatMasterProspectTrackerSheet_(sheet) {
   runSheetFormattingStep_(sheet, 'Master Prospect gridlines', function() {
     sheet.setHiddenGridlines(true);
   });
+  applyOperatingSystemSheetChrome_(sheet, 'MASTER PROSPECT TRACKER', table.headerRow, lastColumn);
   formatTableHeader_(sheet, table.headerRow, lastColumn);
   runSheetFormattingStep_(sheet, 'Master Prospect body styling', function() {
     sheet.getRange(table.headerRow + 1, 1, Math.max(lastRow - table.headerRow, 1), lastColumn)
@@ -1980,6 +5597,7 @@ function formatMasterProspectTrackerSheet_(sheet) {
       .setBorder(true, false, true, false, false, false, '#eee6d5', SpreadsheetApp.BorderStyle.SOLID);
   });
   applyAlternatingRows_(sheet, table.headerRow + 1, lastRow, lastColumn);
+  applyOperatingSystemTableSurface_(sheet, table.headerRow, lastRow, lastColumn);
   applyMasterProspectColumnWidths_(sheet, table.headers);
   applyColumnFormattingByHeader_(sheet, table.headers, table.headerRow, lastRow, {
     'Audit Score': { horizontalAlignment: 'center', numberFormat: '0' },
@@ -1990,6 +5608,9 @@ function formatMasterProspectTrackerSheet_(sheet) {
     'Audit Package Date': { horizontalAlignment: 'center', numberFormat: 'yyyy-mm-dd hh:mm' },
     'Discovery Date': { horizontalAlignment: 'center', numberFormat: 'yyyy-mm-dd hh:mm' },
     'Closed Date': { horizontalAlignment: 'center', numberFormat: 'yyyy-mm-dd' }
+  });
+  applyVisualComfortBody_(sheet, table.headerRow + 1, lastRow, lastColumn, {
+    rowHeight: 34
   });
   applyWrapByHeader_(sheet, table.headers, table.headerRow, lastRow, [
     'Audit Outcome',
@@ -2018,6 +5639,7 @@ function formatClientsSheet_(sheet) {
   runSheetFormattingStep_(sheet, 'Clients gridlines', function() {
     sheet.setHiddenGridlines(true);
   });
+  applyOperatingSystemSheetChrome_(sheet, 'CLIENTS', table.headerRow, lastColumn);
   formatTableHeader_(sheet, table.headerRow, lastColumn);
   runSheetFormattingStep_(sheet, 'Clients body styling', function() {
     sheet.getRange(table.headerRow + 1, 1, Math.max(lastRow - table.headerRow, 1), lastColumn)
@@ -2026,19 +5648,37 @@ function formatClientsSheet_(sheet) {
       .setVerticalAlignment('middle');
   });
   applyAlternatingRows_(sheet, table.headerRow + 1, lastRow, lastColumn);
+  applyOperatingSystemTableSurface_(sheet, table.headerRow, lastRow, lastColumn);
+  setColumnWidthIfHeader_(sheet, table.headers, 'Client ID', 155);
+  setColumnWidthIfHeader_(sheet, table.headers, 'Company', 210);
   setColumnWidthIfHeader_(sheet, table.headers, 'Client Name', 210);
   setColumnWidthIfHeader_(sheet, table.headers, 'Contact', 160);
   setColumnWidthIfHeader_(sheet, table.headers, 'Email', 220);
   setColumnWidthIfHeader_(sheet, table.headers, 'Phone', 135);
   setColumnWidthIfHeader_(sheet, table.headers, 'Website', 230);
+  setColumnWidthIfHeader_(sheet, table.headers, 'Industry', 150);
+  setColumnWidthIfHeader_(sheet, table.headers, 'Service Package', 220);
   setColumnWidthIfHeader_(sheet, table.headers, 'Service', 220);
+  setColumnWidthIfHeader_(sheet, table.headers, 'Current Project', 220);
+  setColumnWidthIfHeader_(sheet, table.headers, 'Project Status', 140);
   setColumnWidthIfHeader_(sheet, table.headers, 'Status', 120);
   applyColumnFormattingByHeader_(sheet, table.headers, table.headerRow, lastRow, {
     'Contract Value': { horizontalAlignment: 'right', numberFormat: '$#,##0.00' },
     'Client Since': { horizontalAlignment: 'center', numberFormat: 'yyyy-mm-dd' },
+    'Start Date': { horizontalAlignment: 'center', numberFormat: 'yyyy-mm-dd' },
+    'Renewal Date': { horizontalAlignment: 'center', numberFormat: 'yyyy-mm-dd' },
+    'Due Date': { horizontalAlignment: 'center', numberFormat: 'yyyy-mm-dd' },
     'Last Activity': { horizontalAlignment: 'center', numberFormat: 'yyyy-mm-dd hh:mm' },
-    'Status': { horizontalAlignment: 'center' }
+    'Status': { horizontalAlignment: 'center' },
+    'Project Status': { horizontalAlignment: 'center' }
   });
+  applyVisualComfortBody_(sheet, table.headerRow + 1, lastRow, lastColumn, {
+    rowHeight: 34
+  });
+  applyWrapByHeader_(sheet, table.headers, table.headerRow, lastRow, [
+    'Current Project',
+    'Notes'
+  ]);
 }
 
 function formatActivityFeedSheet_(sheet) {
@@ -2057,6 +5697,7 @@ function formatActivityFeedSheet_(sheet) {
   runSheetFormattingStep_(sheet, 'Activity Feed gridlines', function() {
     sheet.setHiddenGridlines(true);
   });
+  applyOperatingSystemSheetChrome_(sheet, 'ACTIVITY FEED', table.headerRow, lastColumn);
   formatTableHeader_(sheet, table.headerRow, lastColumn);
   runSheetFormattingStep_(sheet, 'Activity Feed body styling', function() {
     sheet.getRange(table.headerRow + 1, 1, Math.max(lastRow - table.headerRow, 1), lastColumn)
@@ -2065,6 +5706,7 @@ function formatActivityFeedSheet_(sheet) {
       .setVerticalAlignment('top');
   });
   applyAlternatingRows_(sheet, table.headerRow + 1, lastRow, lastColumn);
+  applyOperatingSystemTableSurface_(sheet, table.headerRow, lastRow, lastColumn);
   setColumnWidthIfHeader_(sheet, table.headers, 'Date', 150);
   setColumnWidthIfHeader_(sheet, table.headers, 'Company', 210);
   setColumnWidthIfHeader_(sheet, table.headers, 'Activity Type', 190);
@@ -2078,11 +5720,20 @@ function formatActivityFeedSheet_(sheet) {
   runSheetFormattingStep_(sheet, 'Activity Feed row heights', function() {
     sheet.setRowHeights(table.headerRow + 1, Math.max(lastRow - table.headerRow, 1), 42);
   });
+  applyVisualComfortBody_(sheet, table.headerRow + 1, lastRow, lastColumn, {
+    rowHeight: 42,
+    wrap: true,
+    verticalAlignment: 'top'
+  });
 }
 
 function formatSettingsSheet_(sheet) {
   if (!sheet) {
     return;
+  }
+
+  if (typeof ensureSystemSettingsSection_ === 'function') {
+    ensureSystemSettingsSection_(SpreadsheetApp.getActiveSpreadsheet());
   }
 
   const table = getHealthHeaderTable_(sheet);
@@ -2104,9 +5755,19 @@ function formatSettingsSheet_(sheet) {
       .setVerticalAlignment('middle');
   });
   applyAlternatingRows_(sheet, table.headerRow + 1, lastRow, lastColumn);
+  applyOperatingSystemTableSurface_(sheet, table.headerRow, lastRow, lastColumn);
   runSheetFormattingStep_(sheet, 'Settings column widths', function() {
     sheet.setColumnWidths(1, Math.min(lastColumn, 4), 190);
   });
+  applyVisualComfortBody_(sheet, table.headerRow + 1, lastRow, lastColumn, {
+    rowHeight: 30
+  });
+  if (typeof formatSystemSettingsSection_ === 'function') {
+    formatSystemSettingsSection_(sheet);
+  }
+  if (typeof formatDropdownListsSection_ === 'function') {
+    formatDropdownListsSection_(sheet);
+  }
 }
 
 function formatTableHeader_(sheet, headerRow, lastColumn) {
@@ -2127,6 +5788,51 @@ function formatTableHeader_(sheet, headerRow, lastColumn) {
   });
 }
 
+function applyOperatingSystemSheetChrome_(sheet, title, headerRow, lastColumn) {
+  runSheetFormattingStep_(sheet, 'Operating system sheet chrome', function() {
+    sheet.setHiddenGridlines(true);
+    sheet.getRange(1, 1, Math.max(sheet.getMaxRows(), 1), Math.max(sheet.getMaxColumns(), 1))
+      .setFontFamily('Arial')
+      .setFontColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.text)
+      .setVerticalAlignment('middle');
+
+    if (headerRow > 1 && lastColumn > 1) {
+      sheet.getRange(1, 1, 1, lastColumn).breakApart().merge()
+        .setValue(title)
+        .setBackground(BUSINESS_OPTIMIZATION_PLATFORM_THEME.black)
+        .setFontColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.gold)
+        .setFontWeight('bold')
+        .setFontSize(16)
+        .setHorizontalAlignment('center')
+        .setVerticalAlignment('middle')
+        .setBorder(true, true, true, true, false, false, BUSINESS_OPTIMIZATION_PLATFORM_THEME.gold, SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
+      sheet.setRowHeight(1, 42);
+      if (headerRow > 2) {
+        sheet.getRange(2, 1, headerRow - 2, lastColumn)
+          .setBackground(BUSINESS_OPTIMIZATION_PLATFORM_THEME.white)
+          .setBorder(false, false, true, false, false, false, '#eee6d5', SpreadsheetApp.BorderStyle.SOLID);
+      }
+    }
+  });
+}
+
+function applyOperatingSystemTableSurface_(sheet, headerRow, lastRow, lastColumn) {
+  const bodyStartRow = headerRow + 1;
+  const bodyRows = Math.max(lastRow - headerRow, 1);
+  runSheetFormattingStep_(sheet, 'Operating system table surface', function() {
+    sheet.getRange(headerRow, 1, 1, lastColumn)
+      .setHorizontalAlignment('center')
+      .setVerticalAlignment('middle')
+      .setWrap(true);
+    sheet.getRange(bodyStartRow, 1, bodyRows, lastColumn)
+      .setVerticalAlignment('middle')
+      .setWrap(false)
+      .setBorder(true, false, true, false, false, false, '#eee6d5', SpreadsheetApp.BorderStyle.SOLID);
+    sheet.getRange(headerRow, 1, Math.max(lastRow - headerRow + 1, 1), lastColumn)
+      .setBorder(true, true, true, true, false, false, BUSINESS_OPTIMIZATION_PLATFORM_THEME.border, SpreadsheetApp.BorderStyle.SOLID);
+  });
+}
+
 function applyAlternatingRows_(sheet, startRow, lastRow, lastColumn) {
   if (lastRow < startRow) {
     return;
@@ -2141,6 +5847,30 @@ function applyAlternatingRows_(sheet, startRow, lastRow, lastColumn) {
   runSheetFormattingStep_(sheet, 'Alternating row backgrounds', function() {
     sheet.getRange(startRow, 1, rowCount, lastColumn).setBackgrounds(backgrounds);
   });
+}
+
+function applyVisualComfortBody_(sheet, startRow, lastRow, lastColumn, options) {
+  if (lastRow < startRow || lastColumn <= 0) {
+    return;
+  }
+
+  const settings = options || {};
+  const rowCount = lastRow - startRow + 1;
+  runSheetFormattingStep_(sheet, 'Visual comfort body styling', function() {
+    sheet.getRange(startRow, 1, rowCount, lastColumn)
+      .setFontFamily('Arial')
+      .setFontSize(settings.fontSize || 10)
+      .setFontColor(BUSINESS_OPTIMIZATION_PLATFORM_THEME.text)
+      .setVerticalAlignment(settings.verticalAlignment || 'middle')
+      .setWrap(settings.wrap === true)
+      .setBorder(true, false, true, false, false, false, BUSINESS_OPTIMIZATION_PLATFORM_THEME.border, SpreadsheetApp.BorderStyle.SOLID);
+  });
+
+  if (settings.rowHeight) {
+    runSheetFormattingStep_(sheet, 'Visual comfort row height', function() {
+      sheet.setRowHeights(startRow, rowCount, settings.rowHeight);
+    });
+  }
 }
 
 function applySectionHeaderStyle_(sheet, startColumn, columnCount) {
@@ -2194,6 +5924,7 @@ function applyMasterProspectColumnWidths_(sheet, headers) {
   setColumnWidthIfHeader_(sheet, headers, 'Audit Score', 95);
   setColumnWidthIfHeader_(sheet, headers, 'Audit Outcome', 230);
   setColumnWidthIfHeader_(sheet, headers, 'Priority Tier', 130);
+  setColumnWidthIfHeader_(sheet, headers, 'Audit Source', 160);
   setColumnWidthIfHeader_(sheet, headers, 'Status', 140);
   setColumnWidthIfHeader_(sheet, headers, 'Next Action', 240);
   setColumnWidthIfHeader_(sheet, headers, 'Follow-Up Date', 130);
@@ -2261,18 +5992,18 @@ function updateExecutiveDashboardClientSummary_() {
 
   const metrics = getClientRevenueMetrics_();
   const recentConversions = getRecentClientConversions_();
-  const discoveryCallsScheduled = countActivityType_('Discovery Call Scheduled');
-  const auditPackagesGenerated = countActivityType_('Audit Package Generated');
-  const auditPackagesSent = countActivityType_('Audit Package Sent');
+  const discoveryCallsScheduled = countActivityTypes_(['Discovery Meeting Scheduled', 'Discovery Call Scheduled']);
+  const auditPackagesGenerated = countActivityTypes_(['Digital Business Assessment Generated', 'Audit Package Generated']);
+  const auditPackagesSent = countActivityTypes_(['Digital Business Assessment', 'Digital Business Assessment Presented']);
   const output = [
     ['CLIENT SUMMARY', '', ''],
     ['Total Clients', metrics.totalClients, ''],
     ['Active Clients', metrics.activeClients, ''],
     ['New Clients This Month', metrics.clientsThisMonth, ''],
     ['Revenue', metrics.totalRevenue, ''],
-    ['Discovery Calls Scheduled', discoveryCallsScheduled, ''],
-    ['Audit Packages Generated', auditPackagesGenerated, ''],
-    ['Audit Packages Sent', auditPackagesSent, ''],
+    ['Discovery Meetings Scheduled', discoveryCallsScheduled, ''],
+    ['Digital Business Assessments Generated', auditPackagesGenerated, ''],
+    ['Digital Business Assessments', auditPackagesSent, ''],
     ['Recent Conversions', '', '']
   ].concat(recentConversions.map(function(conversion) {
     return [conversion.clientName, conversion.clientSince, conversion.contractValue];
@@ -2302,7 +6033,8 @@ function getClientRevenueMetrics_() {
     totalRevenue: 0,
     averageDealSize: 0,
     clientsThisMonth: 0,
-    revenueThisMonth: 0
+    revenueThisMonth: 0,
+    activeProjects: 0
   };
 
   if (!sheet) {
@@ -2325,20 +6057,32 @@ function getClientRevenueMetrics_() {
   let totalRevenue = 0;
   let clientsThisMonth = 0;
   let revenueThisMonth = 0;
+  let activeProjects = 0;
 
   values.forEach(function(row) {
-    const clientName = String(row[table.headers['Client Name'] - 1] || '').trim();
+    const clientName = String(
+      getValueByHeader_(row, table.headers, 'Company') ||
+      getValueByHeader_(row, table.headers, 'Client Name') ||
+      ''
+    ).trim();
     if (!clientName) {
       return;
     }
 
-    const status = String(row[table.headers.Status - 1] || '').trim();
-    const contractValue = Number(row[table.headers['Contract Value'] - 1]) || 0;
-    const clientSince = dateValueOrNull_(row[table.headers['Client Since'] - 1]);
+    const status = String(getValueByHeader_(row, table.headers, 'Status') || '').trim();
+    const projectStatus = String(getValueByHeader_(row, table.headers, 'Project Status') || '').trim();
+    const contractValue = Number(getValueByHeader_(row, table.headers, 'Contract Value')) || 0;
+    const clientSince = dateValueOrNull_(
+      getValueByHeader_(row, table.headers, 'Start Date') ||
+      getValueByHeader_(row, table.headers, 'Client Since')
+    );
     clientCount += 1;
 
     if (status === 'Active') {
       activeClients += 1;
+    }
+    if (projectStatus === 'Active' || projectStatus === 'In Progress') {
+      activeProjects += 1;
     }
 
     totalRevenue += contractValue;
@@ -2355,7 +6099,8 @@ function getClientRevenueMetrics_() {
     totalRevenue: totalRevenue,
     averageDealSize: clientCount ? totalRevenue / clientCount : 0,
     clientsThisMonth: clientsThisMonth,
-    revenueThisMonth: revenueThisMonth
+    revenueThisMonth: revenueThisMonth,
+    activeProjects: activeProjects
   };
 }
 

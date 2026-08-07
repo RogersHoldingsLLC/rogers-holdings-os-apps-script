@@ -2,11 +2,11 @@
 
 Business Optimization Platform uses three customer-facing deliverables with distinct roles in the sales process.
 
-## 1. Executive Snapshot
+## 1. Executive Brief
 
 Filename:
 
-- `Executive Snapshot.pdf`
+- `Executive Brief.pdf`
 
 Purpose:
 
@@ -22,7 +22,7 @@ Use when:
 
 Recommended language:
 
-- Executive Snapshot
+- Executive Brief
 - Practical opportunities
 - Recommended first step
 - Digital health score
@@ -39,14 +39,14 @@ Avoid:
 
 Recommended outreach behavior:
 
-- Cold outreach should attach or reference `Executive Snapshot.pdf` first.
+- Cold outreach should attach or reference `Executive Brief.pdf` first.
 - Do not lead with the full assessment and improvement plan unless the current workflow requires it or the prospect has requested more detail.
 
 ## 2. Digital Business Assessment
 
-Current filename:
+Canonical filename:
 
-- `Audit Report.pdf`
+- `Digital Business Assessment.pdf`
 
 Customer-facing name:
 
@@ -61,19 +61,18 @@ Purpose:
 Use when:
 
 - A meeting is scheduled.
-- The owner asks for details behind the snapshot.
+- The owner asks for details behind the brief.
 - Rogers Holdings needs to demonstrate the reasoning behind recommendations.
 
-Important:
+Compatibility:
 
-- Do not rename the file yet. Existing workflows depend on `Audit Report.pdf`.
-- Use “Digital Business Assessment” in customer-facing conversation where appropriate.
+- Existing `AuditReport.pdf` and `Audit Report.pdf` files remain discoverable when sending a legacy package. New generation writes `Digital Business Assessment.pdf`.
 
 ## 3. Improvement Plan
 
-Current filename:
+Canonical filename:
 
-- `Proposal.pdf`
+- `Improvement Plan.pdf`
 
 Customer-facing name:
 
@@ -91,26 +90,25 @@ Use when:
 - Priorities are confirmed.
 - The business owner is ready to evaluate scope.
 
-Important:
+Compatibility:
 
-- Do not rename the file yet. Existing workflows depend on `Proposal.pdf`.
-- Use “Improvement Plan” in customer-facing conversation where appropriate.
+- Existing `Proposal.pdf` remains discoverable when sending a legacy package. New generation writes `Improvement Plan.pdf`.
 
 ## Standard Consulting Workflow
 
 Business Optimization Platform now aligns every prospect-facing action around one consulting process:
 
 1. Lead Found
-2. Executive Snapshot Sent
+2. Executive Brief Sent
 3. Discovery Meeting Scheduled
-4. Digital Business Assessment Presented
+4. Digital Business Assessment
 5. Improvement Plan Sent
 6. Project Started
 7. Client
 
 ## Purpose of Each Step
 
-Executive Snapshot:
+Executive Brief:
 
 - Get the meeting.
 - Give the owner a concise, respectful reason to review the opportunity.
@@ -146,10 +144,10 @@ Client:
 
 ## Recommended Flow
 
-1. Generate the Executive Snapshot.
-2. Use the snapshot in outreach, then run **Confirm Executive Snapshot Sent** only after it is actually sent.
+1. Generate the Executive Brief.
+2. Use the brief in outreach, then run **Confirm Executive Brief Sent** only after it is actually sent.
 3. Create the discovery Calendar event; only successful Calendar creation confirms **Discovery Meeting Scheduled**.
-4. During the meeting, review the Digital Business Assessment, then run **Confirm Assessment Presented**.
+4. During the meeting, review the Digital Business Assessment, then run **Confirm Digital Business Assessment**.
 5. Generate the Improvement Plan, send it, then run **Confirm Improvement Plan Sent**.
 6. When accepted, run **Record Improvement Plan Accepted / Start Project**.
 7. After onboarding is complete, run **Complete Client Onboarding**.
@@ -160,10 +158,10 @@ Generating, regenerating, previewing, auditing, creating files, or creating a Gm
 
 | Current Status | Allowed next Status |
 | --- | --- |
-| Lead Found | Executive Snapshot Sent, Nurture, Lost |
-| Executive Snapshot Sent | Discovery Meeting Scheduled, Nurture, Lost |
-| Discovery Meeting Scheduled | Digital Business Assessment Presented, Nurture, Lost |
-| Digital Business Assessment Presented | Improvement Plan Sent, Nurture, Lost |
+| Lead Found | Executive Brief Sent, Nurture, Lost |
+| Executive Brief Sent | Discovery Meeting Scheduled, Nurture, Lost |
+| Discovery Meeting Scheduled | Digital Business Assessment, Nurture, Lost |
+| Digital Business Assessment | Improvement Plan Sent, Nurture, Lost |
 | Improvement Plan Sent | Project Started, Nurture, Lost |
 | Project Started | Client only |
 | Client | Client only |
@@ -184,7 +182,7 @@ Manual edits use the same matrix. Multi-cell Status edits are rejected by the li
 
 ## Future Visual Evidence Plan
 
-Future versions should add real evidence to the Executive Snapshot when available:
+Future versions should add real evidence to the Executive Brief when available:
 
 - Desktop screenshot
 - Mobile screenshot

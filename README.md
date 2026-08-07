@@ -9,17 +9,17 @@ The Business Optimization Platform is the client delivery platform for the Roger
 
 ```text
 Business Snapshot
--> creates a prospect or assessment input
+-> acquires a prospect and creates the initial Executive Brief workflow input
 -> Business Optimization Platform
--> manages consulting, proposals, projects, clients, and follow-up
+-> delivers the Digital Business Assessment, Improvement Plan, projects, clients, and follow-up
 ```
 
-The Website Audit Tool API powers audit acquisition for both Business Snapshot and Business Optimization Platform. Headquarters is the separate internal command center for Rogers Holdings LLC and is not part of this client delivery repository.
+Business Snapshot is the public acquisition product. The Website Audit Tool API is the internal technical evidence service used by Business Snapshot and Business Optimization Platform. Headquarters is the separate internal command center for Rogers Holdings LLC and is not part of this client delivery repository.
 
 The system is designed to manage the complete small-business lifecycle:
 
 ```text
-Lead Found -> Executive Snapshot Sent -> Discovery Meeting Scheduled -> Digital Business Assessment Presented -> Improvement Plan Sent -> Project Started -> Client
+Lead Found -> Executive Brief Sent -> Discovery Meeting Scheduled -> Digital Business Assessment -> Improvement Plan Sent -> Project Started -> Client
 ```
 
 ## Version
@@ -45,10 +45,10 @@ See:
 The Version 1.0 release candidate includes:
 
 - CRM: Master Prospect Tracker, Clients, Client Workspace, Projects, Follow-Ups, Activity Feed
-- Sales workflow: Executive Snapshot, Digital Business Assessment, Improvement Plan, Gmail Draft Automation, Next Action Engine
+- Sales workflow: Business Snapshot intake, Executive Brief, Digital Business Assessment, Improvement Plan, Gmail Draft Automation, Next Action Engine
 - Client delivery: Client conversion, project creation, project status/progress tracking, deliverable tracking
 - System: Executive Dashboard, Dashboard Metrics, Health Check, Reset Demo Data, Business Optimization Platform navigation menu
-- Deliverables: Executive Snapshot PDF, branded Digital Business Assessment PDF, Improvement Plan PDF, Discovery Call Brief PDF, outreach draft content
+- Deliverables: `Executive Brief.pdf`, `Digital Business Assessment.pdf`, `Improvement Plan.pdf`, Discovery Call Brief PDF, outreach draft content
 - Development: local `clasp` workflow, validation, backup, status checks, deployment script, duplicate function verification
 
 ## Core Google Sheets
@@ -96,6 +96,7 @@ Menu functions are defined in `Menu.gs` and call existing public workflow functi
 Root `.gs` files are the authoritative Apps Script source:
 
 - `AuditEngine.gs`
+- `BusinessSnapshotIntake.gs`
 - `BusinessInterpretationEngine.gs`
 - `CalendarEngine.gs`
 - `Code.gs`
@@ -116,11 +117,12 @@ Root `.gs` files are the authoritative Apps Script source:
 - `InspectionRulesRegistry.gs`
 - `Menu.gs`
 - `PdfEngine.gs`
+- `ProspectRevenueWorkflow.gs`
 - `SheetHelpers.gs`
 - `VisualEvidenceEngine.gs`
 - `WebsiteFetchEngine.gs`
 
-Root `.js` files with the same basenames are non-authoritative duplicates and are ignored by deployment.
+Root `.js` files with matching basenames are local-test mirrors only. Root `.gs` files remain authoritative, and `.js` mirrors are ignored by deployment.
 
 ## Local Development
 
@@ -207,10 +209,11 @@ Do not deploy unless validation passes.
 
 Common optional or recommended Apps Script properties:
 
-- `WEBSITE_AUDIT_TOOL_URL` or `WEBSITE_AUDIT_TOOL_ENDPOINT` — required only to acquire fresh real-audit data from the approved Website Audit Tool
+- `BOP_SPREADSHEET_ID` — required by the Business Snapshot library intake path; identifies the intended BOP workbook and has no active-workbook fallback
+- `WEBSITE_AUDIT_TOOL_URL` or `WEBSITE_AUDIT_TOOL_ENDPOINT` — required only to acquire fresh real-audit data from the approved Website Audit Tool API
 - `BRAND_ASSET_FOLDER_ID` or `ROGERS_BRAND_ASSET_FOLDER_ID`
 
-Audit acquisition and deliverable rendering are separate. Digital Business Assessment and Full Prospect Package rendering use the local PDF engine when the selected prospect already has Audit Score, Audit Outcome, Priority Tier, and a non-placeholder Audit Source. Existing screenshot and evidence fields are reused; no evidence is invented. Quick Internal Audit data is not eligible for client-facing rendering. Health Check reports a missing Website Audit Tool endpoint as a warning that blocks fresh audit acquisition, not as a platform-wide failure.
+Audit acquisition and deliverable rendering are separate. Digital Business Assessment and Full Prospect Package rendering use the local PDF engine when the selected prospect already has Audit Score, Audit Outcome, Priority Tier, and a verified Audit Source. `Website Audit Tool API` is canonical; the historical `Website Audit Tool` value remains eligible for compatibility. Existing screenshot and evidence fields are reused; no evidence is invented. Quick Internal Audit data is not eligible for client-facing rendering. Health Check reports a missing Website Audit Tool API endpoint as a warning that blocks fresh audit acquisition, not as a platform-wide failure.
 
 ## Health Check
 
