@@ -8,9 +8,13 @@ The Business Optimization Platform is at Version `1.0.0-rc` (build `2026.07.20-r
 
 Feature development is frozen for V1.0. Current work should focus on release acceptance, bug fixes, documentation, and production readiness.
 
+The `release/business-snapshot-naming-v1` candidate adds the canonical BOP-side Business Snapshot intake module and Naming Standard v1.0. Business Snapshot is the public acquisition product; its fixed-version library boundary creates a Lead Found prospect, durable intake activity, and an open Executive Brief Follow-Up in the explicitly configured BOP workbook. The intake uses request-ID idempotency, duplicate-entity rejection, literal-text protection, and compensating rollback with reconciliation-required handling. No anonymous receiver, Apps Script version, deployment, or production workbook change is included in this repository release.
+
+The active customer journey uses three canonical deliverables: `Executive Brief.pdf` for the initial meeting-focused summary, `Digital Business Assessment.pdf` for the deeper evidence-based diagnostic, and `Improvement Plan.pdf` for the recommended roadmap, scope, and next step. `Website Audit Tool API` is the internal technical evidence-service identity and is not a customer offer name.
+
 Prospect-to-Revenue Workflow v1 is implemented on `feature/prospect-to-revenue-workflow-v1` for local validation and disposable-workbook acceptance. It adds a thin coordinator around existing engines, stable Prospect IDs, visible validation/inspection/workflow/review state, Prospect ID and operation-key activity correlation, explicit Brian approval, and deterministic resume behavior. Preparation creates or updates a Gmail draft but cannot send email or advance CRM Status. It has not been deployed to production.
 
-Disposable-workbook acceptance was completed on 2026-07-23. The selected prospect validated as Ready, reused exact Website Audit Tool provenance, reconciled the Executive Snapshot and three-file assessment package, updated one exact-match canonical Gmail draft, surfaced `Needs Brian Review`, recorded explicit approval, and preserved the blank preexisting CRM Status because no external send was confirmed. A resume run reused the same audit and Gmail draft. Live acceptance found and corrected legacy Next Action validation fallback; the repaired run persisted `Review Outreach` and then `Confirm Executive Snapshot Sent`. A stale-review-note reset correction was locally regression-tested and pushed to acceptance after the live run. Production deployment remains pending separate approval.
+Historical acceptance record (pre-Naming Standard v1.0 terminology retained): disposable-workbook acceptance was completed on 2026-07-23. The selected prospect validated as Ready, reused exact Website Audit Tool provenance, reconciled the Executive Snapshot and three-file assessment package, updated one exact-match canonical Gmail draft, surfaced `Needs Brian Review`, recorded explicit approval, and preserved the blank preexisting CRM Status because no external send was confirmed. A resume run reused the same audit and Gmail draft. Live acceptance found and corrected legacy Next Action validation fallback; the repaired run persisted `Review Outreach` and then `Confirm Executive Snapshot Sent`. A stale-review-note reset correction was locally regression-tested and pushed to acceptance after the live run. Production deployment remains pending separate approval.
 
 ## Architecture
 
@@ -20,12 +24,12 @@ Product hierarchy:
 
 ```text
 Business Snapshot
--> creates a prospect or assessment input
+-> publicly acquires the prospect and creates the Executive Brief workflow input
 -> Business Optimization Platform
--> manages consulting, proposals, projects, clients, and follow-up
+-> delivers the Digital Business Assessment, Improvement Plan, projects, clients, and follow-up
 ```
 
-Rogers Holdings LLC is the company. Headquarters is its separate internal command center. Business Optimization Platform is the client delivery platform. Website Audit Tool API is the shared audit-acquisition service used by Business Snapshot and Business Optimization Platform.
+Rogers Holdings LLC is the company. Headquarters is its separate internal command center. Business Optimization Platform is the client delivery platform. Website Audit Tool API is the internal technical evidence service shared by Business Snapshot and Business Optimization Platform.
 
 Primary services:
 
@@ -47,31 +51,32 @@ Local EBI acceptance uses `npm run acceptance:ebi` to test four grounded industr
 
 The live-acceptance hardening adds a normalized assessment evidence contract with explicit `PASS`, `FAIL`, `UNKNOWN`, and `NOT_APPLICABLE` vocabulary plus inspection confidence. Incomplete inspector execution and unsupported zero scores suppress client-facing scores and severity claims in reports, previews, and outreach. Checklist states default to `Not Verified`, never PASS. Internal review markers are rejected as semantic business evidence, and low-confidence or review-required observations cannot generate client recommendations. Professional-services classification covers business consulting and digital optimization without applying local-service recommendations unless supported. The Improvement Plan remains on its approved legacy path.
 
-All visible score summaries in the Digital Business Assessment, Executive Snapshot PDF and preview, and Improvement Plan now use `getReportScoreContext_()`. The helper returns the display score, verification state, severity label, safe fallback language, and confidence/completeness state. Incomplete inspection data and unsupported zero scores render `Not verified` with no critical-severity claim. The Improvement Plan still does not consume EBI evidence; a narrow deterministic audience-context helper selects local-service, professional/B2B, nonprofit, or neutral legacy wording so unsupported local-commercial language does not leak into other business types.
+All visible score summaries in the Digital Business Assessment, Executive Brief PDF and preview, and Improvement Plan use `getReportScoreContext_()`. The helper returns the display score, verification state, severity label, safe fallback language, and confidence/completeness state. Incomplete inspection data and unsupported zero scores render `Not verified` with no critical-severity claim. The Improvement Plan still does not consume EBI evidence; a narrow deterministic audience-context helper selects local-service, professional/B2B, nonprofit, or neutral legacy wording so unsupported local-commercial language does not leak into other business types.
 
 The normalized evidence contract now evaluates each item independently. Every item carries `PASS`, `FAIL`, `UNKNOWN`, or `NOT_APPLICABLE`, normalized confidence, source, explanation, observation state, and separate eligibility for client findings, recommendations, and outreach. Aggregate notes and incomplete report text cannot convert unknown items into verified failures. Client-safe report projections retain only eligible evidence; an incomplete report may still retain an explicitly observed, sufficiently confident item while omitting unknown siblings. When no verified finding exists, reports and plans show a preliminary discovery-confirmation state instead of synthetic findings.
 
 `getBusinessClassificationContext_()` is the shared downstream language authority for professional/B2B, local-service, nonprofit, and neutral records. It controls audience perspective, priorities, first steps, roadmap framing, service-package language, Improvement Plan wording, and outreach. PDF roadmap pagination uses an explicit kept section with a forced clean-page start so the heading and first roadmap card cannot separate in Google HTML-to-PDF conversion.
 
-Final artifact acceptance was performed in the bound disposable workbook `DISPOSABLE V1.0 ACCEPTANCE - 2026-07-10`. The Executive Snapshot, Digital Business Assessment, Improvement Plan, and Outreach Email were regenerated and visually reviewed in Chrome. Live defects found during that cycle were limited to structured screenshot-evidence normalization, unverified legacy summary/metric leakage, unsupported generic findings, a duplicated final-page heading, and page-top Timeline clearance. The corrected Improvement Plan remains five pages; its Timeline heading is visible and attached to the first item. The artifact set contains no score/confidence leakage, presents incomplete evidence as discovery work rather than verified fact, and consistently uses professional/B2B audience language. Changes were deployed only to the disposable acceptance Apps Script project; production was not modified.
+Historical artifact acceptance record (pre-Naming Standard v1.0 terminology retained): final artifact acceptance was performed in the bound disposable workbook `DISPOSABLE V1.0 ACCEPTANCE - 2026-07-10`. The Executive Snapshot, Digital Business Assessment, Improvement Plan, and Outreach Email were regenerated and visually reviewed in Chrome. Live defects found during that cycle were limited to structured screenshot-evidence normalization, unverified legacy summary/metric leakage, unsupported generic findings, a duplicated final-page heading, and page-top Timeline clearance. The corrected Improvement Plan remains five pages; its Timeline heading is visible and attached to the first item. The artifact set contains no score/confidence leakage, presents incomplete evidence as discovery work rather than verified fact, and consistently uses professional/B2B audience language. Changes were deployed only to the disposable acceptance Apps Script project; production was not modified.
 
-Post-deployment smoke review identified a narrow client-rendering correction cycle: mixed-case `LLc` suffixes must render as `LLC`, `Website Audit` must never appear as the Executive Snapshot service recommendation, and incomplete evidence must present `Digital Visibility & Conversion Improvement Package` only as a preliminary option pending discovery. PDF heading retention is independent from explicit page breaks; the Assessment’s Improvement Roadmap divider and Business Impact share one page-safe group so dividers cannot become isolated headings.
+Historical smoke-review record (pre-Naming Standard v1.0 terminology retained): post-deployment review identified a narrow client-rendering correction cycle: mixed-case `LLc` suffixes must render as `LLC`, `Website Audit` must never appear as the Executive Snapshot service recommendation, and incomplete evidence must present `Digital Visibility & Conversion Improvement Package` only as a preliminary option pending discovery. PDF heading retention is independent from explicit page breaks; the Assessment’s Improvement Roadmap divider and Business Impact share one page-safe group so dividers cannot become isolated headings.
 
-V1 separates audit acquisition from deliverable rendering. `runRealWebsiteAudit` requires an approved Website Audit Tool endpoint. `generateAuditPackage` and `runFullProspectPackage` use the same fail-closed local-rendering gate: `Audit Source` must equal `Website Audit Tool` exactly; Audit Score must be numeric from 0 through 100; Audit Outcome must equal `Strong Fit`, `Good Fit`, `Needs Nurture`, or `Poor Fit`; Priority Tier must equal `A - Hot`, `B - Good`, or `C - Later`; and Summary or Notes must supply PDF narrative. Blank, Quick Internal Audit, `D - Nurture`, `Authoritative Import`, arbitrary text, the general Source column, and inferred provenance do not qualify. Stored screenshot and evidence fields flow into the existing PDF renderer. The internal Inspection Engine remains developer-only and is not the production audit acquisition path.
+V1 separates evidence acquisition from deliverable rendering. `runRealWebsiteAudit` requires an approved Website Audit Tool API endpoint. `generateAuditPackage` and `runFullProspectPackage` use the same fail-closed local-rendering gate: `Audit Source` must equal canonical `Website Audit Tool API` or historical compatible `Website Audit Tool`; Audit Score must be numeric from 0 through 100; Audit Outcome must equal `Strong Fit`, `Good Fit`, `Needs Nurture`, or `Poor Fit`; Priority Tier must equal `A - Hot`, `B - Good`, or `C - Later`; and Summary or Notes must supply PDF narrative. Blank, Quick Internal Audit, `D - Nurture`, `Authoritative Import`, arbitrary text, the general Source column, and inferred provenance do not qualify. Stored screenshot and evidence fields flow into the existing PDF renderer. The internal Inspection Engine remains developer-only and is not the production evidence-acquisition path.
 
-Master Prospect Tracker startup repair ensures the required `Audit Source` header exists without moving an existing column or changing its cells. A missing header is placed immediately after `Priority Tier`, or appended if `Priority Tier` is itself missing so Health Check can report that separate defect. The column receives its own dropdown containing only `Website Audit Tool` and `Quick Internal Audit`; inherited or incorrect validation is replaced without changing existing cell contents. Legacy audit provenance is never inferred: existing values are preserved exactly, blank legacy values remain blank, and invalid legacy values remain visible but blocked from client-facing rendering.
+Master Prospect Tracker startup repair ensures the required `Audit Source` header exists without moving an existing column or changing its cells. A missing header is placed immediately after `Priority Tier`, or appended if `Priority Tier` is itself missing so Health Check can report that separate defect. The column receives its own dropdown containing `Website Audit Tool API`, historical `Website Audit Tool`, and `Quick Internal Audit`; inherited or incorrect validation is replaced without changing existing cell contents. Legacy audit provenance is never inferred: existing values are preserved exactly, blank legacy values remain blank, and invalid legacy values remain visible but blocked from client-facing rendering.
 
-`Generate Digital Business Assessment` creates `AuditReport.pdf`, `Proposal.pdf`, and `Outreach Email Draft.txt` in Drive. Audit-report regeneration treats canonical `AuditReport.pdf` and legacy `Audit Report.pdf` as one logical artifact within the resolved package folder, trashes every active copy of both names, creates one fresh canonical file, and reports canonical removals, legacy removals, and the created filename. Proposal regeneration still replaces exact-name predecessors, while the outreach text draft still updates in place and removes exact-name duplicates. It logs `Outreach Draft File Created` and does not create a Gmail draft. `Create Outreach Gmail Draft`, `Run Full Prospect Package`, and `Send Digital Business Assessment` retain their real Gmail-draft behavior and use Gmail-specific success wording only after Gmail creation or update succeeds.
+The canonical generated files are `Executive Brief.pdf`, `Digital Business Assessment.pdf`, and `Improvement Plan.pdf`; the assessment package also maintains `Outreach Email Draft.txt`. Assessment regeneration removes active `Digital Business Assessment.pdf`, `AuditReport.pdf`, and `Audit Report.pdf` copies before creating one canonical assessment. Existing `AuditReport.pdf`, `Audit Report.pdf`, and `Proposal.pdf` remain discoverable when sending or moving a legacy package, but new generation writes only the canonical filenames. The outreach text draft updates in place and removes exact-name duplicates. It logs `Outreach Draft File Created` and does not create a Gmail draft. `Create Outreach Gmail Draft`, `Run Full Prospect Package`, and `Send Digital Business Assessment` retain their real Gmail-draft behavior and use Gmail-specific success wording only after Gmail creation or update succeeds.
 
 All Gmail-producing workflows use one exact-match reconciliation rule within the current authenticated Gmail account: recipient email is trimmed and case-normalized, subject is trimmed and then matched exactly, one matching draft is refreshed, no match creates exactly one draft, and multiple matches fail safely without creating or updating another draft. Assessment attachment failures reconcile again before using the folder-link fallback so an ambiguously persisted attachment draft and a fallback draft cannot both be created. Activity Feed events distinguish Gmail drafts created from Gmail drafts updated and are written only after verified Gmail success.
 
-Production diagnostics must remain privacy-safe: log workflow state, counts, durations, and outcomes, but do not log prospect contact data, full Website Audit Tool response bodies, Drive URLs, or file identifiers by default.
+Production diagnostics must remain privacy-safe: log workflow state, counts, durations, and outcomes, but do not log prospect contact data, full Website Audit Tool API response bodies, Drive URLs, or file identifiers by default.
 
 ## Authoritative Source
 
 Root `.gs` files are authoritative:
 
 - `AuditEngine.gs`
+- `BusinessSnapshotIntake.gs`
 - `BusinessInterpretationEngine.gs`
 - `CalendarEngine.gs`
 - `Code.gs`
@@ -92,11 +97,12 @@ Root `.gs` files are authoritative:
 - `InspectionRulesRegistry.gs`
 - `Menu.gs`
 - `PdfEngine.gs`
+- `ProspectRevenueWorkflow.gs`
 - `SheetHelpers.gs`
 - `VisualEvidenceEngine.gs`
 - `WebsiteFetchEngine.gs`
 
-Root `.js` files are non-authoritative duplicates and must not be edited as source.
+Root `.js` files with matching basenames are local-test mirrors only. They are ignored by deployment and must not be edited as authoritative source.
 
 ## Key Design Decisions
 
@@ -114,9 +120,9 @@ Root `.js` files are non-authoritative duplicates and must not be edited as sour
 
 ```text
 Lead Found
-Executive Snapshot Sent
+Executive Brief Sent
 Discovery Meeting Scheduled
-Digital Business Assessment Presented
+Digital Business Assessment
 Improvement Plan Sent
 Project Started
 Client
@@ -126,7 +132,7 @@ Lost
 Business lifecycle:
 
 ```text
-Lead Found -> Executive Snapshot Sent -> Discovery Meeting Scheduled -> Digital Business Assessment Presented -> Improvement Plan Sent -> Project Started -> Client
+Lead Found -> Executive Brief Sent -> Discovery Meeting Scheduled -> Digital Business Assessment -> Improvement Plan Sent -> Project Started -> Client
 ```
 
 CRM Status is a confirmed-event field. Generating or previewing artifacts, completing an audit, creating files, and creating Gmail drafts do not advance it. Operators use explicit confirmation actions for sent/presented/accepted/onboarded outcomes; successful Calendar event creation may confirm Discovery Meeting Scheduled. Invalid stage jumps are blocked, and repeated confirmations are idempotent.
@@ -139,6 +145,8 @@ Manual Status edits fail closed when prior confirmed state cannot be proven: the
 
 Menu and user-facing workflows include:
 
+- `ingestBusinessSnapshot`
+- `ingestBusinessSnapshotPublic`
 - `runNextAction`
 - `runFullProspectPackage`
 - `runRealWebsiteAudit`

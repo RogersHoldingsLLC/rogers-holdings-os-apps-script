@@ -4,6 +4,11 @@
 
 ### Added
 
+- Added the canonical `BusinessSnapshotIntake.gs` library boundary for Business Snapshot submissions, including explicit workbook resolution through `BOP_SPREADSHEET_ID`, normalized public input validation, duplicate company/email protection, and one Lead Found prospect plus linked Follow-Up per accepted request.
+- Added durable `INTAKE:<requestId>` idempotency with exact Prospect ID, Activity Feed, and open Executive Brief Follow-Up verification so safe retries return the original prospect without duplicating records.
+- Added compensating rollback and reconciliation-required failure handling for partial tracker, Activity Feed, and Follow-Up writes, including verification that pre-existing Follow-Ups remain unchanged.
+- Added centralized literal-text protection at Business Snapshot tracker, Activity Feed, and Follow-Up write boundaries so leading `=` input cannot execute as a spreadsheet formula while legitimate values such as international `+` phone numbers remain unchanged.
+- Added Rogers Holdings Naming Standard v1.0 documentation and regression coverage for the canonical customer and operator journey: Executive Brief, Digital Business Assessment, and Improvement Plan.
 - Added Prospect-to-Revenue Workflow v1 for one selected prospect, with stable Prospect IDs, persistent validation, inspection, workflow, recovery, and Brian-review state.
 - Added menu and Prospect Workspace actions to validate, prepare, resume, review, approve for manual outreach, or request changes.
 - Added Activity Feed correlation by Prospect ID and workflow operation key.
@@ -13,7 +18,9 @@
 
 ### Safety
 
-- Prospect preparation reuses the established Website Audit Tool, Drive/PDF, and exact-match Gmail draft engines.
+- Canonical lifecycle writes use `Lead Found -> Executive Brief Sent -> Discovery Meeting Scheduled -> Digital Business Assessment -> Improvement Plan Sent -> Project Started -> Client`; legacy stored lifecycle and Next Action values normalize to these names without rewriting historical records.
+- `Website Audit Tool API` is the internal technical evidence-service identity. Historical `Website Audit Tool` and `Website Audit` evidence values, legacy lifecycle aliases, internal function/schema names, and legacy package filenames remain supported only where compatibility requires them.
+- Prospect preparation reuses the established Website Audit Tool API, Drive/PDF, and exact-match Gmail draft engines.
 - Preparation never sends email and never advances confirmed CRM Status.
 - Explicit approval records Brian's decision but still requires manual Gmail sending and the existing sent-confirmation action.
 

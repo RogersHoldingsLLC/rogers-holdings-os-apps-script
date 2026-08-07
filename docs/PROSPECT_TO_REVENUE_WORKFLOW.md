@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Prospect-to-Revenue Workflow v1 connects the existing prospect, Website Audit Tool, executive deliverable, Gmail-draft, Follow-Up, Activity Feed, and lifecycle capabilities for one selected prospect.
+Prospect-to-Revenue Workflow v1 connects the existing prospect, Website Audit Tool API, Executive Brief, Gmail-draft, Follow-Up, Activity Feed, and lifecycle capabilities for one selected prospect.
 
 Google Sheets remains the operational source of truth and Google Apps Script remains the automation layer. The workflow does not introduce a service, database, framework, or automatic email sending.
 
@@ -12,11 +12,11 @@ Google Sheets remains the operational source of truth and Google Apps Script rem
 2. Run **Validate Selected Prospect**.
 3. Correct any fields reported as missing or invalid.
 4. Run **Prepare Prospect for Outreach**.
-5. The workflow reuses verified Website Audit Tool data or acquires it, reconciles the Executive Snapshot and assessment package, and creates or updates one exact-match Gmail draft.
+5. The workflow reuses verified Website Audit Tool API evidence or acquires it, reconciles the Executive Brief and Digital Business Assessment package, and creates or updates one exact-match Gmail draft.
 6. Review the Prospect Workspace, deliverables, evidence, recipient, subject, and Gmail draft.
 7. Run **Approve for Manual Outreach** or **Request Changes**.
 8. After approval, send the Gmail draft manually.
-9. Run **Confirm Executive Snapshot Sent** only after the message was actually sent.
+9. Run **Confirm Executive Brief Sent** only after the message was actually sent.
 
 If preparation stops, correct the reported issue and run **Resume Prospect Workflow**. Previous successful work is preserved.
 
@@ -38,7 +38,7 @@ Every coordinated operation uses `PTR:<Prospect ID>:V1`. Activity Feed rows stor
 - Gmail operations use the established exact recipient/subject reconciliation.
 - `Approved` records Brian's decision; it does not send email.
 - Calendar invitations remain a separate, explicit Brian-initiated action.
-- Only exact `Website Audit Tool` provenance qualifies for verified client-facing rendering.
+- Canonical `Website Audit Tool API` provenance qualifies for verified client-facing rendering; historical `Website Audit Tool` provenance remains accepted for compatibility.
 - Failures persist recovery details and preserve successful prior work.
 
 ## Public Entry Points
