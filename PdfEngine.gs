@@ -56,7 +56,7 @@ function buildAuditReportPdfBlob_(prospect, reportFile) {
       brandedPdfSectionHtml_('Recommended Next Step', finalRecommendationHtml_(prospect, nextStep, estimatedImpact, safeReportFile))
     ].filter(Boolean).join('')
   });
-  return htmlToPdfBlob_(html, 'Audit Report.pdf');
+  return htmlToPdfBlob_(html, 'Digital Business Assessment.pdf');
 }
 
 function buildProposalPdfBlob_(prospect, proposal) {
@@ -82,12 +82,12 @@ function buildProposalPdfBlob_(prospect, proposal) {
       brandedPdfSectionHtml_('Acceptance', acceptancePageHtml_(prospect, recommendedPackage))
     ].join('')
   });
-  return htmlToPdfBlob_(html, 'Proposal.pdf');
+  return htmlToPdfBlob_(html, 'Improvement Plan.pdf');
 }
 
 function buildExecutiveSnapshotPdfBlob_(prospect, reportFile) {
   const html = buildExecutiveSnapshotPdfHtml_(prospect || {}, reportFile || {});
-  return htmlToPdfBlob_(html, 'Executive Snapshot.pdf');
+  return htmlToPdfBlob_(html, 'Executive Brief.pdf');
 }
 
 function buildDiscoveryCallBriefPdfBlob_(prospect, startDate, durationMinutes) {
@@ -1471,7 +1471,7 @@ function hasRealProofEvidence_(finding, evidenceObject) {
 }
 
 function enforcePdfFindingEvidenceQuality_(prospect, reportFile, findings) {
-  // PDF V4 CHANGE: reject generic score evidence before Audit Report PDF rendering.
+  // PDF V4 CHANGE: reject generic score evidence before assessment PDF rendering.
   const evidenceObject = getAuditEvidenceObject_(prospect, reportFile);
   const screenshot = getEvidenceScreenshotUri_(evidenceObject);
   return (findings || []).map(function(finding) {
@@ -1795,7 +1795,7 @@ function finalRecommendationHtml_(prospect, nextStep, estimatedImpact, reportFil
 }
 
 function buildRecommendedPackage_(prospect) {
-  const service = getClientFacingServiceName_(prospect.offerService || 'Website Audit', prospect.auditScore);
+  const service = getClientFacingServiceName_(prospect.offerService || 'Business Snapshot', prospect.auditScore);
   const investmentRange = recommendedInvestmentRangeForService_(service);
   const highScore = getReportScoreContext_(prospect || {}, (prospect && prospect.reportFile) || {}).scoreVerified === true && isNearPerfectAuditScore_(prospect);
   const audience = getImprovementPlanBusinessContext_(prospect);
@@ -1916,8 +1916,8 @@ function buildExecutiveSnapshotPdfHtml_(prospect, reportFile) {
             <div class="brand-block">
               <div class="brand-panel">${logoHtml}</div>
               <div>
-                <div class="snapshot-label">Executive Snapshot</div>
-                <h1>Digital Opportunity Snapshot</h1>
+                <div class="snapshot-label">Executive Brief</div>
+                <h1>Executive Brief</h1>
               </div>
             </div>
             <div class="meta">
@@ -2169,7 +2169,7 @@ function proposalIntroHtml_(prospect) {
   return [
     '<div class="summary-card executive-summary">',
     `<h3>Thank you, ${escapeHtml_(prospect.company || 'team')}.</h3>`,
-    `<p>This proposal translates the website review into a practical improvement plan. It focuses on ${decisionLanguage}.</p>`,
+    `<p>This Improvement Plan translates the website review into a practical improvement plan. It focuses on ${decisionLanguage}.</p>`,
     '<p>The recommendation is intentionally focused. The goal is not to add unnecessary technology. The goal is to create a clearer digital foundation that supports real customer decisions.</p>',
     '</div>'
   ].join('');
@@ -2280,7 +2280,7 @@ function proposalNextStepsHtml_(prospect) {
     '<div><strong>3. Scope</strong><span>Confirm timeline, investment, and responsibilities.</span></div>',
     '<div><strong>4. Begin</strong><span>Schedule kickoff and execute the first approved improvement.</span></div>',
     '</div>',
-    '<p>The recommended discovery conversation should confirm the most important business goal for the next 30-90 days, then turn this proposal into a clear starting plan.</p>',
+    '<p>The recommended discovery conversation should confirm the most important business goal for the next 30-90 days, then turn this Improvement Plan into a clear starting plan.</p>',
     '<div class="contact-card">',
     `<strong>${escapeHtml_(contact.name)}</strong><br>`,
     `${escapeHtml_(contact.company)}<br>`,
@@ -3425,7 +3425,7 @@ function buildProposalHtml_(prospect, proposal) {
                 // Continue to manual-copy message below.
               }
 
-              message.textContent = 'Copy failed. Please manually select the proposal text and copy it.';
+              message.textContent = 'Copy failed. Please manually select the Improvement Plan text and copy it.';
               return false;
             }
 

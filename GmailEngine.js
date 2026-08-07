@@ -4,46 +4,66 @@
  */
 
 function buildOutreachDrafts_(prospect) {
-  const company = String(prospect.company || '').trim();
+  prospect = normalizeClientProspect_(prospect);
+  const company = prospect.company;
   const website = String(prospect.website || '').trim();
   const auditScore = prospect.auditScore === '' || prospect.auditScore === null || prospect.auditScore === undefined
     ? 'not scored'
     : String(prospect.auditScore);
-  const auditOutcome = String(prospect.auditOutcome || 'website review').trim();
-  const offerService = String(prospect.offerService || 'website and local visibility review').trim();
-  const findings = getSmartFindings_(prospect);
+  const reportFile = prospect.reportFile || {};
+  const confidence = getAssessmentConfidenceState_(prospect, reportFile);
+  const safeDigitalPresence = getDigitalPresenceAssessment_(prospect.auditScore, confidence);
+  const classification = getBusinessClassificationContext_(prospect, reportFile);
+  const offerService = getClientFacingServiceName_(prospect.offerService || 'website and local visibility review', prospect.auditScore);
+  const recommendationVerified = confidence.scoreAllowed === true;
+  const findings = filterClientEligibleEvidence_(getSmartFindings_(prospect), prospect, reportFile, 'outreach');
   const websiteLine = website
-    ? `I took a quick look at ${website} and noticed a few opportunities that may help more local customers take action.`
-    : 'I noticed there may be an opportunity to improve your online visibility so more local customers can find, trust, and contact the business.';
+    ? `I reviewed ${website} from the perspective of ${classification.audiencePerspective}.`
+    : `I reviewed your online presence from the perspective of ${classification.audiencePerspective}.`;
   const findingsLine = findings.length
-    ? 'A few things stood out:\n' + findings.map(function(finding) {
+    ? 'A couple of opportunities stood out:\n' + findings.slice(0, 2).map(function(finding) {
       return '- ' + finding;
     }).join('\n')
     : '';
-  const subject = website ? `Quick website note for ${company}` : `Quick local visibility note for ${company}`;
+  const subject = website ? `Website review for ${company}` : `Digital presence review for ${company}`;
+  const scoreValue = safeDigitalPresence.score;
+  const opportunityFrame = scoreValue !== null && scoreValue >= 90
+    ? 'The main opportunity looks more like refinement and growth than a major rebuild.'
+    : `The main opportunity is practical improvement: ${classification.priorities.join(' ')}`;
   const auditLine = website
-    ? `The quick audit score came back at ${auditScore}/100 with this outcome: ${auditOutcome}. I would keep the next step simple: ${offerService}.`
-    : `I would keep the next step simple: ${offerService}. The goal would be to improve local visibility and make it easier for customers to take the next step.`;
+    ? (confidence.scoreAllowed
+      ? `The Digital Presence Score came back at ${safeDigitalPresence.scoreText || auditScore}. ${safeDigitalPresence.title}. ${opportunityFrame}`
+      : 'The review identified areas worth verifying together. I have not included a definitive score or severity claim because the available inspection evidence is incomplete.')
+    : `The clearest starting point appears to be ${offerService}. The goal would be to improve visibility, credibility, and the path for customers to take action.`;
 
   const initialParts = [
     `Hi ${company} team,`,
-    `My name is Brian with Rogers Holdings LLC. ${websiteLine}`,
+    `My name is Brian Keith Rogers with Rogers Holdings LLC. ${websiteLine}`,
     auditLine,
     findingsLine,
-    'No pressure either way. I wanted to pass this along in case it is useful. If you would like, I can send over a short plain-English summary of the highest-impact fixes.',
+    recommendationVerified
+      ? `I prepared a short Executive Brief with the clearest next step: ${offerService}.`
+      : `I prepared a short Executive Brief with a preliminary service option to confirm during discovery: ${offerService}.`,
+    'If it would be useful, I can send it over or walk through it in a quick conversation.',
     'Best,',
-    'Brian Rogers',
-    'Rogers Holdings LLC'
+    'Brian Keith Rogers',
+    'Rogers Holdings LLC',
+    'briankeith@rogersholdingsllc.com',
+    '859-404-7300'
   ].filter(Boolean);
 
   const followUpParts = [
     `Hi ${company} team,`,
-    website ? 'I wanted to follow up on the quick website note I sent over.' : 'I wanted to follow up on the quick local visibility note I sent over.',
-    `Based on the audit, the practical next step still looks like ${offerService}. The goal would be simple: make it easier for local customers to understand what you offer, trust the business, and contact you.`,
-    'If helpful, I can put together a short summary with the main opportunities and a recommended first step.',
+    website ? 'I wanted to follow up on the website review note I sent over.' : 'I wanted to follow up on the digital presence review note I sent over.',
+    recommendationVerified
+      ? `The practical next step still looks like ${offerService}.`
+      : `A practical service option to confirm during discovery is ${offerService}.`,
+    'If useful, I can share the Executive Brief and walk through the highest-impact opportunities in a short conversation.',
     'Best,',
-    'Brian Rogers',
-    'Rogers Holdings LLC'
+    'Brian Keith Rogers',
+    'Rogers Holdings LLC',
+    'briankeith@rogersholdingsllc.com',
+    '859-404-7300'
   ];
 
   return {
@@ -51,6 +71,66 @@ function buildOutreachDrafts_(prospect) {
     initialEmail: initialParts.join('\n\n'),
     followUpEmail: followUpParts.join('\n\n')
   };
+}
+
+function normalizeGmailDraftRecipient_(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function normalizeGmailDraftSubject_(value) {
+  return String(value || '').trim();
+}
+
+function findExactGmailDraftMatches_(recipient, subject) {
+  const normalizedRecipient = normalizeGmailDraftRecipient_(recipient);
+  const normalizedSubject = normalizeGmailDraftSubject_(subject);
+  return GmailApp.getDrafts().filter(function(draft) {
+    const message = draft.getMessage();
+    return normalizeGmailDraftRecipient_(message.getTo()) === normalizedRecipient &&
+      normalizeGmailDraftSubject_(message.getSubject()) === normalizedSubject;
+  });
+}
+
+function assertUnambiguousGmailDraftMatches_(matches, recipient, subject) {
+  if (matches.length > 1) {
+    throw new Error(`Multiple Gmail drafts match recipient ${String(recipient || '').trim()} and subject "${normalizeGmailDraftSubject_(subject)}" in the current Gmail account. Resolve the duplicate drafts before retrying; no new draft was created.`);
+  }
+}
+
+function reconcileExactGmailDraft_(recipient, subject, body, options) {
+  const matches = findExactGmailDraftMatches_(recipient, subject);
+  assertUnambiguousGmailDraftMatches_(matches, recipient, subject);
+  if (matches.length === 1) {
+    matches[0].update(recipient, subject, body, options || {});
+    return { draft: matches[0], created: false, updated: true };
+  }
+  return { draft: GmailApp.createDraft(recipient, subject, body, options || {}), created: true, updated: false };
+}
+
+function reconcileAfterAmbiguousGmailCreateError_(recipient, subject) {
+  const matches = findExactGmailDraftMatches_(recipient, subject);
+  assertUnambiguousGmailDraftMatches_(matches, recipient, subject);
+  return matches.length === 1
+    ? { draft: matches[0], created: false, updated: false, retainedAfterError: true }
+    : null;
+}
+
+function createOrReconcileAssessmentGmailDraft_(recipient, subject, body, attachments, fallbackBody) {
+  try {
+    const result = reconcileExactGmailDraft_(recipient, subject, body, { attachments: attachments });
+    result.withAttachments = true;
+    return result;
+  } catch (attachmentError) {
+    const persisted = reconcileAfterAmbiguousGmailCreateError_(recipient, subject);
+    if (persisted) {
+      persisted.withAttachments = null;
+      return persisted;
+    }
+    const fallback = reconcileExactGmailDraft_(recipient, subject, fallbackBody);
+    fallback.withAttachments = false;
+    fallback.attachmentError = attachmentError;
+    return fallback;
+  }
 }
 
 function sendAuditPackage() {
@@ -75,7 +155,7 @@ function sendAuditPackage() {
   if (missing.length) {
     ui.alert(
       'Business Optimization Platform',
-      'Add the missing fields before sending the audit package: ' + missing.join(', '),
+      'Add the missing fields before sending the Digital Business Assessment: ' + missing.join(', '),
       ui.ButtonSet.OK
     );
     return;
@@ -84,92 +164,53 @@ function sendAuditPackage() {
   if (!isAuditPackageGenerated_(context.values, context.table.headers)) {
     ui.alert(
       'Business Optimization Platform',
-      'Generate the audit package first, then run Send Audit Package again.',
+      'Generate the Digital Business Assessment first, then run Send Audit Package again.',
       ui.ButtonSet.OK
     );
     return;
   }
 
   try {
-    console.log('Send Audit Package: selected prospect loaded', {
-      company: prospect.company,
-      website: prospect.website,
-      email: prospect.email
-    });
+    console.log('Send Audit Package: selected prospect loaded');
     const folder = getAuditPackageFolder_(prospect.company);
     if (!folder) {
-      throw new Error('Audit package folder was not found. Generate the audit package first.');
+      throw new Error('Digital Business Assessment folder was not found. Generate the Digital Business Assessment first.');
     }
-    console.log('Send Audit Package: folder found', {
-      folderName: folder.getName(),
-      folderUrl: folder.getUrl()
-    });
+    console.log('Send Audit Package: folder found');
 
     const packageFiles = getRequiredAuditPackageFiles_(folder, prospect);
-    console.log('Send Audit Package: audit report file found', {
-      fileName: packageFiles.auditReport.getName(),
-      fileId: packageFiles.auditReport.getId()
-    });
-    console.log('Send Audit Package: proposal PDF file found', {
-      fileName: packageFiles.proposalDraft.getName(),
-      fileId: packageFiles.proposalDraft.getId()
-    });
-    console.log('Send Audit Package: outreach email draft file found', {
-      fileName: packageFiles.outreachDraft.getName(),
-      fileId: packageFiles.outreachDraft.getId()
-    });
+    console.log('Send Audit Package: required files found');
     const subject = `Website Improvement Opportunities for ${prospect.company}`;
     const body = buildAuditPackageSendEmailBody_(prospect, folder);
-    let draftCreatedWithAttachments = false;
+    const attachments = [packageFiles.auditReport.getBlob(), packageFiles.proposalDraft.getBlob()];
+    console.log('Send Audit Package: attachments prepared', { attachmentCount: attachments.length });
+    const gmailDraftResult = createOrReconcileAssessmentGmailDraft_(
+      String(prospect.email || '').trim(), subject, body, attachments,
+      buildAuditPackageSendEmailBody_(prospect, folder, true)
+    );
+    const draftActivityType = gmailDraftResult.created
+      ? 'Digital Business Assessment Gmail Draft Created'
+      : 'Digital Business Assessment Gmail Draft Updated';
 
-    try {
-      const attachments = [
-        packageFiles.auditReport.getBlob(),
-        packageFiles.proposalDraft.getBlob()
-      ];
-      console.log('Send Audit Package: attachments prepared', {
-        attachmentCount: attachments.length
-      });
-      console.log('Send Audit Package: Gmail draft attempted with attachments');
-      GmailApp.createDraft(
-        String(prospect.email || '').trim(),
-        subject,
-        body,
-        {
-          attachments: attachments
-        }
-      );
-      draftCreatedWithAttachments = true;
-      console.log('Send Audit Package: Gmail draft created with attachments');
-    } catch (attachmentError) {
-      console.warn(
-        'Send Audit Package: attachment draft failed, attempting draft without attachments: ' +
-        (attachmentError && attachmentError.message ? attachmentError.message : String(attachmentError))
-      );
-      console.log('Send Audit Package: Gmail draft attempted without attachments');
-      GmailApp.createDraft(
-        String(prospect.email || '').trim(),
-        subject,
-        buildAuditPackageSendEmailBody_(prospect, folder, true)
-      );
-      console.log('Send Audit Package: Gmail draft created without attachments');
-    }
-
-    setProspectStatusIfHeader_(context.sheet, context.table.headers, context.selectedRow, 'Audit Package Sent');
-    setIfHeaderCell_(context.sheet, context.table.headers, context.selectedRow, 'Next Action', 'Follow Up');
-    updateSelectedProspectFollowUpDate_(context.sheet, context.table.headers, context.selectedRow, 7);
+    setIfHeaderCell_(context.sheet, context.table.headers, context.selectedRow, 'Next Action', 'Present Digital Business Assessment');
     updateSelectedProspectLastActivity_(context.sheet, context.table.headers, context.selectedRow);
     logPipelineActivity_(
       context.ss,
       prospect.company,
-      'Audit Package Sent',
-      draftCreatedWithAttachments
-        ? 'Audit package Gmail draft created with audit report PDF and proposal PDF attached.'
-        : 'Audit package Gmail draft created without attachments; Drive folder link included due to attachment failure.'
+      draftActivityType,
+      gmailDraftResult.withAttachments === true
+        ? `${gmailDraftResult.created ? 'Created' : gmailDraftResult.updated ? 'Updated' : 'Retained'} Digital Business Assessment Gmail draft with assessment PDF and Improvement Plan PDF attached.`
+        : gmailDraftResult.withAttachments === false
+          ? `${gmailDraftResult.created ? 'Created' : 'Updated'} Digital Business Assessment Gmail draft without attachments; Drive folder link included due to attachment failure.`
+          : 'Retained the single matching Digital Business Assessment Gmail draft after an ambiguous attachment operation; no fallback duplicate was created.'
     );
     refreshSalesOperatingSystem_();
 
-    ui.alert('Business Optimization Platform', 'Audit Package Gmail Draft Created', ui.ButtonSet.OK);
+    ui.alert(
+      gmailDraftResult.created ? 'Email Draft Ready' : 'Email Draft Updated',
+      `${gmailDraftResult.created ? 'A new' : 'The existing'} Digital Business Assessment email draft is ready in Gmail.\n\nNext Step\nReview the message, verify the attached documents, and send it when ready.`,
+      ui.ButtonSet.OK
+    );
   } catch (error) {
     ui.alert(
       'Business Optimization Platform',
@@ -184,26 +225,28 @@ function getRequiredAuditPackageFiles_(folder, prospect) {
     const companyKey = normalizeLookupKey_(prospect.company);
     const fileKey = normalizeLookupKey_(fileName);
     const isPdf = /\.pdf$/i.test(fileName);
-    return fileName === 'Audit Report.pdf' ||
+    return fileName === 'Digital Business Assessment.pdf' ||
+      fileName === 'AuditReport.pdf' ||
+      fileName === 'Audit Report.pdf' ||
       (fileName.indexOf('Audit Report') === 0 && isPdf) ||
       (companyKey && fileKey.indexOf(companyKey) !== -1 && fileName.indexOf('Report') !== -1 && isPdf);
   });
   const outreachDraft = findAuditPackageFileByName_(folder, 'Outreach Email Draft.txt');
-  const proposalDraft = findAuditPackageFileByName_(folder, 'Proposal.pdf');
+  const proposalDraft = findAuditPackageFileByNames_(folder, ['Improvement Plan.pdf', 'Proposal.pdf']);
   const missing = [];
 
   if (!auditReport) {
-    missing.push('Audit Report.pdf');
+    missing.push('Digital Business Assessment.pdf');
   }
   if (!outreachDraft) {
     missing.push('Outreach Email Draft');
   }
   if (!proposalDraft) {
-    missing.push('Proposal.pdf');
+    missing.push('Improvement Plan.pdf');
   }
 
   if (missing.length) {
-    throw new Error('Audit package is missing required file(s): ' + missing.join(', ') + '. Regenerate the package and try again.');
+    throw new Error('Digital Business Assessment is missing required file(s): ' + missing.join(', ') + '. Regenerate the package and try again.');
   }
 
   return {
@@ -242,37 +285,49 @@ function findNewestAuditPackageFile_(folder, matcher) {
   }
 
   console.log('Send Audit Package: file lookup completed', {
-    folderName: folder.getName(),
     checkedCount: checkedCount,
-    selectedFile: newestFile ? newestFile.getName() : ''
+    fileSelected: !!newestFile
   });
   return newestFile;
 }
 
+function findAuditPackageFileByNames_(folder, fileNames) {
+  for (let index = 0; index < fileNames.length; index += 1) {
+    const file = findAuditPackageFileByName_(folder, fileNames[index]);
+    if (file) return file;
+  }
+  return null;
+}
+
 function buildAuditPackageSendEmailBody_(prospect, folder, includeFolderLinkOnly) {
-  const findings = getSmartFindings_(prospect).slice(0, 3);
+  const reportFile = prospect.reportFile || {};
+  const findings = filterClientEligibleEvidence_(getSmartFindings_(prospect), prospect, reportFile, 'outreach').slice(0, 3);
+  const scoreContext = getReportScoreContext_(prospect, reportFile);
+  const classification = getBusinessClassificationContext_(prospect, reportFile);
   const findingsText = findings.length
     ? findings.map(function(finding) {
       return '- ' + finding;
     }).join('\n')
-    : '- There may be practical opportunities to improve online visibility, trust, and customer inquiries.';
+    : '- No findings are presented as verified yet; confirm the priority evidence during discovery.';
 
   const parts = [
     `Hi ${prospect.company} team,`,
     '',
-    `My name is Brian with Rogers Holdings LLC. I completed a website audit for ${prospect.website} and wanted to send over the results in a simple format.`,
+    `My name is Brian Keith Rogers with Rogers Holdings LLC. I completed a website and digital presence review for ${prospect.website} and prepared the results in a practical, business-focused format.`,
     '',
-    'A few opportunities stood out:',
+    findings.length ? 'A few verified opportunities stood out:' : 'Current review state:',
     findingsText,
     '',
-    `The audit score came back at ${prospect.auditScore}/100 with this outcome: ${prospect.auditOutcome}. I attached the audit report and a short proposal draft so you can review the recommended next steps.`,
-    includeFolderLinkOnly && folder ? `\nYou can review the audit package here: ${folder.getUrl()}` : '',
+    `The Digital Presence Score is ${scoreContext.displayScore}. ${scoreContext.severityLabel}. ${scoreContext.safeFallbackLanguage} I attached the Digital Business Assessment and Improvement Plan so you can review the business context, preliminary priorities, recommended service package, and next steps for ${classification.audience}.`,
+    includeFolderLinkOnly && folder ? `\nYou can review the Digital Business Assessment package here: ${folder.getUrl()}` : '',
     '',
-    'If it would be helpful, I would be glad to have a short conversation and walk through the highest-impact improvements.',
+    'If helpful, I would be glad to walk through the highest-impact improvements in a short conversation and answer any questions.',
     '',
     'Best,',
-    'Brian Rogers',
-    'Rogers Holdings LLC'
+    'Brian Keith Rogers',
+    'Rogers Holdings LLC',
+    'briankeith@rogersholdingsllc.com',
+    '859-404-7300'
   ];
 
   return parts.filter(function(part) {
@@ -337,8 +392,9 @@ function createOutreachGmailDraft() {
   const drafts = buildOutreachDrafts_(prospect);
   const recipient = String(prospect.email || '').trim();
 
+  let gmailDraftResult = null;
   try {
-    GmailApp.createDraft(recipient, drafts.subject, drafts.initialEmail);
+    gmailDraftResult = reconcileExactGmailDraft_(recipient, drafts.subject, drafts.initialEmail);
   } catch (error) {
     if (!recipient) {
       ui.alert(
@@ -351,16 +407,16 @@ function createOutreachGmailDraft() {
     throw error;
   }
 
-  logOutreachGmailDraftCreated_(ss, prospect, drafts, recipient);
-  setProspectStatusIfHeader_(sheet, table.headers, selectedRow, 'Draft Created');
+  logOutreachGmailDraftReconciled_(ss, prospect, drafts, recipient, gmailDraftResult);
+  setIfHeaderCell_(sheet, table.headers, selectedRow, 'Next Action', 'Confirm Executive Brief Sent');
   updateSelectedProspectLastActivity_(sheet, table.headers, selectedRow);
   refreshSalesOperatingSystem_();
 
-  const message = recipient
-    ? 'Gmail draft created.'
-    : 'Gmail draft created.';
-
-  ui.alert('Business Optimization Platform', message, ui.ButtonSet.OK);
+  if (typeof showOutreachEmailPreview_ === 'function') {
+    showOutreachEmailPreview_(prospect, drafts, recipient);
+  } else {
+    ui.alert('Business Optimization Platform', 'Gmail draft created.', ui.ButtonSet.OK);
+  }
 }
 
 function requiredProspectFieldsMissing_(prospect, fieldPairs) {
@@ -374,7 +430,7 @@ function requiredProspectFieldsMissing_(prospect, fieldPairs) {
     });
 }
 
-function logOutreachGmailDraftCreated_(ss, prospect, drafts, recipient) {
+function logOutreachGmailDraftReconciled_(ss, prospect, drafts, recipient, result) {
   const sheet = getRequiredSheet_(ss, ACTIVITY_FEED_SHEET);
   const table = getHeaderTable_(sheet, [
     'Date',
@@ -387,9 +443,10 @@ function logOutreachGmailDraftCreated_(ss, prospect, drafts, recipient) {
   const rowValues = new Array(table.lastColumn).fill('');
   setIfHeader_(rowValues, table.headers, 'Date', new Date());
   setIfHeader_(rowValues, table.headers, 'Company', prospect.company);
-  setIfHeader_(rowValues, table.headers, 'Activity Type', 'Gmail Draft Created');
-  setIfHeader_(rowValues, table.headers, 'Activity Notes', 'Created outreach Gmail draft. Subject: ' + drafts.subject + '.' + recipientNote);
-  setIfHeader_(rowValues, table.headers, 'Next Action', 'Send Intro Email');
+  const action = result && result.created ? 'Created' : 'Updated';
+  setIfHeader_(rowValues, table.headers, 'Activity Type', `Outreach Gmail Draft ${action}`);
+  setIfHeader_(rowValues, table.headers, 'Activity Notes', `${action} outreach Gmail draft. Subject: ${drafts.subject}.${recipientNote}`);
+  setIfHeader_(rowValues, table.headers, 'Next Action', 'Schedule Discovery Meeting');
 
   const targetRow = Math.max(sheet.getLastRow() + 1, table.headerRow + 1);
   sheet.getRange(targetRow, 1, 1, table.lastColumn).setValues([rowValues]);

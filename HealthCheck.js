@@ -20,6 +20,11 @@ function buildSystemHealthReport_() {
     ACTIVITY_FEED_SHEET,
     DASHBOARD_METRICS_SHEET,
     CLIENTS_SHEET,
+    CLIENT_WORKSPACE_SHEET,
+    FOLLOW_UPS_SHEET,
+    PROJECTS_SHEET,
+    DAILY_FRICTION_LOG_SHEET,
+    PRODUCT_FEEDBACK_SHEET,
     'Executive Dashboard'
   ];
   const requiredHeaders = {};
@@ -34,23 +39,51 @@ function buildSystemHealthReport_() {
     'Audit Score',
     'Audit Outcome',
     'Priority Tier',
+    'Audit Source',
     'Last Activity',
     'Follow-Up Date',
-    'Next Action'
+    'Next Action',
+    'Prospect ID',
+    'Validation Status',
+    'Inspection Status',
+    'Workflow Status',
+    'Workflow Operation Key',
+    'Review Status'
   ];
   requiredHeaders[ACTIVITY_FEED_SHEET] = [
     'Date',
     'Company',
     'Activity Type',
-    'Activity Notes'
+    'Activity Notes',
+    'Prospect ID',
+    'Operation Key'
   ];
   requiredHeaders[CLIENTS_SHEET] = [
+    'Client ID',
+    'Company',
     'Client Name',
+    'Contact',
+    'Email',
+    'Phone',
     'Website',
+    'Industry',
+    'Service Package',
+    'Start Date',
+    'Renewal Date',
     'Contract Value',
     'Client Since',
-    'Status'
+    'Status',
+    'Assigned To',
+    'Current Project',
+    'Project Status',
+    'Due Date',
+    'Last Activity',
+    'Notes'
   ];
+  requiredHeaders[FOLLOW_UPS_SHEET] = FOLLOW_UP_COLUMNS;
+  requiredHeaders[PROJECTS_SHEET] = PROJECT_COLUMNS;
+  requiredHeaders[DAILY_FRICTION_LOG_SHEET] = DAILY_FRICTION_LOG_COLUMNS;
+  requiredHeaders[PRODUCT_FEEDBACK_SHEET] = PRODUCT_FEEDBACK_COLUMNS;
   const report = {
     generatedAt: new Date(),
     status: 'Pass',
@@ -103,10 +136,16 @@ function buildSystemHealthReport_() {
 
   addProspectDataHealthChecks_(report, sheetInfo);
   addClientDataHealthChecks_(report, sheetInfo);
+  addClientWorkflowHealthChecks_(report, sheetInfo);
+  addFollowUpWorkflowHealthChecks_(report, sheetInfo);
+  addProjectWorkflowHealthChecks_(report, sheetInfo);
   addRuntimeDependencyHealthChecks_(report);
   finalizeSystemHealthReport_(report);
   storeSystemHealthStatus_(report);
-  Logger.log('Business Optimization Platform System Health Check: ' + JSON.stringify(report));
+  Logger.log('Business Optimization Platform System Health Check: ' + JSON.stringify({
+    status: report.status,
+    summary: report.summary
+  }));
 
   return report;
 }
@@ -117,7 +156,7 @@ function storeSystemHealthStatus_(report) {
   properties.setProperty('ROGERS_OS_LAST_HEALTH_CHECK_RESULT', report.status || 'Unknown');
   properties.setProperty('ROGERS_OS_LAST_GMAIL_STATUS', getHealthCheckStatusByCheck_(report, 'Gmail permissions available', 'Gmail permissions unavailable'));
   properties.setProperty('ROGERS_OS_LAST_DRIVE_STATUS', getHealthCheckStatusByCheck_(report, 'Drive permissions available', 'Drive permissions unavailable'));
-  properties.setProperty('ROGERS_OS_LAST_PDF_STATUS', getHealthCheckStatusByCheck_(report, 'Audit Report.pdf generation dependencies available', 'Audit Report.pdf dependency check failed'));
+  properties.setProperty('ROGERS_OS_LAST_PDF_STATUS', getHealthCheckStatusByCheck_(report, 'Digital Business Assessment.pdf generation dependencies available', 'Digital Business Assessment.pdf dependency check failed'));
 }
 
 function getHealthCheckStatusByCheck_(report, passCheck, failCheck) {
@@ -154,7 +193,7 @@ function addScriptPropertyHealthChecks_(report) {
   if (auditEndpoint) {
     addHealthItem_(report, 'Pass', 'Audit endpoint script property configured', 'WEBSITE_AUDIT_TOOL_URL or WEBSITE_AUDIT_TOOL_ENDPOINT is available.', 'No action needed.');
   } else {
-    addHealthItem_(report, 'Fail', 'Missing audit endpoint script property', 'WEBSITE_AUDIT_TOOL_URL / WEBSITE_AUDIT_TOOL_ENDPOINT', 'Set the Website Audit Tool endpoint before running real audits or audit packages.');
+    addHealthItem_(report, 'Warning', 'Fresh audit acquisition endpoint not configured', 'WEBSITE_AUDIT_TOOL_URL / WEBSITE_AUDIT_TOOL_ENDPOINT is absent. Local package rendering remains available for prospects with complete, verified audit data.', 'Configure an approved Website Audit Tool API endpoint before acquiring fresh real-audit data.');
   }
 
   if (brandFolderId) {
@@ -210,15 +249,11 @@ function trashTemporaryGmailDraft_(draft) {
     return;
   }
 
-  const message = draft.getMessage();
-  if (!message) {
+  if (!draft.getMessage() || !draft.getMessage().getThread()) {
     return;
   }
 
-  const thread = message.getThread();
-  if (thread) {
-    thread.moveToTrash();
-  }
+  draft.getMessage().getThread().moveToTrash();
 }
 
 function addPdfGenerationDependencyHealthCheck_(report) {
@@ -237,15 +272,15 @@ function addPdfGenerationDependencyHealthCheck_(report) {
     });
 
     if (missing.length) {
-      addHealthItem_(report, 'Fail', 'Audit Report.pdf dependencies missing', missing.join(', '), 'Restore missing PDF engine helpers before generating audit packages.');
+      addHealthItem_(report, 'Fail', 'Digital Business Assessment.pdf dependencies missing', missing.join(', '), 'Restore missing PDF engine helpers before generating assessment packages.');
       return;
     }
 
     HtmlService.createHtmlOutput('<p>PDF dependency check</p>');
     Utilities.newBlob('PDF dependency check', 'text/html', 'health-check.html');
-    addHealthItem_(report, 'Pass', 'Audit Report.pdf generation dependencies available', 'HTML, blob, Drive, and PDF helper dependencies are present.', 'No action needed.');
+    addHealthItem_(report, 'Pass', 'Digital Business Assessment.pdf generation dependencies available', 'HTML, blob, Drive, and PDF helper dependencies are present.', 'No action needed.');
   } catch (error) {
-    addHealthItem_(report, 'Fail', 'Audit Report.pdf dependency check failed', error && error.message ? error.message : String(error), 'Verify Apps Script services and PDF helper functions.');
+    addHealthItem_(report, 'Fail', 'Digital Business Assessment.pdf dependency check failed', error && error.message ? error.message : String(error), 'Verify Apps Script services and PDF helper functions.');
   }
 }
 
@@ -302,6 +337,7 @@ function addProspectDataHealthChecks_(report, sheetInfo) {
 
   addDuplicateHealthItems_(report, 'Company', companyDuplicates);
   addDuplicateHealthItems_(report, 'Website', websiteDuplicates);
+  addProspectDropdownHealthCheck_(report, sheet, table);
 
   if (blankCompanyRows.length) {
     addHealthItem_(
@@ -319,13 +355,43 @@ function addProspectDataHealthChecks_(report, sheetInfo) {
     addHealthItem_(
       report,
       'Warning',
-      'Overdue follow-ups found',
+      'Overdue Follow-Ups found',
       overdueRows.join('; '),
-      'Review the Follow-Up Queue and complete or reschedule overdue follow-ups.'
+      'Review the Follow-Up Queue and complete or reschedule overdue Follow-Ups.'
     );
   } else {
-    addHealthItem_(report, 'Pass', 'No overdue follow-ups found', MASTER_PROSPECT_SHEET, 'No action needed.');
+    addHealthItem_(report, 'Pass', 'No overdue Follow-Ups found', MASTER_PROSPECT_SHEET, 'No action needed.');
   }
+}
+
+function addProspectDropdownHealthCheck_(report, sheet, table) {
+  if (typeof findInvalidProspectDropdownValues_ !== 'function') {
+    addHealthItem_(
+      report,
+      'Warning',
+      'Prospect dropdown validation check unavailable',
+      'Dropdown scanner function is missing.',
+      'Restore findInvalidProspectDropdownValues_ before daily use.'
+    );
+    return;
+  }
+
+  const issues = findInvalidProspectDropdownValues_(sheet, table);
+  if (!issues.length) {
+    addHealthItem_(report, 'Pass', 'Prospect dropdown values are valid', MASTER_PROSPECT_SHEET, 'No action needed.');
+    return;
+  }
+
+  const detail = issues.slice(0, 12).map(function(issue) {
+    return `${issue.header} row ${issue.row}: "${issue.value}" → "${issue.suggestedValue}"`;
+  }).join('; ');
+  addHealthItem_(
+    report,
+    'Warning',
+    'Invalid prospect dropdown values found',
+    issues.length > 12 ? detail + `; +${issues.length - 12} more` : detail,
+    'Run Business Optimization Platform > System > Repair Invalid Dropdown Values.'
+  );
 }
 
 function addClientDataHealthChecks_(report, sheetInfo) {
@@ -351,7 +417,8 @@ function addClientDataHealthChecks_(report, sheetInfo) {
     const values = prospectInfo.sheet.getRange(dataStartRow, 1, rowCount, prospectInfo.table.lastColumn).getValues();
     values.forEach(function(row, index) {
       const status = String(getValueByHeader_(row, prospectHeaders, 'Status') || '').trim();
-      if (status !== 'Won') {
+      const normalizedStatus = typeof normalizePipelineStage_ === 'function' ? normalizePipelineStage_(status) : status;
+      if (normalizedStatus !== 'Client' && status !== 'Won') {
         return;
       }
 
@@ -363,7 +430,7 @@ function addClientDataHealthChecks_(report, sheetInfo) {
         (websiteKey && clientKeys.websites[websiteKey]);
 
       if (!clientExists) {
-        missingClients.push(`${String(company || 'Unnamed won prospect').trim()} (row ${dataStartRow + index})`);
+        missingClients.push(`${String(company || 'Unnamed client-stage prospect').trim()} (row ${dataStartRow + index})`);
       }
     });
   }
@@ -372,13 +439,78 @@ function addClientDataHealthChecks_(report, sheetInfo) {
     addHealthItem_(
       report,
       'Warning',
-      'Won prospects missing from Clients tab',
+      'Client-stage prospects missing from Clients tab',
       missingClients.join('; '),
-      'Run Convert To Client for each won prospect or verify the Clients record exists.'
+      'Run Convert to Client for each client-stage prospect or verify the Clients record exists.'
     );
   } else {
-    addHealthItem_(report, 'Pass', 'Won prospects are represented in Clients', CLIENTS_SHEET, 'No action needed.');
+    addHealthItem_(report, 'Pass', 'Client-stage prospects are represented in Clients', CLIENTS_SHEET, 'No action needed.');
   }
+}
+
+function addClientWorkflowHealthChecks_(report, sheetInfo) {
+  const clientWorkspaceInfo = sheetInfo[CLIENT_WORKSPACE_SHEET];
+  const workflowChecks = [
+    ['Client conversion workflow available', typeof convertWonProspectToClient === 'function' && typeof convertWonProspectToClient_ === 'function'],
+    ['Client duplicate prevention available', typeof findExistingClientRow_ === 'function' && typeof upsertClientRecordFromProspect_ === 'function'],
+    ['Client Workspace renderer available', typeof openClientWorkspace === 'function' && typeof refreshClientWorkspaceForClientRow_ === 'function'],
+    ['Client Dashboard integration available', typeof refreshExecutiveDashboard === 'function' && typeof getClientRevenueMetrics_ === 'function'],
+    ['Client Activity logging available', typeof logPipelineActivity_ === 'function']
+  ];
+
+  workflowChecks.forEach(function(item) {
+    if (item[1]) {
+      addHealthItem_(report, 'Pass', item[0], 'Required Client Workspace function is available.', 'No action needed.');
+    } else {
+      addHealthItem_(report, 'Fail', item[0], 'One or more required Client Workspace functions are missing.', 'Restore the Client Workspace module before using client workflows.');
+    }
+  });
+
+  if (clientWorkspaceInfo && clientWorkspaceInfo.sheet) {
+    addHealthItem_(report, 'Pass', 'Client Workspace sheet available', CLIENT_WORKSPACE_SHEET, 'No action needed.');
+  } else {
+    addHealthItem_(report, 'Fail', 'Client Workspace sheet missing', CLIENT_WORKSPACE_SHEET, 'Run Refresh Executive Dashboard or Open Client Workspace to create the sheet.');
+  }
+}
+
+function addFollowUpWorkflowHealthChecks_(report, sheetInfo) {
+  const followUpInfo = sheetInfo[FOLLOW_UPS_SHEET];
+  const workflowChecks = [
+    ['Follow-Ups sheet available', !!(followUpInfo && followUpInfo.sheet)],
+    ['Follow-Up creation available', typeof createFollowUp === 'function' && typeof upsertOpenFollowUp_ === 'function'],
+    ['Follow-Up completion available', typeof completeFollowUp === 'function' && typeof completeOpenFollowUpsForCompany_ === 'function'],
+    ['Follow-Up dashboard integration available', typeof getFollowUpMetrics_ === 'function' && typeof updateDashboardKPIs_ === 'function'],
+    ['Follow-Up Next Action integration available', typeof syncFollowUpForProspectRow_ === 'function' && typeof runNextAction === 'function'],
+    ['Follow-Up Client Workspace integration available', typeof getFollowUpsForCompany_ === 'function' && typeof buildClientWorkspaceModel_ === 'function']
+  ];
+
+  workflowChecks.forEach(function(item) {
+    if (item[1]) {
+      addHealthItem_(report, 'Pass', item[0], 'Required Follow-Up Engine function is available.', 'No action needed.');
+    } else {
+      addHealthItem_(report, 'Fail', item[0], 'One or more required Follow-Up Engine functions are missing.', 'Restore the Follow-Up Engine before daily use.');
+    }
+  });
+}
+
+function addProjectWorkflowHealthChecks_(report, sheetInfo) {
+  const projectInfo = sheetInfo[PROJECTS_SHEET];
+  const workflowChecks = [
+    ['Projects sheet available', !!(projectInfo && projectInfo.sheet)],
+    ['Project creation available', typeof createProject === 'function' && typeof upsertProjectFromClient_ === 'function'],
+    ['Project duplicate prevention available', typeof findExistingProject_ === 'function'],
+    ['Project dashboard integration available', typeof getProjectMetrics_ === 'function' && typeof updateDashboardKPIs_ === 'function'],
+    ['Project Client Workspace integration available', typeof getProjectsForClient_ === 'function' && typeof buildClientWorkspaceModel_ === 'function'],
+    ['Project Activity Feed integration available', typeof logPipelineActivity_ === 'function']
+  ];
+
+  workflowChecks.forEach(function(item) {
+    if (item[1]) {
+      addHealthItem_(report, 'Pass', item[0], 'Required Project Delivery Engine function is available.', 'No action needed.');
+    } else {
+      addHealthItem_(report, 'Fail', item[0], 'One or more required Project Delivery Engine functions are missing.', 'Restore the Project Delivery Engine before client delivery work.');
+    }
+  });
 }
 
 function getClientHealthKeys_(sheet, table) {
@@ -395,7 +527,10 @@ function getClientHealthKeys_(sheet, table) {
 
   const values = sheet.getRange(dataStartRow, 1, rowCount, table.lastColumn).getValues();
   values.forEach(function(row) {
-    const companyKey = normalizeLookupKey_(getValueByHeader_(row, table.headers, 'Client Name'));
+    const companyKey = normalizeLookupKey_(
+      getValueByHeader_(row, table.headers, 'Company') ||
+      getValueByHeader_(row, table.headers, 'Client Name')
+    );
     const websiteKey = normalizeWebsiteKey_(getValueByHeader_(row, table.headers, 'Website'));
 
     if (companyKey) {
@@ -432,6 +567,14 @@ function addDuplicateHealthItems_(report, fieldName, lookup) {
 }
 
 function getHealthHeaderTable_(sheet) {
+  if (sheet.getName() === ACTIVITY_FEED_SHEET) {
+    return resolveActivityFeedHeaderTable_(sheet, [
+      'Date',
+      'Company',
+      'Activity Type',
+      'Activity Notes'
+    ]);
+  }
   const headerRow = findBestHeaderRow_(sheet);
   const lastColumn = Math.max(sheet.getLastColumn(), 1);
   const values = sheet.getRange(headerRow, 1, 1, lastColumn).getDisplayValues()[0];
@@ -484,8 +627,8 @@ function buildSystemHealthCheckHtml_(report) {
     const rowClass = String(item.status || '').toLowerCase();
     return `
       <tr>
-        <td><span class="pill ${rowClass}">${escapeHtml_(item.status)}</span></td>
-        <td>${escapeHtml_(item.check)}</td>
+        <td><span class="pill ${rowClass}">${escapeHtml_(getOperatorHealthStatus_(item.status))}</span></td>
+        <td>${escapeHtml_(getOperatorHealthCheckName_(item.check))}</td>
         <td>${escapeHtml_(item.detail)}</td>
         <td>${escapeHtml_(item.suggestedFix)}</td>
       </tr>
@@ -587,7 +730,7 @@ function buildSystemHealthCheckHtml_(report) {
           }
           .pill {
             display: inline-block;
-            min-width: 62px;
+            min-width: 112px;
             padding: 4px 8px;
             border-radius: 999px;
             color: #111111;
@@ -611,28 +754,28 @@ function buildSystemHealthCheckHtml_(report) {
         <div class="header">
           <div class="eyebrow">Business Optimization Platform</div>
           <h1>System Health Check</h1>
-          <div class="timestamp">Generated: ${escapeHtml_(formatDisplayDate_(report.generatedAt))}</div>
+          <div class="timestamp">Operational readiness report &nbsp;•&nbsp; Generated ${escapeHtml_(formatDisplayDate_(report.generatedAt))}</div>
         </div>
 
         <div class="summary">
           <div class="metric overall">
-            <span>Status</span>
-            <strong class="${statusClass}">${escapeHtml_(report.status)}</strong>
+            <span>Overall Readiness</span>
+            <strong class="${statusClass}">${escapeHtml_(getOperatorHealthStatus_(report.status))}</strong>
           </div>
           <div class="metric">
-            <span>Pass</span>
+            <span>Operational</span>
             <strong>${report.summary.pass}</strong>
           </div>
           <div class="metric">
-            <span>Warnings</span>
+            <span>Configuration Needed</span>
             <strong>${report.summary.warning}</strong>
           </div>
           <div class="metric">
-            <span>Fails</span>
+            <span>Action Required</span>
             <strong>${report.summary.fail}</strong>
           </div>
           <div class="metric">
-            <span>Issues</span>
+            <span>Open Items</span>
             <strong>${report.summary.totalIssues}</strong>
           </div>
         </div>
@@ -640,10 +783,10 @@ function buildSystemHealthCheckHtml_(report) {
         <table>
           <thead>
             <tr>
-              <th>Status</th>
-              <th>Check</th>
-              <th>Issues Found</th>
-              <th>Suggested Fix</th>
+              <th>Readiness</th>
+              <th>Area</th>
+              <th>Details</th>
+              <th>Recommended Action</th>
             </tr>
           </thead>
           <tbody>${issueRows}</tbody>
@@ -651,4 +794,42 @@ function buildSystemHealthCheckHtml_(report) {
       </body>
     </html>
   `;
+}
+
+function getOperatorHealthStatus_(status) {
+  const labels = {
+    Pass: 'Operational',
+    Warning: 'Configuration Needed',
+    Fail: 'Action Required'
+  };
+  return labels[String(status || '')] || String(status || 'Unknown');
+}
+
+function getOperatorHealthCheckName_(technicalName) {
+  const name = String(technicalName || 'System check');
+  const exactNames = {
+    'Audit endpoint script property configured': 'Website Audit Tool API connection ready',
+    'Fresh audit acquisition endpoint not configured': 'Website Audit Tool API connection needs setup',
+    'Brand asset folder script property configured': 'Brand assets configured',
+    'Brand asset folder script property not configured': 'Brand assets need setup',
+    'Brand Asset Folder reachable': 'Brand assets available',
+    'Brand Asset Folder not reachable': 'Brand assets unavailable',
+    'Brand Asset Folder check failed': 'Brand assets unavailable',
+    'Drive permissions available': 'Google Drive access ready',
+    'Drive permissions unavailable': 'Google Drive access needs attention',
+    'Gmail permissions available': 'Gmail access ready',
+    'Gmail permissions unavailable': 'Gmail access needs attention',
+    'Digital Business Assessment.pdf generation dependencies available': 'Document generation ready',
+    'Digital Business Assessment.pdf dependencies missing': 'Document generation needs attention',
+    'Digital Business Assessment.pdf dependency check failed': 'Document generation needs attention'
+  };
+  if (exactNames[name]) return exactNames[name];
+  return name
+    .replace(/ workflow available$/, ' workflow ready')
+    .replace(/ integration available$/, ' integration ready')
+    .replace(/ renderer available$/, ' workspace ready')
+    .replace(/ creation available$/, ' creation ready')
+    .replace(/ completion available$/, ' completion ready')
+    .replace(/ duplicate prevention available$/, ' duplicate protection ready')
+    .replace(/ Activity logging available$/, ' activity tracking ready');
 }

@@ -103,7 +103,7 @@ function buildDemoProspectRecords_() {
       'Audit Score': 84,
       'Audit Outcome': 'Strong Fit',
       'Priority Tier': 'A - Hot',
-      Status: 'Digital Business Assessment Presented',
+      Status: 'Digital Business Assessment',
       'Next Action': 'Generate Improvement Plan',
       'Follow-Up Date': addDays_(today, 3),
       'Offer / Service': 'Local SEO',
@@ -127,9 +127,9 @@ function buildDemoProspectRecords_() {
       'Audit Outcome': 'Not Audited',
       'Priority Tier': 'A - Hot',
       Status: 'Lead Found',
-      'Next Action': 'Generate Executive Snapshot',
+      'Next Action': 'Generate Executive Brief',
       'Follow-Up Date': addDays_(today, 2),
-      'Offer / Service': 'Website Audit',
+      'Offer / Service': 'Business Snapshot',
       Notes: 'Search visibility may be limited. Visitors may not know the next step to take.',
       Summary: 'High opportunity to improve local search visibility. Plumbing company needs clearer service information and stronger local search signals.',
       'Audit Package Generated': '',
@@ -149,7 +149,7 @@ function buildDemoProspectRecords_() {
       'Audit Score': 63,
       'Audit Outcome': 'Good Fit',
       'Priority Tier': 'B - Good',
-      Status: 'Digital Business Assessment Presented',
+      Status: 'Digital Business Assessment',
       'Next Action': 'Follow Up',
       'Follow-Up Date': addDays_(today, 1),
       'Offer / Service': 'Client Website',
@@ -223,7 +223,7 @@ function buildDemoProspectRecords_() {
       'Follow-Up Date': addDays_(today, 2),
       'Offer / Service': 'Local SEO',
       Notes: 'The online presence could do more to build trust before a patient reaches out.',
-      Summary: 'Professional site with room to improve appointment conversion. Proposal sent for appointment-focused conversion improvements.',
+      Summary: 'Professional site with room to improve appointment conversion. Improvement Plan sent for appointment-focused conversion improvements.',
       'Audit Package Generated': 'Yes',
       'Audit Package Date': addDays_(today, -4),
       'Last Activity': addDays_(today, -1)
@@ -265,7 +265,7 @@ function buildDemoProspectRecords_() {
       'Audit Outcome': 'Poor Fit',
       'Priority Tier': 'C - Later',
       Status: 'Nurture',
-      'Next Action': 'Generate Executive Snapshot',
+      'Next Action': 'Generate Executive Brief',
       'Follow-Up Date': addDays_(today, 7),
       'Offer / Service': 'Consulting',
       Notes: 'Customers may have difficulty finding the business online.',
@@ -318,7 +318,7 @@ function normalizeDemoProspectRecordsForDropdowns_(sheet, table, demoProspects) 
     offerService: getDropdownAllowedValuesForHeader_(sheet, table, 'Offer / Service')
   };
   const offerServiceValues = [
-    'Website Audit',
+    'Business Snapshot',
     'Google Business Optimization',
     'Local SEO',
     'AI Automation',
@@ -331,7 +331,7 @@ function normalizeDemoProspectRecordsForDropdowns_(sheet, table, demoProspects) 
 
   return demoProspects.map(function(prospect) {
     const normalized = Object.assign({}, prospect);
-    normalized.Source = chooseAllowedValue_(dropdowns.source, ['Manual Import', 'Website Audit Tool'], 'Manual Import');
+    normalized.Source = chooseAllowedValue_(dropdowns.source, ['Manual Import', 'Website Audit Tool API', 'Website Audit Tool'], 'Manual Import');
     normalized['Priority Tier'] = chooseAllowedValue_(
       dropdowns.priorityTier,
       [normalized['Priority Tier'], mapDemoPriorityTier_(normalized['Priority Tier'])],
@@ -350,7 +350,7 @@ function normalizeDemoProspectRecordsForDropdowns_(sheet, table, demoProspects) 
 function normalizeDemoNextAction_(nextAction, allowedValues) {
   const mappings = {
     'Generate audit package': ['Present Digital Business Assessment', 'Generate Improvement Plan', 'Follow Up'],
-    'Run website audit': ['Generate Executive Snapshot', 'Create Outreach Draft', 'Follow Up'],
+    'Run website audit': ['Generate Executive Brief', 'Create Outreach Draft', 'Follow Up'],
     'Follow Up': ['Follow Up', 'Create Outreach Draft'],
     'Schedule kickoff': ['Start Project', 'Follow Up'],
     'Conduct Discovery Call': ['Present Digital Business Assessment', 'Follow Up'],
@@ -358,7 +358,7 @@ function normalizeDemoNextAction_(nextAction, allowedValues) {
     'Send follow-up email': ['Follow Up', 'Create Outreach Draft'],
     'Send helpful local visibility note': ['Create Outreach Draft', 'Follow Up']
   };
-  const candidates = mappings[nextAction] || [nextAction, 'Follow Up', 'Create Outreach Draft', 'Generate Executive Snapshot', 'Generate Improvement Plan'];
+  const candidates = mappings[nextAction] || [nextAction, 'Follow Up', 'Create Outreach Draft', 'Generate Executive Brief', 'Generate Improvement Plan'];
   return chooseAllowedValue_(allowedValues, candidates, candidates[0]);
 }
 
@@ -610,9 +610,9 @@ function createDemoCompanyDriveAssets_(companyName, prospect) {
   const internalProspect = demoProspectToInternalProspect_(prospect);
   const proposal = buildProposal_(internalProspect);
   trashLegacyAuditPackageTextFiles_(folder);
-  upsertAuditPackageBlobFile_(folder, 'AuditReport.pdf', buildAuditReportPdfBlob_(internalProspect, { text: buildDemoAuditReportText_(prospect) }));
+  upsertAuditPackageBlobFile_(folder, 'Digital Business Assessment.pdf', buildAuditReportPdfBlob_(internalProspect, { text: buildDemoAuditReportText_(prospect) }));
   upsertAuditPackageTextFile_(folder, 'Outreach Email Draft.txt', buildAuditPackageOutreachText_(buildOutreachDrafts_(internalProspect)), MimeType.PLAIN_TEXT);
-  upsertAuditPackageBlobFile_(folder, 'Proposal.pdf', buildProposalPdfBlob_(internalProspect, proposal));
+  upsertAuditPackageBlobFile_(folder, 'Improvement Plan.pdf', buildProposalPdfBlob_(internalProspect, proposal));
   filesCreated += 3;
 
   if (companyName === 'Bluegrass Roofing Co' || companyName === 'Copper Door Cafe') {

@@ -182,15 +182,22 @@ var CLIENT_COLUMNS = [
 
 var PIPELINE_STAGES = [
   'Lead Found',
-  'Executive Snapshot Sent',
+  'Executive Brief Sent',
   'Discovery Meeting Scheduled',
-  'Digital Business Assessment Presented',
+  'Digital Business Assessment',
   'Improvement Plan Sent',
   'Project Started',
   'Client',
   'Nurture',
   'Lost'
 ];
+
+// Stored workbooks may still contain pre-v1.0 lifecycle values. Keep these
+// aliases readable, but write and display only the canonical stage names above.
+var LEGACY_PIPELINE_STAGE_ALIASES = {
+  'Executive Snapshot Sent': 'Executive Brief Sent',
+  'Digital Business Assessment Presented': 'Digital Business Assessment'
+};
 
 var LIFECYCLE_RECONCILIATION_COLUMNS = [
   'Lifecycle Operation Key',
@@ -215,9 +222,9 @@ var PROSPECT_REVENUE_ACTIVITY_COLUMNS = ['Prospect ID', 'Operation Key'];
 
 var PIPELINE_STAGE_COLORS = {
   'Lead Found': '#d9d9d9',
-  'Executive Snapshot Sent': '#d9d2e9',
+  'Executive Brief Sent': '#d9d2e9',
   'Discovery Meeting Scheduled': '#fff2cc',
-  'Digital Business Assessment Presented': '#cfe2f3',
+  'Digital Business Assessment': '#cfe2f3',
   'Improvement Plan Sent': '#d0e0e3',
   'Project Started': '#eadcf8',
   'Client': '#d9ead3',
@@ -236,17 +243,18 @@ var PROSPECT_DROPDOWN_DEFAULTS = {
   'Priority Tier': [
     'A - Hot',
     'B - Good',
-    'C - Later'
+    'C - Later',
+    'D - Nurture'
   ],
   Status: PIPELINE_STAGES,
   'Next Action': [
-    'Generate Executive Snapshot',
+    'Generate Executive Brief',
     'Create Outreach Draft',
     'Review Outreach',
-    'Confirm Executive Snapshot Sent',
+    'Confirm Executive Brief Sent',
     'Schedule Discovery Meeting',
     'Present Digital Business Assessment',
-    'Confirm Assessment Presented',
+    'Confirm Digital Business Assessment',
     'Generate Improvement Plan',
     'Confirm Improvement Plan Sent',
     'Record Improvement Plan Outcome',
@@ -257,7 +265,7 @@ var PROSPECT_DROPDOWN_DEFAULTS = {
     'Archived'
   ],
   'Offer / Service': [
-    'Website Audit',
+    'Business Snapshot',
     'Google Business Optimization',
     'Local SEO',
     'AI Automation',
@@ -274,11 +282,13 @@ var PROSPECT_DROPDOWN_DEFAULTS = {
 };
 
 var AUDIT_SOURCE_VALUES = [
+  'Website Audit Tool API',
   'Website Audit Tool',
   'Quick Internal Audit'
 ];
 
 var VERIFIED_CLIENT_FACING_AUDIT_SOURCES = [
+  'Website Audit Tool API',
   'Website Audit Tool'
 ];
 

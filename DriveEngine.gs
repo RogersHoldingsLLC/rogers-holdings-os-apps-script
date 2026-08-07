@@ -71,7 +71,7 @@ function createClientFolderStructure_(company) {
   return {
     root: root,
     audit: getOrCreateChildFolder_(root, 'Audit'),
-    proposal: getOrCreateChildFolder_(root, 'Proposal'),
+    proposal: getOrCreateChildFolder_(root, 'Improvement Plan'),
     contracts: getOrCreateChildFolder_(root, 'Contracts'),
     invoices: getOrCreateChildFolder_(root, 'Invoices'),
     assets: getOrCreateChildFolder_(root, 'Assets'),
@@ -91,10 +91,11 @@ function getOrCreateChildFolder_(parentFolder, folderName) {
 function moveExistingAuditPackageFilesToAuditFolder_(clientRootFolder, auditFolder) {
   const fileNames = [
     'Outreach Email Draft.txt',
+    'Improvement Plan.pdf',
     'Proposal.pdf'
   ];
   const auditReport = findNewestAuditPackageFile_(clientRootFolder, function(fileName) {
-    return fileName.indexOf('Audit Report') === 0 || fileName.indexOf('Report') !== -1;
+    return fileName === 'Digital Business Assessment.pdf' || fileName.indexOf('Audit Report') === 0 || fileName.indexOf('Report') !== -1;
   });
 
   if (auditReport) {
@@ -232,7 +233,7 @@ function storeAuditPackageFiles_(folder, reportFile, drafts, proposal, prospect)
   ));
   packageFiles.push(upsertAuditPackageBlobFile_(
     folder,
-    'Proposal.pdf',
+    'Improvement Plan.pdf',
     buildProposalPdfBlob_(prospect, proposal),
     reconciliationResults
   ));
@@ -287,10 +288,11 @@ function upsertAuditPackageBlobFile_(folder, fileName, blob, reconciliationResul
 }
 
 function reconcileAuditReportFile_(folder, blob, reconciliationResults) {
-  const canonicalFileName = 'AuditReport.pdf';
+  const canonicalFileName = 'Digital Business Assessment.pdf';
   const legacyFileName = 'Audit Report.pdf';
   const canonicalFiles = findAllAuditPackageFilesByName_(folder, canonicalFileName);
-  const legacyFiles = findAllAuditPackageFilesByName_(folder, legacyFileName);
+  const legacyFiles = findAllAuditPackageFilesByName_(folder, legacyFileName)
+    .concat(findAllAuditPackageFilesByName_(folder, 'AuditReport.pdf'));
   trashAuditPackageFiles_(canonicalFiles.concat(legacyFiles));
 
   const file = folder.createFile(blob.setName(canonicalFileName));

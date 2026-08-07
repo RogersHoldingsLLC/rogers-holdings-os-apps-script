@@ -25,7 +25,7 @@ function runRealWebsiteAudit() {
   if (missing.length) {
     ui.alert(
       'Business Optimization Platform',
-      'Add the missing required field before running the real Website Audit Tool: ' + missing.join(', '),
+      'Add the missing required field before running the real Website Audit Tool API: ' + missing.join(', '),
       ui.ButtonSet.OK
     );
     return;
@@ -33,7 +33,7 @@ function runRealWebsiteAudit() {
 
   const confirm = ui.alert(
     'Business Optimization Platform',
-    `Run full Website Audit Tool for ${prospect.company}?\n\nThis will execute the real audit workflow and may take several moments.`,
+    `Run full Website Audit Tool API for ${prospect.company}?\n\nThis will execute the real audit workflow and may take several moments.`,
     ui.ButtonSet.OK_CANCEL
   );
 
@@ -46,9 +46,9 @@ function runRealWebsiteAudit() {
     applyWebsiteAuditToolResults_(context, auditPayload);
     refreshSalesOperatingSystem_();
 
-    ui.alert('Business Optimization Platform', 'Website Audit Tool completed and prospect record updated.', ui.ButtonSet.OK);
+    ui.alert('Business Optimization Platform', 'Website Audit Tool API completed and prospect record updated.', ui.ButtonSet.OK);
   } catch (error) {
-    console.error('Website Audit Tool: audit operation failed', {
+    console.error('Website Audit Tool API: audit operation failed', {
       company: prospect.company,
       website: prospect.website,
       error: error && error.stack ? error.stack : (error && error.message ? error.message : String(error))
@@ -64,13 +64,13 @@ function runRealWebsiteAudit() {
 function getWebsiteAuditOperatorErrorMessage_(error) {
   const detail = error && error.message ? error.message : String(error || '');
   if (/WEBSITE_AUDIT_TOOL_URL|WEBSITE_AUDIT_TOOL_ENDPOINT|endpoint.*not configured/i.test(detail)) {
-    return 'The Website Audit Tool is not configured for this workspace. Ask an administrator to complete the audit connection, then try again.';
+    return 'The Website Audit Tool API is not configured for this workspace. Ask an administrator to complete the audit connection, then try again.';
   }
   if (/HTTP|UrlFetch|request failed|timed? out|network|host/i.test(detail)) {
-    return 'The Website Audit Tool could not be reached. Confirm the service is available, then try again.';
+    return 'The Website Audit Tool API could not be reached. Confirm the service is available, then try again.';
   }
   if (/JSON|audit payload|required result fields|did not include/i.test(detail)) {
-    return 'The Website Audit Tool returned an incomplete result. Try again; if the issue continues, ask an administrator to review the integration log.';
+    return 'The Website Audit Tool API returned an incomplete result. Try again; if the issue continues, ask an administrator to review the integration log.';
   }
   return 'The website audit could not be completed. Try again; if the issue continues, ask an administrator to review the integration log.';
 }
@@ -299,7 +299,7 @@ function showBulkAuditPipelineSummary_(summary) {
 function runWebsiteAuditToolWorkflow_(prospect) {
   const endpoint = getWebsiteAuditToolEndpoint_();
   if (!endpoint) {
-    throw new Error('Fresh website audit acquisition requires Script Property WEBSITE_AUDIT_TOOL_URL or WEBSITE_AUDIT_TOOL_ENDPOINT. Configure an approved Website Audit Tool endpoint, then run Run Real Website Audit again.');
+    throw new Error('Fresh website audit acquisition requires Script Property WEBSITE_AUDIT_TOOL_URL or WEBSITE_AUDIT_TOOL_ENDPOINT. Configure an approved Website Audit Tool API endpoint, then run Run Real Website Audit again.');
   }
 
   const payload = buildWebsiteAuditToolLaunchPayload_(prospect);
@@ -315,14 +315,14 @@ function runWebsiteAuditToolWorkflow_(prospect) {
   const responseText = response.getContentText();
 
   if (statusCode < 200 || statusCode >= 300) {
-    throw new Error(`Website Audit Tool request failed with HTTP ${statusCode}: ${responseText}`);
+    throw new Error(`Website Audit Tool API request failed with HTTP ${statusCode}: ${responseText}`);
   }
 
   let parsed;
   try {
     parsed = JSON.parse(responseText);
   } catch (error) {
-    throw new Error('Website Audit Tool response was not valid JSON.');
+    throw new Error('Website Audit Tool API response was not valid JSON.');
   }
 
   return normalizeWebsiteAuditToolPayload_(parsed, prospect);
@@ -361,7 +361,7 @@ function logWebsiteAuditToolLaunchPayload_(payload) {
 function normalizeWebsiteAuditToolPayload_(response, prospect) {
   const payload = response && (response.payload || response.audit || response.result || response.data || response);
   if (!payload || typeof payload !== 'object') {
-    throw new Error('Website Audit Tool response did not include an audit payload.');
+    throw new Error('Website Audit Tool API response did not include an audit payload.');
   }
 
   const normalized = {
@@ -389,7 +389,7 @@ function normalizeWebsiteAuditToolPayload_(response, prospect) {
   ]);
 
   if (missing.length) {
-    throw new Error('Website Audit Tool response is missing required result fields: ' + missing.join(', ') + '.');
+    throw new Error('Website Audit Tool API response is missing required result fields: ' + missing.join(', ') + '.');
   }
 
   return normalized;
@@ -399,7 +399,7 @@ function applyWebsiteAuditToolResults_(context, auditPayload) {
   const sheet = context.sheet;
   const headers = context.table.headers;
   const selectedRow = context.selectedRow;
-  const summary = auditPayload.summary || `Website Audit Tool completed for ${auditPayload.company}.`;
+  const summary = auditPayload.summary || `Website Audit Tool API completed for ${auditPayload.company}.`;
 
   setIfHeaderCell_(sheet, headers, selectedRow, 'Audit Score', auditPayload.auditScore);
   setIfHeaderCell_(sheet, headers, selectedRow, 'Audit Outcome', auditPayload.auditOutcome);
@@ -415,9 +415,9 @@ function applyWebsiteAuditToolResults_(context, auditPayload) {
   setIfHeaderCell_(sheet, headers, selectedRow, 'Mobile Screenshot Base64', auditPayload.mobileScreenshotBase64);
   setIfHeaderCell_(sheet, headers, selectedRow, 'Competitive Position', auditPayload.competitivePosition);
   setIfHeaderCell_(sheet, headers, selectedRow, 'Competitor Summary', auditPayload.competitorSummary);
-  setIfHeaderCell_(sheet, headers, selectedRow, 'Audit Source', 'Website Audit Tool');
+  setIfHeaderCell_(sheet, headers, selectedRow, 'Audit Source', 'Website Audit Tool API');
   updateSelectedProspectLastActivity_(sheet, headers, selectedRow);
-  logPipelineActivity_(context.ss, auditPayload.company, 'Website Audit Tool', summary);
+  logPipelineActivity_(context.ss, auditPayload.company, 'Website Audit Tool API', summary);
 }
 
 function generateAuditPackage() {
@@ -505,7 +505,7 @@ function generateExecutiveSnapshot() {
   if (missing.length) {
     ui.alert(
       'Business Optimization Platform',
-      'Add the missing required fields before generating the Executive Snapshot: ' + missing.join(', '),
+      'Add the missing required fields before generating the Executive Brief: ' + missing.join(', '),
       ui.ButtonSet.OK
     );
     return;
@@ -535,15 +535,15 @@ function generateExecutiveSnapshot() {
     };
     const file = upsertAuditPackageBlobFile_(
       folder,
-      'Executive Snapshot.pdf',
+      'Executive Brief.pdf',
       buildExecutiveSnapshotPdfBlob_(prospect, reportFile)
     );
 
     logPipelineActivity_(
       context.ss,
       prospect.company,
-      'Executive Snapshot Generated',
-      'Generated Executive Snapshot.pdf for meeting-focused outreach.'
+      'Executive Brief Generated',
+      'Generated Executive Brief.pdf for meeting-focused outreach.'
     );
     setIfHeaderCell_(context.sheet, context.table.headers, context.selectedRow, 'Next Action', 'Create Outreach Draft');
     updateSelectedProspectLastActivity_(context.sheet, context.table.headers, context.selectedRow);
@@ -554,7 +554,7 @@ function generateExecutiveSnapshot() {
     } else {
       ui.alert(
         'Business Optimization Platform',
-        `Executive Snapshot generated for ${prospect.company}.\n\nFile: ${file.getName()}\nFolder: ${folder.getName()}`,
+        `Executive Brief generated for ${prospect.company}.\n\nFile: ${file.getName()}\nFolder: ${folder.getName()}`,
         ui.ButtonSet.OK
       );
     }
@@ -606,7 +606,7 @@ function runFullProspectPackage() {
     currentStep = 'Create or reuse Drive folder';
     folder = getOrCreateAuditPackageFolder_(prospect.company);
 
-    currentStep = 'Run real Website Audit if audit data is missing';
+    currentStep = 'Run website inspection if assessment data is missing';
     if (!isVerifiedAuditDataForLocalRendering_(prospect)) {
       if (!getWebsiteAuditToolEndpoint_()) {
         throw new Error(buildVerifiedAuditRequiredMessage_(prospect));
@@ -670,23 +670,23 @@ function buildFullProspectPackageSummary_(prospect, folder, packageResult, gmail
   const createdFileNames = (packageResult && packageResult.createdFiles || []).map(function(file) {
     return file.getName();
   });
-  const auditReportStatus = createdFileNames.indexOf('AuditReport.pdf') !== -1 ? 'generated' : 'found';
-  const proposalStatus = createdFileNames.indexOf('Proposal.pdf') !== -1 ? 'generated' : 'found';
+  const auditReportStatus = createdFileNames.indexOf('Digital Business Assessment.pdf') !== -1 ? 'generated' : 'found';
+  const proposalStatus = createdFileNames.indexOf('Improvement Plan.pdf') !== -1 ? 'generated' : 'found';
 
   return [
     'Full Prospect Package Complete',
     '',
     'Company: ' + prospect.company,
     'Folder: ' + (folder ? folder.getName() : 'Not available'),
-    'AuditReport.pdf: ' + auditReportStatus,
-    'Proposal.pdf: ' + proposalStatus,
+    'Digital Business Assessment.pdf: ' + auditReportStatus,
+    'Improvement Plan.pdf: ' + proposalStatus,
     'Gmail draft created: ' + (gmailDraftCreated ? 'Yes' : 'No'),
-    'Next Action: Confirm Executive Snapshot Sent after it is actually sent'
+    'Next Action: Confirm Executive Brief Sent after it is actually sent'
   ].join('\n');
 }
 
 function updateFullPackageProspectFields_(sheet, headers, selectedRow) {
-  setIfHeaderCell_(sheet, headers, selectedRow, 'Next Action', 'Confirm Executive Snapshot Sent');
+  setIfHeaderCell_(sheet, headers, selectedRow, 'Next Action', 'Confirm Executive Brief Sent');
   setIfHeaderCell_(sheet, headers, selectedRow, 'Last Activity', new Date());
   setIfHeaderCell_(sheet, headers, selectedRow, 'Audit Package Generated', 'Yes');
   setIfHeaderCell_(sheet, headers, selectedRow, 'Proposal Generated', 'Yes');
@@ -715,7 +715,7 @@ function getLocalAuditDataReadiness_(prospect) {
   if (!sourceTrimmed) {
     missing.push('Audit Source');
   } else if (VERIFIED_CLIENT_FACING_AUDIT_SOURCES.indexOf(source) === -1) {
-    invalid.push('Audit Source (must be Website Audit Tool)');
+    invalid.push('Audit Source (must be Website Audit Tool API)');
   }
 
   if (!scoreText) {
@@ -765,7 +765,7 @@ function buildVerifiedAuditRequiredMessage_(prospect) {
   if (readiness.invalid.length) {
     details.push('Invalid: ' + readiness.invalid.join(', ') + '.');
   }
-  return 'A complete, verified Website Audit Tool audit is required before generating client-facing assessment files. ' +
+  return 'A complete, verified Website Audit Tool API audit is required before generating client-facing assessment files. ' +
     details.join(' ') +
     ' Fresh audit acquisition is unavailable because WEBSITE_AUDIT_TOOL_URL or WEBSITE_AUDIT_TOOL_ENDPOINT is not configured. Quick Internal Audit and inferred or manually entered provenance are not eligible.';
 }
@@ -782,7 +782,7 @@ function assertVerifiedAuditDataForLocalRendering_(prospect) {
   if (readiness.invalid.length) {
     details.push('Invalid: ' + readiness.invalid.join(', ') + '.');
   }
-  throw new Error('A complete, verified Website Audit Tool audit is required before generating client-facing assessment files. ' + details.join(' '));
+  throw new Error('A complete, verified Website Audit Tool API audit is required before generating client-facing assessment files. ' + details.join(' '));
 }
 
 function buildLocalAuditReportInput_(prospect) {
@@ -863,7 +863,7 @@ function buildSelectedProspectForAuditPackage_(context) {
 function requestWebsiteAuditPackageReport_(prospect) {
   const endpoint = getWebsiteAuditToolEndpoint_();
   if (!endpoint) {
-    throw new Error('Set Script Property WEBSITE_AUDIT_TOOL_URL to the Website Audit Tool runner endpoint, then run Generate Digital Business Assessment again.');
+    throw new Error('Set Script Property WEBSITE_AUDIT_TOOL_URL to the Website Audit Tool API runner endpoint, then run Generate Digital Business Assessment again.');
   }
 
   const payload = buildWebsiteAuditToolLaunchPayload_(prospect);
@@ -882,7 +882,7 @@ function requestWebsiteAuditPackageReport_(prospect) {
   const contentType = getResponseContentType_(response);
 
   if (statusCode < 200 || statusCode >= 300) {
-    throw new Error(`Website Audit Tool report request failed with HTTP ${statusCode}: ${response.getContentText()}`);
+    throw new Error(`Website Audit Tool API report request failed with HTTP ${statusCode}: ${response.getContentText()}`);
   }
 
   if (contentType.indexOf('application/pdf') !== -1) {
@@ -897,7 +897,7 @@ function requestWebsiteAuditPackageReport_(prospect) {
     try {
       parsed = JSON.parse(response.getContentText());
     } catch (error) {
-      throw new Error('Website Audit Tool report response was not valid JSON.');
+      throw new Error('Website Audit Tool API report response was not valid JSON.');
     }
     logAuditPackageApiResponseDebug_(parsed);
     return normalizeAuditPackageReportResponse_(parsed);
@@ -937,7 +937,7 @@ function getResponseContentType_(response) {
 function normalizeAuditPackageReportResponse_(response) {
   const payload = response && (response.report || response.payload || response.data || response);
   if (!payload || typeof payload !== 'object') {
-    throw new Error('Website Audit Tool response did not include an audit report.');
+    throw new Error('Website Audit Tool API response did not include an audit report.');
   }
 
   if (payload.pdfBase64 || payload.reportPdfBase64) {
@@ -972,7 +972,7 @@ function normalizeAuditPackageReportResponse_(response) {
   });
 
   if (!String(text || '').trim()) {
-    throw new Error('Website Audit Tool response did not include PDF or TXT report content.');
+    throw new Error('Website Audit Tool API response did not include PDF or TXT report content.');
   }
 
   return {
@@ -1009,7 +1009,7 @@ function runWebsiteAudit() {
   if (isWebsiteAuditToolResult_(prospect)) {
     ui.alert(
       'Business Optimization Platform',
-      'This prospect already has Website Audit Tool results. Quick Internal Audit will not overwrite full audit data.',
+      'This prospect already has Website Audit Tool API results. Quick Internal Audit will not overwrite full audit data.',
       ui.ButtonSet.OK
     );
     return;
@@ -1017,7 +1017,7 @@ function runWebsiteAudit() {
 
   const confirm = ui.alert(
     'Business Optimization Platform',
-    `This is a quick internal placeholder audit, not the full Website Audit Tool report. It should not be used as a final client-facing audit. Continue?\n\nProspect: ${prospect.company}`,
+    `This is a quick internal placeholder audit, not the full Website Audit Tool API report. It should not be used as a final client-facing audit. Continue?\n\nProspect: ${prospect.company}`,
     ui.ButtonSet.OK_CANCEL
   );
 
@@ -1045,7 +1045,8 @@ function isWebsiteAuditToolResult_(prospect) {
 }
 
 function isWebsiteAuditToolSource_(value) {
-  return String(value || '').trim().toLowerCase() === 'website audit tool';
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized === 'website audit tool api' || normalized === 'website audit tool';
 }
 
 function generatePlaceholderAuditResults_(prospect) {
@@ -1054,7 +1055,7 @@ function generatePlaceholderAuditResults_(prospect) {
   const auditScore = hasHttps ? 72 : 58;
   const auditOutcome = hasHttps ? 'Good Fit' : 'Needs Nurture';
   const priorityTier = auditScore >= 70 ? 'B - Good' : 'A - Hot';
-  const offerService = 'Website Audit';
+  const offerService = 'Business Snapshot';
   const findings = [
     'Customers may benefit from clearer reasons to contact the business.',
     'Local visibility may improve with stronger search and service messaging.',
@@ -1062,7 +1063,7 @@ function generatePlaceholderAuditResults_(prospect) {
     'The next step should focus on making it easier for visitors to take action.'
   ];
   const notes = [
-    'QUICK INTERNAL AUDIT ONLY - Not from full Website Audit Tool.',
+    'QUICK INTERNAL AUDIT ONLY - Not from full Website Audit Tool API.',
     'Audit Source: Quick Internal Audit'
   ].concat(findings).join('\n');
   const summary = `Internal placeholder audit completed for ${prospect.company}. Score: ${auditScore}/100. Outcome: ${auditOutcome}.`;

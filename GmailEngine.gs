@@ -42,8 +42,8 @@ function buildOutreachDrafts_(prospect) {
     auditLine,
     findingsLine,
     recommendationVerified
-      ? `I prepared a short Executive Snapshot with the clearest next step: ${offerService}.`
-      : `I prepared a short Executive Snapshot with a preliminary service option to confirm during discovery: ${offerService}.`,
+      ? `I prepared a short Executive Brief with the clearest next step: ${offerService}.`
+      : `I prepared a short Executive Brief with a preliminary service option to confirm during discovery: ${offerService}.`,
     'If it would be useful, I can send it over or walk through it in a quick conversation.',
     'Best,',
     'Brian Keith Rogers',
@@ -58,7 +58,7 @@ function buildOutreachDrafts_(prospect) {
     recommendationVerified
       ? `The practical next step still looks like ${offerService}.`
       : `A practical service option to confirm during discovery is ${offerService}.`,
-    'If useful, I can share the Executive Snapshot and walk through the highest-impact opportunities in a short conversation.',
+    'If useful, I can share the Executive Brief and walk through the highest-impact opportunities in a short conversation.',
     'Best,',
     'Brian Keith Rogers',
     'Rogers Holdings LLC',
@@ -225,23 +225,24 @@ function getRequiredAuditPackageFiles_(folder, prospect) {
     const companyKey = normalizeLookupKey_(prospect.company);
     const fileKey = normalizeLookupKey_(fileName);
     const isPdf = /\.pdf$/i.test(fileName);
-    return fileName === 'AuditReport.pdf' ||
+    return fileName === 'Digital Business Assessment.pdf' ||
+      fileName === 'AuditReport.pdf' ||
       fileName === 'Audit Report.pdf' ||
       (fileName.indexOf('Audit Report') === 0 && isPdf) ||
       (companyKey && fileKey.indexOf(companyKey) !== -1 && fileName.indexOf('Report') !== -1 && isPdf);
   });
   const outreachDraft = findAuditPackageFileByName_(folder, 'Outreach Email Draft.txt');
-  const proposalDraft = findAuditPackageFileByName_(folder, 'Proposal.pdf');
+  const proposalDraft = findAuditPackageFileByNames_(folder, ['Improvement Plan.pdf', 'Proposal.pdf']);
   const missing = [];
 
   if (!auditReport) {
-    missing.push('AuditReport.pdf');
+    missing.push('Digital Business Assessment.pdf');
   }
   if (!outreachDraft) {
     missing.push('Outreach Email Draft');
   }
   if (!proposalDraft) {
-    missing.push('Proposal.pdf');
+    missing.push('Improvement Plan.pdf');
   }
 
   if (missing.length) {
@@ -288,6 +289,14 @@ function findNewestAuditPackageFile_(folder, matcher) {
     fileSelected: !!newestFile
   });
   return newestFile;
+}
+
+function findAuditPackageFileByNames_(folder, fileNames) {
+  for (let index = 0; index < fileNames.length; index += 1) {
+    const file = findAuditPackageFileByName_(folder, fileNames[index]);
+    if (file) return file;
+  }
+  return null;
 }
 
 function buildAuditPackageSendEmailBody_(prospect, folder, includeFolderLinkOnly) {
@@ -399,7 +408,7 @@ function createOutreachGmailDraft() {
   }
 
   logOutreachGmailDraftReconciled_(ss, prospect, drafts, recipient, gmailDraftResult);
-  setIfHeaderCell_(sheet, table.headers, selectedRow, 'Next Action', 'Confirm Executive Snapshot Sent');
+  setIfHeaderCell_(sheet, table.headers, selectedRow, 'Next Action', 'Confirm Executive Brief Sent');
   updateSelectedProspectLastActivity_(sheet, table.headers, selectedRow);
   refreshSalesOperatingSystem_();
 
