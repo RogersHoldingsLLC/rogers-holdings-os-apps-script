@@ -70,6 +70,7 @@ const context = vm.createContext({
   }
 });
 vm.runInContext(fs.readFileSync(path.join(root, 'Config.gs'), 'utf8'), context, { filename: 'Config.gs' });
+vm.runInContext(fs.readFileSync(path.join(root, 'BusinessSnapshotIntake.gs'), 'utf8'), context, { filename: 'BusinessSnapshotIntake.gs' });
 vm.runInContext(fs.readFileSync(path.join(root, 'SheetHelpers.gs'), 'utf8'), context, { filename: 'SheetHelpers.gs' });
 vm.runInContext(fs.readFileSync(path.join(root, 'Menu.gs'), 'utf8'), context, { filename: 'Menu.gs' });
 vm.runInContext(fs.readFileSync(path.join(root, 'AuditEngine.gs'), 'utf8'), context, { filename: 'AuditEngine.gs' });
@@ -133,7 +134,7 @@ context.requestWebsiteAuditPackageReport_ = () => { endpointReportRequests += 1;
 context.buildOutreachDrafts_ = () => ({ subject: 'Assessment', initialEmail: 'Body' });
 context.buildProposal_ = () => ({});
 context.getOrCreateAuditPackageFolder_ = () => ({ getName: () => 'Acceptance Test Co' });
-context.storeAuditPackageFiles_ = () => [{ getName: () => 'AuditReport.pdf' }];
+context.storeAuditPackageFiles_ = () => [{ getName: () => 'Digital Business Assessment.pdf' }];
 context.ensureSheetColumns_ = () => ({ headers: {} });
 context.setIfHeaderCell_ = () => {};
 context.updateSelectedProspectLastActivity_ = () => {};
@@ -308,10 +309,11 @@ assert.strictEqual(gmailDrafts.every((draft) => draft.updateCount === 0), true, 
 const driveContext = vm.createContext({ console });
 vm.runInContext(fs.readFileSync(path.join(root, 'DriveEngine.gs'), 'utf8'), driveContext, { filename: 'DriveEngine.gs' });
 const files = [
+  { name: 'Digital Business Assessment.pdf', trashed: false, setTrashed(value) { this.trashed = value; } },
   { name: 'AuditReport.pdf', trashed: false, setTrashed(value) { this.trashed = value; } },
   { name: 'Audit Report.pdf', trashed: false, setTrashed(value) { this.trashed = value; } },
-  { name: 'Proposal.pdf', trashed: false, setTrashed(value) { this.trashed = value; } },
-  { name: 'Proposal.pdf', trashed: false, setTrashed(value) { this.trashed = value; } },
+  { name: 'Improvement Plan.pdf', trashed: false, setTrashed(value) { this.trashed = value; } },
+  { name: 'Improvement Plan.pdf', trashed: false, setTrashed(value) { this.trashed = value; } },
   { name: 'Outreach Email Draft.txt', contents: 'old', trashed: false, setContent(value) { this.contents = value; }, setDescription() { return this; }, setTrashed(value) { this.trashed = value; } },
   { name: 'Outreach Email Draft.txt', contents: 'duplicate', trashed: false, setContent(value) { this.contents = value; }, setDescription() { return this; }, setTrashed(value) { this.trashed = value; } }
 ];
@@ -330,18 +332,19 @@ const folder = {
 const blob = { name: '', setName(name) { this.name = name; return this; } };
 const reconciliation = [];
 driveContext.reconcileAuditReportFile_(folder, blob, reconciliation);
-driveContext.upsertAuditPackageBlobFile_(folder, 'Proposal.pdf', blob, reconciliation);
+driveContext.upsertAuditPackageBlobFile_(folder, 'Improvement Plan.pdf', blob, reconciliation);
 driveContext.upsertAuditPackageTextFile_(folder, 'Outreach Email Draft.txt', 'updated body', 'text/plain', reconciliation);
-assert.strictEqual(files.filter((file) => file.name === 'AuditReport.pdf' && !file.trashed).length, 1, 'repeated package generation leaves one active AuditReport.pdf');
+assert.strictEqual(files.filter((file) => file.name === 'Digital Business Assessment.pdf' && !file.trashed).length, 1, 'repeated package generation leaves one active Digital Business Assessment.pdf');
+assert.strictEqual(files.filter((file) => file.name === 'AuditReport.pdf' && !file.trashed).length, 0, 'audit reconciliation removes the legacy compact filename');
 assert.strictEqual(files.filter((file) => file.name === 'Audit Report.pdf' && !file.trashed).length, 0, 'audit reconciliation removes the legacy spaced filename');
-assert.strictEqual(files.filter((file) => file.name === 'Proposal.pdf' && !file.trashed).length, 1, 'repeated package generation leaves one active Proposal.pdf');
+assert.strictEqual(files.filter((file) => file.name === 'Improvement Plan.pdf' && !file.trashed).length, 1, 'repeated package generation leaves one active Improvement Plan.pdf');
 assert.strictEqual(files.filter((file) => file.name === 'Outreach Email Draft.txt' && !file.trashed).length, 1, 'repeated package generation leaves one active Outreach Email Draft.txt');
 assert.strictEqual(files.find((file) => file.name === 'Outreach Email Draft.txt' && !file.trashed).contents, 'updated body', 'text artifact updates in place');
 assert.deepStrictEqual(
   JSON.parse(JSON.stringify(reconciliation.map((result) => ({ fileName: result.fileName, action: result.action, removedDuplicates: result.removedDuplicates, removedPrevious: result.removedPrevious })))),
   [
-    { fileName: 'AuditReport.pdf', action: 'replaced', removedDuplicates: 1, removedPrevious: 2 },
-    { fileName: 'Proposal.pdf', action: 'replaced', removedDuplicates: 1, removedPrevious: 2 },
+    { fileName: 'Digital Business Assessment.pdf', action: 'replaced', removedDuplicates: 2, removedPrevious: 3 },
+    { fileName: 'Improvement Plan.pdf', action: 'replaced', removedDuplicates: 1, removedPrevious: 2 },
     { fileName: 'Outreach Email Draft.txt', action: 'updated', removedDuplicates: 1, removedPrevious: 0 }
   ],
   'PDF reconciliation explicitly reports replacement and duplicate removal'
@@ -349,23 +352,24 @@ assert.deepStrictEqual(
 assert.deepStrictEqual(
   JSON.parse(JSON.stringify(reconciliation[0])),
   {
-    fileName: 'AuditReport.pdf',
+    fileName: 'Digital Business Assessment.pdf',
     action: 'replaced',
     updated: false,
     replaced: true,
-    removedDuplicates: 1,
-    removedPrevious: 2,
+    removedDuplicates: 2,
+    removedPrevious: 3,
     canonicalCopiesRemoved: 1,
-    legacyCopiesRemoved: 1,
-    createdFileName: 'AuditReport.pdf'
+    legacyCopiesRemoved: 2,
+    createdFileName: 'Digital Business Assessment.pdf'
   },
   'audit reconciliation reports canonical and legacy removals plus the created canonical filename'
 );
 
 driveContext.reconcileAuditReportFile_(folder, blob, reconciliation);
-assert.strictEqual(files.filter((file) => file.name === 'AuditReport.pdf' && !file.trashed).length, 1, 'another audit generation still leaves one active canonical report');
+assert.strictEqual(files.filter((file) => file.name === 'Digital Business Assessment.pdf' && !file.trashed).length, 1, 'another audit generation still leaves one active canonical report');
+assert.strictEqual(files.filter((file) => file.name === 'AuditReport.pdf' && !file.trashed).length, 0, 'another audit generation leaves zero active compact legacy reports');
 assert.strictEqual(files.filter((file) => file.name === 'Audit Report.pdf' && !file.trashed).length, 0, 'another audit generation leaves zero active legacy reports');
-assert.strictEqual(files.filter((file) => file.name === 'Proposal.pdf' && !file.trashed).length, 1, 'audit retry does not change Proposal.pdf reconciliation');
+assert.strictEqual(files.filter((file) => file.name === 'Improvement Plan.pdf' && !file.trashed).length, 1, 'audit retry does not change Improvement Plan.pdf reconciliation');
 assert.strictEqual(files.filter((file) => file.name === 'Outreach Email Draft.txt' && !file.trashed).length, 1, 'audit retry does not change Outreach Email Draft.txt reconciliation');
 
 const healthContext = vm.createContext({

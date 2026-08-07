@@ -48,7 +48,10 @@ test('legacy stored values normalize to canonical display and workflow values', 
   assert.equal(context.validateProspectStageTransition_('Executive Snapshot Sent', 'Discovery Meeting Scheduled').allowed, true);
 
   vm.runInContext(read('DigitalPresenceAssessmentEngine.js'), context, { filename: 'DigitalPresenceAssessmentEngine.js' });
-  assert.equal(context.getClientFacingServiceName_('Website Audit', 82), 'Business Snapshot');
+  assert.equal(
+    context.getClientFacingServiceName_('Website Audit', 82),
+    'Digital Visibility & Conversion Improvement Package'
+  );
 });
 
 test('customer and operator surfaces use canonical Executive Brief language', () => {
@@ -207,6 +210,19 @@ test('Website Audit Tool API is canonical while legacy source values remain acce
   assert.match(read('BusinessSnapshotIntake.js'), /'Audit Source', 'Website Audit Tool API'/);
   assert.match(read('AuditEngine.js'), /'Audit Source', 'Website Audit Tool API'/);
   assert.match(read('ExecutiveBusinessIntelligenceEngine.js'), /source: 'Website Audit Tool API'/);
+});
+
+test('legacy Website Audit service history remains client-safe without replacing the current offer', () => {
+  const context = { console };
+  vm.createContext(context);
+  vm.runInContext(read('DigitalPresenceAssessmentEngine.js'), context, { filename: 'DigitalPresenceAssessmentEngine.js' });
+
+  assert.equal(context.getClientFacingServiceName_('Business Snapshot', 0), 'Business Snapshot');
+  assert.equal(
+    context.getClientFacingServiceName_('Website Audit', 0),
+    'Digital Visibility & Conversion Improvement Package'
+  );
+  assert.doesNotMatch(context.getClientFacingServiceName_('Website Audit', 0), /Website Audit/);
 });
 
 test('activity, next action, and workspace wording are canonical', () => {

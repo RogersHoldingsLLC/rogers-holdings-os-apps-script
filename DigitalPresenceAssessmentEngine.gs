@@ -217,10 +217,7 @@ function parseDigitalPresenceScore_(score) {
 function getClientFacingServiceName_(service, score) {
   const value = String(service || '').trim();
   const normalized = value.toLowerCase();
-  if (normalized === 'website audit') {
-    return 'Business Snapshot';
-  }
-  if (!value || normalized === 'website and local visibility review' || normalized === 'website and local visibility improvement') {
+  if (!value || normalized === 'website audit' || normalized === 'website and local visibility review' || normalized === 'website and local visibility improvement') {
     const assessment = getDigitalPresenceAssessment_(score);
     if (assessment.score !== null && assessment.score >= 90) {
       return 'Growth & Optimization Review';
