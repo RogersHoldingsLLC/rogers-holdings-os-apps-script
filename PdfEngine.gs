@@ -1916,7 +1916,7 @@ function buildExecutiveSnapshotPdfHtml_(prospect, reportFile) {
             <div class="brand-block">
               <div class="brand-panel">${logoHtml}</div>
               <div>
-                <div class="snapshot-label">Executive Brief</div>
+                <div class="snapshot-label">BUSINESS SNAPSHOT</div>
                 <h1>Executive Brief</h1>
               </div>
             </div>
