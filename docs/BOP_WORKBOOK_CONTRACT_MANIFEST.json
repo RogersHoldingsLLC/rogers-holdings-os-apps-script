@@ -1,0 +1,107 @@
+{
+  "manifestVersion": "1.0.0",
+  "capturedAt": "2026-08-09",
+  "purpose": "Documentation and governance only; never load this file as runtime configuration.",
+  "sensitivity": "Internal. Production, acceptance, request, correlation, deployment, and entity IDs are intentionally omitted.",
+  "workbook": {
+    "title": "Rogers Holdings BOP — CRM & Delivery System",
+    "locale": "en_US",
+    "timeZone": "America/Los_Angeles",
+    "formulaContract": "No formulas observed in populated production ranges; dashboards and workspaces are materialized by Apps Script.",
+    "headerDiscovery": "Most header-based code scans only rows 1 through 10."
+  },
+  "sheets": [
+    {"name":"Executive Dashboard","order":0,"hidden":false,"headerRow":null,"role":"operator-generated","contract":"fixed-layout","frozenRows":2},
+    {"name":"Brian's Daily Friction Log","order":1,"hidden":false,"headerRow":1,"role":"operator","contract":"append-table","frozenRows":1},
+    {"name":"Product Feedback","order":2,"hidden":false,"headerRow":1,"role":"operator","contract":"append-table","frozenRows":1},
+    {"name":"Client Workspace","order":3,"hidden":false,"headerRow":null,"role":"operator-generated","contract":"fixed-layout","frozenRows":3},
+    {"name":"Follow-Ups","order":4,"hidden":false,"headerRow":1,"role":"mixed","contract":"core-table","frozenRows":1},
+    {"name":"Dashboard Metrics","order":5,"hidden":false,"headerRow":1,"role":"system","contract":"generated-table","frozenRows":1},
+    {"name":"Master Prospect Tracker","order":6,"hidden":false,"headerRow":4,"role":"mixed","contract":"core-table","frozenRows":4},
+    {"name":"Clients","order":7,"hidden":false,"headerRow":4,"role":"mixed","contract":"core-table-with-compatibility-columns","frozenRows":4},
+    {"name":"Activity Feed","order":8,"hidden":false,"headerRow":4,"role":"system-history","contract":"append-oriented-core-table","frozenRows":4},
+    {"name":"Settings","order":9,"hidden":false,"headerRow":5,"role":"system","contract":"helper-values-and-settings","frozenRows":5},
+    {"name":"Inspection Playground","order":10,"hidden":true,"headerRow":null,"role":"developer","contract":"fixed-layout","frozenRows":3},
+    {"name":"Projects","order":11,"hidden":false,"headerRow":1,"role":"mixed","contract":"core-table","frozenRows":1}
+  ],
+  "headers": {
+    "Master Prospect Tracker": ["Company","Contact","Email","Phone","Website","City","State","Industry","Source","Audit Score","Audit Outcome","Priority Tier","Audit Source","Status","Next Action","Follow-Up Date","Last Activity","Opportunity Value","Offer / Service","Moved to CRM","Notes","Closed Date","Audit Package Generated","Audit Package Date","Discovery Date","Summary","Lifecycle Operation Key","Lifecycle Operation State","Lifecycle Operation Details","Lifecycle Confirmed At","Calendar Operation Key","Calendar Event ID","Calendar Operation State","Prospect ID","Validation Status","Validation Details","Inspection Status","Inspection Attempted At","Inspection Completed At","Workflow Status","Workflow Operation Key","Workflow Details","Review Status","Reviewed At","Review Notes","Proposal Generated","Gmail Draft Created"],
+    "Follow-Ups": ["Follow-Up ID","Company","Contact","Email","Related Prospect ID","Related Client ID","Current Status","Follow-Up Type","Due Date","Days Until Due","Priority","Assigned To","Notes","Completed","Completed Date"],
+    "Clients": ["Client","Service","Monthly Value","Start Date","Status","Next Review","Notes","Client Name","Contact","Email","Phone","Website","Priority Tier","Contract Value","Client Since","Last Activity","Client ID","Company","Industry","Service Package","Renewal Date","Assigned To","Current Project","Project Status","Due Date"],
+    "Activity Feed": ["Date","Company","Activity Type","Activity Notes","Next Action","Follow-Up Date","Prospect ID","Operation Key"],
+    "Projects": ["Project ID","Client ID","Client","Service","Package","Status","Priority","Start Date","Due Date","Progress %","Assigned To","Current Phase","Deliverables","Folder","Notes","Last Updated"],
+    "Dashboard Metrics": ["Metric","Value","Updated At"],
+    "Brian's Daily Friction Log": ["Date","Area","Issue / Observation","Type","Priority","Impact","Possible Fix","Status","Notes"],
+    "Product Feedback": ["Feedback ID","Date Logged","Source","Priority","Type","Area","Description","Business Impact","Status","Target Version","Notes"]
+  },
+  "lifecycle": {
+    "canonical": ["Lead Found","Executive Brief Sent","Discovery Meeting Scheduled","Digital Business Assessment","Improvement Plan Sent","Project Started","Client","Nurture","Lost"],
+    "compatibilityAliases": {
+      "Executive Snapshot Sent": "Executive Brief Sent",
+      "Digital Business Assessment Presented": "Digital Business Assessment"
+    }
+  },
+  "businessSnapshot": {
+    "schemaVersion": "business-snapshot.v1",
+    "requiredTrackerHeaders": ["Company","Contact","Email","Phone","Website","Source","Audit Outcome","Priority Tier","Audit Source","Status","Next Action","Last Activity","Offer / Service","Moved to CRM","Notes","Prospect ID"],
+    "newRecordContract": {
+      "offerOrService": "Business Snapshot",
+      "status": "Lead Found",
+      "nextAction": "Generate Executive Brief",
+      "openFollowUpType": "Executive Brief",
+      "activityTypes": ["Business Snapshot Intake","Follow-Up Created"]
+    },
+    "idempotency": {
+      "operationKey": "INTAKE:<requestId>",
+      "requiredProspectCount": 1,
+      "requiredOpenFollowUpCount": 1,
+      "requiredCorrelatedActivityCount": 2,
+      "replayCreatesDuplicates": false
+    }
+  },
+  "relationships": [
+    {"from":"Master Prospect Tracker.Prospect ID","to":"Follow-Ups.Related Prospect ID","cardinality":"one-to-many"},
+    {"from":"Master Prospect Tracker.Prospect ID","to":"Activity Feed.Prospect ID","cardinality":"one-to-many"},
+    {"from":"Clients.Client ID","to":"Projects.Client ID","cardinality":"one-to-many"},
+    {"from":"Clients.Client ID","to":"Follow-Ups.Related Client ID","cardinality":"one-to-many"},
+    {"from":"requestId","to":"Activity Feed.Operation Key","transform":"INTAKE:<requestId>"},
+    {"from":"Master Prospect Tracker.Prospect ID","to":"Workflow Operation Key","transform":"PTR:<Prospect ID>:V1"}
+  ],
+  "fixedLayouts": {
+    "Executive Dashboard": {
+      "clearAndFormat":"A1:L80","kpis":"A1:L12","pipeline":"A14:C24","recentActivity":"E14:H30","followUpQueue":"A34:G47","topOpportunities":"H34:L45","quickActions":"A56:C58","quickActionCells":"A57:C58","systemStatus":"E56:G61"
+    },
+    "Client Workspace": {
+      "clearAndFormat":"A1:J70","title":"A1:J1","selectedClient":"A2:J2","overviewStart":"A4","contactStart":"D4","currentProjectStart":"G4","timelineStart":"A13","documentsStart":"G13","projectDeliveryStart":"A22","quickActionsStart":"A28","nextStepsStart":"E28","upcomingTasksStart":"A39"
+    }
+  },
+  "validations": {
+    "Master Prospect Tracker": {
+      "I5:I203":["Google Search","Google Maps","Referral","Chamber","Facebook","Website","Walk-In / Local","Internal","Other"],
+      "K5:K203":["Strong Fit","Good Fit","Needs Nurture","Poor Fit","Not Audited"],
+      "L5:L203":["A - Hot","B - Good","C - Later","D - Nurture"],
+      "M5:M1000":["Website Audit Tool API","Website Audit Tool","Quick Internal Audit"],
+      "N5:N1000":["Lead Found","Executive Brief Sent","Discovery Meeting Scheduled","Digital Business Assessment","Improvement Plan Sent","Project Started","Client","Nurture","Lost"],
+      "O5:O1000":["Generate Executive Brief","Create Outreach Draft","Review Outreach","Confirm Executive Brief Sent","Schedule Discovery Meeting","Present Digital Business Assessment","Confirm Digital Business Assessment","Generate Improvement Plan","Confirm Improvement Plan Sent","Record Improvement Plan Outcome","Complete Client Onboarding","Reactivate Nurtured Prospect","Follow Up","Nurture","Archived"],
+      "S5:S203":["Website Audit","Google Business Optimization","Local SEO","AI Automation","Business Systems","Client Website","Monthly Support","One-Time Project","Consulting"],
+      "T5:T203":["No","Yes"]
+    },
+    "Clients": {"E5:E104":["Active","Onboarding","Paused","Closed Won","Completed","At Risk"]},
+    "Projects": {
+      "F2:F1000":["Planning","Discovery","In Progress","Waiting on Client","Review","Completed","Maintenance","Cancelled"],
+      "M2:M1000":["Website","SEO","Google Business","Automation","Consulting","Training","Other"]
+    },
+    "Settings":{"B3":["FALSE","TRUE"]}
+  },
+  "ownership": {
+    "systemOwned": ["all IDs","all operation keys and operation states","Calendar Event ID","Days Until Due","all generated dashboard and workspace ranges","Dashboard Metrics.Value","Dashboard Metrics.Updated At","Activity Feed history","Last Activity when written by workflow","workflow, inspection, validation, and review state fields"],
+    "operatorOwned": ["prospect contact and business context","Priority Tier","Opportunity Value","Notes","manual Follow-Up task content","project planning fields","client relationship fields","friction log","product feedback"],
+    "mixedOrGuarded": ["Status","Next Action","Follow-Up Date","Offer / Service","Audit Source","Completed","Project Status","Deliverables"],
+    "rule": "Mixed or guarded fields may be edited only through validated operator workflows or after explicit code-level review."
+  },
+  "changeControl": {
+    "preserve": ["sheet names","header text","header rows","IDs","lifecycle values","compatibility aliases","validations","fixed layouts","hidden state","idempotency behavior"],
+    "phase1bAllowed": ["column grouping","column hiding","safe freeze adjustments","filters","widths","wrapping","presentation-only conditional formatting","operator instruction notes"],
+    "requiresMigration": ["renames","deletions","physical schema consolidation","dashboard coordinate changes","Client Workspace coordinate changes","validation vocabulary retirement","ID backfills","timezone change","normalized deliverable entity"]
+  }
+}

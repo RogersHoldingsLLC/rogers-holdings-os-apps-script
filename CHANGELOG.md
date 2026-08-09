@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-08-09 — Workbook Optimization Safety Foundation
+
+- Captured a read-only production workbook baseline covering sheet structure, exact headers, populated row counts, validation rules, conditional formatting, entity counts, accepted Business Snapshot correlation evidence, and fixed Apps Script layout coordinates.
+- Added a machine-readable, documentation-only workbook contract manifest.
+- Created a separate owner-restricted workbook optimization acceptance copy with a distinct non-production title; no production mapping or public intake path was changed.
+- Corrected current-state documentation to record the accepted production topology: Website -> Cloudflare -> Replacement Production Receiver Version 2 -> Authorized BOP Version 7 -> authoritative production workbook.
+- Preserved prior receiver activation and release statements as historical evidence.
+
 ## [Unreleased]
 
 ### Added

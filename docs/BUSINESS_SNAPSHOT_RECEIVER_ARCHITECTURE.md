@@ -1,13 +1,22 @@
 # Business Snapshot Receiver Architecture
 
-Status: local proposal only. No receiver, deployment, library version, or live
-workbook change has been created.
+Status: production-active and accepted. This document originated as the pre-activation architecture plan; the historical activation checklist remains below as release evidence.
+
+Current accepted production topology:
+
+```text
+Website
+-> Cloudflare
+-> Replacement Production Receiver Version 2
+-> Authorized BOP Version 7
+-> Rogers Holdings BOP — CRM & Delivery System
+```
+
+Production replay with the same request ID has been verified to create no duplicate Prospect, Follow-Up, or Activity state. The production `BOP_SPREADSHEET_ID` remains authoritative and must never be changed to target a test or workbook-optimization copy.
 
 ## Boundary
 
-The BOP-bound project owns the canonical `ingestBusinessSnapshot(input)`
-function. It intentionally contains no `doGet` or `doPost`. A future standalone
-Apps Script receiver will be the only anonymous HTTP surface.
+The BOP-bound project owns the canonical `ingestBusinessSnapshot(input)` function. It intentionally contains no `doGet` or `doPost`. Replacement Production Receiver Version 2 is the anonymous HTTP boundary and calls the authorized fixed BOP Version 7 library.
 
 The receiver calls the canonical function through a fixed, numbered Apps Script
 library version. Library execution has no bound-container or active-spreadsheet
@@ -145,7 +154,9 @@ same-second collision risk while keeping IDs recognizable. UUID collision risk
 is non-zero but operationally negligible; workbook-level uniqueness should
 still be monitored during future migrations or bulk imports.
 
-## Activation requirements
+## Historical activation requirements
+
+The following checklist is retained as the pre-production release gate that led to the accepted deployment. It is historical evidence, not a statement that production activation is still pending.
 
 Before production activation:
 
@@ -162,7 +173,7 @@ Before production activation:
 7. Review OAuth scopes, execution identity, access controls, logs, monitoring,
    and rollback procedures before any production deployment decision.
 
-## Release sequence
+## Historical release sequence
 
 1. Review and test the BOP-side change locally.
 2. Commit the reviewed BOP source.

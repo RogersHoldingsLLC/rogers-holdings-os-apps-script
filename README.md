@@ -16,6 +16,18 @@ Business Snapshot
 
 Business Snapshot is the public acquisition product. The Website Audit Tool API is the internal technical evidence service used by Business Snapshot and Business Optimization Platform. Headquarters is the separate internal command center for Rogers Holdings LLC and is not part of this client delivery repository.
 
+The accepted production acquisition topology is:
+
+```text
+Website
+-> Cloudflare
+-> Replacement Production Receiver Version 2
+-> Authorized BOP Version 7
+-> Rogers Holdings BOP — CRM & Delivery System
+```
+
+The receiver is pinned to the authorized BOP library version and the production library's `BOP_SPREADSHEET_ID` resolves only the authoritative workbook. Non-production copies must never reuse or replace that production mapping.
+
 The system is designed to manage the complete small-business lifecycle:
 
 ```text
