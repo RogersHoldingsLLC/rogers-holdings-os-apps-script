@@ -59,6 +59,7 @@ function onOpen(e) {
     .addItem('Review Selected Follow-Up', 'showSelectedFollowUpContext')
     .addItem('Open Related Record', 'openSelectedFollowUpRelatedRecord')
     .addItem('Complete Selected Follow-Up', 'completeSelectedFollowUpControlled')
+    .addItem('Sync Prospect Next Action from Open Follow-Ups', 'syncProspectNextActionFromOpenFollowUps')
     .addItem('Refresh Follow-Ups', 'refreshFollowUps');
 
   const clientProjectMenu = ui.createMenu('Clients & Projects')

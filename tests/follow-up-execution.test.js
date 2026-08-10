@@ -53,11 +53,13 @@ class MockSheet {
     this.rows[row - 1][column - 1] = value;
     this.writeLog.push({ row, column, value });
   }
+  getParent() { return this.parent || null; }
 }
 
 class MockSpreadsheet {
   constructor(sheets, activeName = 'Follow-Ups') {
     this.sheets = Object.fromEntries(sheets.map(sheet => [sheet.getName(), sheet]));
+    sheets.forEach(sheet => { sheet.parent = this; });
     this.activeSheet = this.sheets[activeName];
   }
   getActiveSheet() { return this.activeSheet; }
@@ -70,7 +72,7 @@ const FOLLOW_HEADERS = [
   'Current Status', 'Follow-Up Type', 'Due Date', 'Days Until Due', 'Priority', 'Assigned To',
   'Notes', 'Completed', 'Completed Date'
 ];
-const PROSPECT_HEADERS = ['Company', 'Prospect ID', 'Status', 'Next Action'];
+const PROSPECT_HEADERS = ['Company', 'Prospect ID', 'Status', 'Next Action', 'Follow-Up Date', 'Offer / Service'];
 const CLIENT_HEADERS = ['Company', 'Client Name', 'Client ID', 'Status'];
 const ACTIVITY_HEADERS = ['Date', 'Company', 'Activity Type', 'Activity Notes', 'Next Action', 'Follow-Up Date', 'Prospect ID', 'Operation Key'];
 
@@ -106,14 +108,21 @@ function makeHarness(options = {}) {
     ]);
     sheets.push(workspace);
   }
-  const spreadsheet = new MockSpreadsheet(sheets);
+  const spreadsheet = new MockSpreadsheet(sheets, options.activeName || 'Follow-Ups');
   followUps.activeRange = new MockRange(followUps, options.selectedRow || 2, 1);
+  prospects.activeRange = new MockRange(prospects, options.prospectSelectedRow || 2, 1);
 
   const calls = { prospectWorkspace: 0, clientWorkspace: 0, dashboard: 0, gmail: 0, calendar: 0, drive: 0, dialogs: 0 };
   const ui = {
     Button: { YES: 'YES', NO: 'NO', OK: 'OK' },
     ButtonSet: { YES_NO: 'YES_NO', OK: 'OK' },
-    alert() { return options.openAfterCompletion ? 'YES' : 'NO'; },
+    alert(title, message, buttonSet) {
+      if (title === 'Sync Prospect Next Action' && buttonSet === 'YES_NO') {
+        if (typeof options.afterSyncPreview === 'function') options.afterSyncPreview({ followUps, prospects, activities });
+        return options.confirmSynchronization ? 'YES' : 'NO';
+      }
+      return options.openAfterCompletion ? 'YES' : 'NO';
+    },
     showModalDialog() { calls.dialogs += 1; }
   };
   const context = vm.createContext({
@@ -279,4 +288,210 @@ test('Phase 2A source has no Gmail, Calendar, Drive, Dashboard, Client Workspace
   assert.doesNotMatch(phase2a, /refreshExecutiveDashboard|updatePipelineDashboardMetrics_/);
   assert.doesNotMatch(phase2a, /openClientWorkspace\s*\(|refreshClientWorkspace\s*\(/);
   assert.doesNotMatch(phase2a, /submitBusinessSnapshot|appendBusinessSnapshotFollowUp_/);
+});
+
+test('Phase 2B mapping targets exist in the canonical Next Action vocabulary', () => {
+  const h = makeHarness();
+  assert.doesNotThrow(() => h.context.assertFollowUpNextActionVocabulary_());
+  assert.deepEqual(
+    Array.from(new Set(Object.values(h.context.FOLLOW_UP_NEXT_ACTION_MAP))).sort(),
+    ['Follow Up', 'Generate Executive Brief', 'Generate Improvement Plan', 'Schedule Discovery Meeting'].sort()
+  );
+});
+
+test('synchronization resolves an exact Prospect ID from Master Prospect Tracker', () => {
+  const h = makeHarness({ activeName: 'Master Prospect Tracker', confirmSynchronization: true });
+  const result = h.context.syncProspectNextActionFromOpenFollowUps();
+  assert.equal(result.changed, true);
+  assert.equal(h.prospects.valueAt(2, 4), 'Generate Executive Brief');
+  assert.equal(h.context.synchronizationDateKey_(h.prospects.valueAt(2, 5)), '2026-08-09');
+});
+
+test('missing Prospect ID fails closed', () => {
+  const h = makeHarness({
+    activeName: 'Master Prospect Tracker', confirmSynchronization: true,
+    prospectRows: [row(PROSPECT_HEADERS, { Company: 'Acme', Status: 'Lead Found' })]
+  });
+  assert.equal(h.context.syncProspectNextActionFromOpenFollowUps(), null);
+  assert.equal(h.prospects.writeLog.length, 0);
+  assert.equal(h.activities.getLastRow(), 1);
+});
+
+test('duplicate Prospect ID fails closed', () => {
+  const duplicated = row(PROSPECT_HEADERS, { Company: 'Acme 2', 'Prospect ID': 'PROS-1', Status: 'Lead Found' });
+  const h = makeHarness({ activeName: 'Master Prospect Tracker', confirmSynchronization: true,
+    prospectRows: [row(PROSPECT_HEADERS, { Company: 'Acme', 'Prospect ID': 'PROS-1', Status: 'Lead Found' }), duplicated] });
+  assert.equal(h.context.syncProspectNextActionFromOpenFollowUps(), null);
+  assert.equal(h.prospects.writeLog.length, 0);
+});
+
+test('missing and duplicate eligible Follow-Up IDs fail closed', () => {
+  const base = { Company: 'Acme', 'Related Prospect ID': 'PROS-1', 'Follow-Up Type': 'Follow-Up', Completed: false };
+  for (const followRows of [
+    [row(FOLLOW_HEADERS, base)],
+    [row(FOLLOW_HEADERS, { ...base, 'Follow-Up ID': 'FU-X' }), row(FOLLOW_HEADERS, { ...base, 'Follow-Up ID': 'FU-X' })]
+  ]) {
+    const h = makeHarness({ followRows, confirmSynchronization: true });
+    assert.equal(h.context.syncProspectNextActionFromOpenFollowUps(), null);
+    assert.equal(h.prospects.writeLog.length, 0);
+  }
+});
+
+test('eligible Follow-Up ID must be globally unique even when the duplicate belongs to another record', () => {
+  const h = makeHarness({ confirmSynchronization: true, followRows: [
+    row(FOLLOW_HEADERS, { 'Follow-Up ID': 'FU-GLOBAL', Company: 'Acme', 'Related Prospect ID': 'PROS-1', 'Follow-Up Type': 'Follow-Up', Completed: false }),
+    row(FOLLOW_HEADERS, { 'Follow-Up ID': 'FU-GLOBAL', Company: 'Other', 'Related Prospect ID': 'PROS-OTHER', 'Follow-Up Type': 'Follow-Up', Completed: true })
+  ] });
+  assert.equal(h.context.syncProspectNextActionFromOpenFollowUps(), null);
+  assert.equal(h.prospects.writeLog.length, 0);
+});
+
+test('completed, client-only, and legacy company-only Follow-Ups are ineligible', () => {
+  const completed = row(FOLLOW_HEADERS, { 'Follow-Up ID': 'FU-DONE', Company: 'Acme', 'Related Prospect ID': 'PROS-1', 'Follow-Up Type': 'Follow-Up', Completed: true });
+  const h = makeHarness({ followRows: [completed], confirmSynchronization: true });
+  assert.equal(h.context.syncProspectNextActionFromOpenFollowUps(), null);
+  for (const values of [
+    { 'Follow-Up ID': 'FU-C', Company: 'Beta', 'Related Client ID': 'CLI-1', 'Follow-Up Type': 'Client Welcome Task', Completed: false },
+    { 'Follow-Up ID': 'FU-L', Company: 'Acme', 'Follow-Up Type': 'Follow-Up', Completed: false }
+  ]) {
+    const x = makeHarness({ followRows: [row(FOLLOW_HEADERS, values)], confirmSynchronization: true });
+    assert.equal(x.context.syncProspectNextActionFromOpenFollowUps(), null);
+    assert.equal(x.prospects.writeLog.length, 0);
+  }
+});
+
+test('primary selection uses earliest date, lexical ID tie-break, then undated rows', () => {
+  const followRows = [
+    row(FOLLOW_HEADERS, { 'Follow-Up ID': 'FU-Z', Company: 'Acme', 'Related Prospect ID': 'PROS-1', 'Follow-Up Type': 'Final Follow-Up', 'Due Date': new Date('2026-08-12T12:00:00Z'), Completed: false }),
+    row(FOLLOW_HEADERS, { 'Follow-Up ID': 'FU-B', Company: 'Acme', 'Related Prospect ID': 'PROS-1', 'Follow-Up Type': 'Discovery Meeting', 'Due Date': new Date('2026-08-10T12:00:00Z'), Completed: false }),
+    row(FOLLOW_HEADERS, { 'Follow-Up ID': 'FU-A', Company: 'Acme', 'Related Prospect ID': 'PROS-1', 'Follow-Up Type': 'Improvement Plan', 'Due Date': new Date('2026-08-10T12:00:00Z'), Completed: false }),
+    row(FOLLOW_HEADERS, { 'Follow-Up ID': 'FU-0', Company: 'Acme', 'Related Prospect ID': 'PROS-1', 'Follow-Up Type': 'Follow-Up', Completed: false })
+  ];
+  const h = makeHarness({ followRows });
+  const resolved = h.context.resolvePrimaryOpenFollowUpForProspect_(h.spreadsheet, 'PROS-1');
+  assert.equal(resolved.primary.followUpId, 'FU-A');
+  assert.deepEqual(Array.from(resolved.eligible, item => item.followUpId), ['FU-A', 'FU-B', 'FU-Z', 'FU-0']);
+});
+
+test('one open Follow-Up maps canonically and unsupported type fails closed', () => {
+  const supported = makeHarness({ followRows: [row(FOLLOW_HEADERS, {
+    'Follow-Up ID': 'FU-I', Company: 'Acme', 'Related Prospect ID': 'PROS-1', 'Follow-Up Type': 'Improvement Plan', Completed: false
+  })] });
+  assert.equal(supported.context.buildFollowUpSynchronizationState_(supported.spreadsheet, 'PROS-1').proposedNextAction, 'Generate Improvement Plan');
+  const unsupported = makeHarness({ confirmSynchronization: true, followRows: [row(FOLLOW_HEADERS, {
+    'Follow-Up ID': 'FU-U', Company: 'Acme', 'Related Prospect ID': 'PROS-1', 'Follow-Up Type': 'Call Somebody', Completed: false
+  })] });
+  assert.equal(unsupported.context.syncProspectNextActionFromOpenFollowUps(), null);
+  assert.equal(unsupported.prospects.writeLog.length, 0);
+});
+
+test('preview cancellation causes no mutation or Activity', () => {
+  const h = makeHarness({ confirmSynchronization: false });
+  const before = h.prospects.rows.map(values => values.slice());
+  const result = h.context.syncProspectNextActionFromOpenFollowUps();
+  assert.equal(result.cancelled, true);
+  assert.deepEqual(h.prospects.rows, before);
+  assert.equal(h.activities.getLastRow(), 1);
+});
+
+test('stale state after confirmation fails closed', () => {
+  const h = makeHarness({ confirmSynchronization: true, afterSyncPreview: ({ followUps }) => {
+    followUps.setValueAt(2, 9, new Date('2026-08-11T12:00:00Z'));
+  } });
+  assert.equal(h.context.syncProspectNextActionFromOpenFollowUps(), null);
+  assert.equal(h.prospects.writeLog.length, 0);
+  assert.equal(h.activities.getLastRow(), 1);
+});
+
+test('synchronization writes only Next Action and Follow-Up Date and preserves all task and lifecycle state', () => {
+  const h = makeHarness({ confirmSynchronization: true, prospectRows: [row(PROSPECT_HEADERS, {
+    Company: 'Acme', 'Prospect ID': 'PROS-1', Status: 'Lead Found', 'Next Action': 'Follow Up',
+    'Follow-Up Date': new Date('2026-08-15T12:00:00Z'), 'Offer / Service': 'Business Snapshot'
+  })] });
+  const followBefore = h.followUps.rows.map(values => values.slice());
+  const result = h.context.syncProspectNextActionFromOpenFollowUps();
+  assert.equal(result.changed, true);
+  assert.deepEqual(h.prospects.writeLog.map(write => write.column), [4, 5]);
+  assert.equal(h.prospects.valueAt(2, 3), 'Lead Found');
+  assert.equal(h.prospects.valueAt(2, 6), 'Business Snapshot');
+  assert.deepEqual(h.followUps.rows, followBefore);
+  assert.deepEqual(h.calls, { prospectWorkspace: 0, clientWorkspace: 0, dashboard: 0, gmail: 0, calendar: 0, drive: 0, dialogs: 0 });
+});
+
+test('material synchronization creates one deterministic correlated Activity and immediate retry is a no-op', () => {
+  const h = makeHarness({ confirmSynchronization: true, prospectRows: [row(PROSPECT_HEADERS, {
+    Company: 'Acme', 'Prospect ID': 'PROS-1', Status: 'Lead Found', 'Next Action': 'Follow Up'
+  })] });
+  const first = h.context.syncProspectNextActionFromOpenFollowUps();
+  const second = h.context.syncProspectNextActionFromOpenFollowUps();
+  assert.match(first.operationKey, /^FOLLOWUPSYNC:PROS-1:FU-1:[0-9A-F]{8}$/);
+  assert.equal(second.changed, false);
+  assert.equal(h.activities.getLastRow(), 2);
+  assert.equal(h.activities.valueAt(2, 7), 'PROS-1');
+  assert.equal(h.activities.valueAt(2, 8), first.operationKey);
+  assert.match(h.activities.valueAt(2, 4), /FU-1.*Assigned To: Brian/);
+});
+
+test('one existing operation key reconciles and duplicate operation keys fail closed', () => {
+  const h = makeHarness({ confirmSynchronization: true, prospectRows: [row(PROSPECT_HEADERS, {
+    Company: 'Acme', 'Prospect ID': 'PROS-1', Status: 'Lead Found', 'Next Action': 'Follow Up'
+  })] });
+  const state = h.context.buildFollowUpSynchronizationState_(h.spreadsheet, 'PROS-1');
+  const key = h.context.buildFollowUpSynchronizationOperationKey_(state);
+  h.activities.rows.push(row(ACTIVITY_HEADERS, { 'Prospect ID': 'PROS-1', 'Operation Key': key }));
+  const reconciled = h.context.syncProspectNextActionFromOpenFollowUps();
+  assert.equal(reconciled.idempotent, true);
+  assert.equal(h.activities.getLastRow(), 2);
+
+  const d = makeHarness({ confirmSynchronization: true, prospectRows: [row(PROSPECT_HEADERS, {
+    Company: 'Acme', 'Prospect ID': 'PROS-1', Status: 'Lead Found', 'Next Action': 'Follow Up'
+  })] });
+  const dState = d.context.buildFollowUpSynchronizationState_(d.spreadsheet, 'PROS-1');
+  const dKey = d.context.buildFollowUpSynchronizationOperationKey_(dState);
+  d.activities.rows.push(row(ACTIVITY_HEADERS, { 'Operation Key': dKey }), row(ACTIVITY_HEADERS, { 'Operation Key': dKey }));
+  assert.equal(d.context.syncProspectNextActionFromOpenFollowUps(), null);
+  assert.equal(d.prospects.writeLog.length, 0);
+});
+
+test('Activity persistence failure restores prior Prospect fields', () => {
+  const h = makeHarness({ confirmSynchronization: true, prospectRows: [row(PROSPECT_HEADERS, {
+    Company: 'Acme', 'Prospect ID': 'PROS-1', Status: 'Lead Found', 'Next Action': 'Follow Up',
+    'Follow-Up Date': new Date('2026-08-15T12:00:00Z')
+  })] });
+  const originalSet = h.activities.setValueAt.bind(h.activities);
+  h.activities.setValueAt = function() { throw new Error('synthetic Activity failure'); };
+  assert.equal(h.context.syncProspectNextActionFromOpenFollowUps(), null);
+  assert.equal(h.prospects.valueAt(2, 4), 'Follow Up');
+  assert.equal(h.context.synchronizationDateKey_(h.prospects.valueAt(2, 5)), '2026-08-15');
+  h.activities.setValueAt = originalSet;
+});
+
+test('Business Snapshot boundary remains Lead Found and never infers Executive Brief Sent', () => {
+  const h = makeHarness({ confirmSynchronization: true, prospectRows: [row(PROSPECT_HEADERS, {
+    Company: 'Acme', 'Prospect ID': 'PROS-1', Status: 'Lead Found', 'Next Action': 'Generate Executive Brief', 'Offer / Service': 'Business Snapshot'
+  })] });
+  h.context.syncProspectNextActionFromOpenFollowUps();
+  assert.equal(h.prospects.valueAt(2, 3), 'Lead Found');
+  assert.equal(h.prospects.valueAt(2, 4), 'Generate Executive Brief');
+  assert.equal(h.prospects.valueAt(2, 6), 'Business Snapshot');
+});
+
+test('Phase 2B source contains no prohibited service, refresh, lifecycle, intake, or Follow-Up writes', () => {
+  const source = fs.readFileSync(path.join(ROOT, 'SheetHelpers.gs'), 'utf8');
+  const start = source.indexOf('var FOLLOW_UP_NEXT_ACTION_MAP');
+  const end = source.indexOf('\nfunction completeFollowUp()', start);
+  const phase2b = source.slice(start, end);
+  assert.doesNotMatch(phase2b, /GmailApp|MailApp|createOutreachGmailDraft/);
+  assert.doesNotMatch(phase2b, /CalendarApp|createDiscoveryCall/);
+  assert.doesNotMatch(phase2b, /DriveApp|generateAuditPackage/);
+  assert.doesNotMatch(phase2b, /refreshExecutiveDashboard|updatePipelineDashboardMetrics_|refreshClientWorkspace/);
+  assert.doesNotMatch(phase2b, /setProspectStatus|applyConfirmedProspectTransition|submitBusinessSnapshot|appendBusinessSnapshotFollowUp_/);
+  assert.doesNotMatch(phase2b, /markFollowUpRowCompleted_|upsertOpenFollowUp_/);
+});
+
+test('Follow-Ups menu retains Phase 2A actions and adds Phase 2B synchronization', () => {
+  const source = fs.readFileSync(path.join(ROOT, 'Menu.gs'), 'utf8');
+  for (const label of ['Review Selected Follow-Up', 'Open Related Record', 'Complete Selected Follow-Up', 'Sync Prospect Next Action from Open Follow-Ups']) {
+    assert.match(source, new RegExp(label));
+  }
 });

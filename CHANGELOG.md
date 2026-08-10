@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-08-10 — Phase 2B Next Action Synchronization (Acceptance Candidate)
+
+- Added the controlled `Sync Prospect Next Action from Open Follow-Ups` action for an exact-ID selected Prospect or prospect-linked Follow-Up.
+- Added deterministic primary open Follow-Up selection: valid dates before undated tasks, earliest due date first, then lexical Follow-Up ID.
+- Added a fixed, validation-backed Follow-Up Type to Next Action mapping, an explicit unchanged-Status preview, document-locked re-read, stale-preview rejection, verified two-field Prospect writes, and compensating restoration.
+- Added material-change-only Activity correlation through `FOLLOWUPSYNC:<Prospect ID>:<Follow-Up ID>:<transition hash>`, including duplicate-key rejection and retry reconciliation.
+- Added focused coverage for exact identity, ineligible linkage, deterministic selection, preview cancellation, stale state, write boundaries, Activity failure recovery, idempotency, external-side-effect isolation, and Business Snapshot/lifecycle boundaries.
+- Preserved workbook schemas, lifecycle vocabulary and transitions, Phase 2A completion, Business Snapshot intake, Gmail, Calendar, Drive, Dashboard, Client Workspace, Receiver Version 2, and immutable BOP Version 7.
+
 ## 2026-08-09 — Phase 2A Follow-Up Execution Improvements
 
 - Advanced the release-candidate build identifier to `2026.08.10-rc` while retaining semantic product version `1.0.0-rc`.

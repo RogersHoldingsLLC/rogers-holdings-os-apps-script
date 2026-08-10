@@ -861,6 +861,273 @@ function completeSelectedFollowUpControlled() {
   }
 }
 
+var FOLLOW_UP_NEXT_ACTION_MAP = {
+  'Executive Brief': 'Generate Executive Brief',
+  'Discovery Meeting': 'Schedule Discovery Meeting',
+  'Discovery Reminder': 'Follow Up',
+  'Improvement Plan': 'Generate Improvement Plan',
+  'Follow-Up': 'Follow Up',
+  'Final Follow-Up': 'Follow Up'
+};
+
+function synchronizationDateKey_(value) {
+  const date = dateValueOrNull_(value);
+  if (!date) return '';
+  return Utilities.formatDate(date, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+}
+
+function deterministicSynchronizationHash_(parts) {
+  const text = parts.map(function(part) { return String(part == null ? '' : part); }).join('\u001f');
+  let hash = 2166136261;
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return ('00000000' + (hash >>> 0).toString(16).toUpperCase()).slice(-8);
+}
+
+function assertFollowUpNextActionVocabulary_() {
+  const approved = (PROSPECT_DROPDOWN_DEFAULTS && PROSPECT_DROPDOWN_DEFAULTS['Next Action']) || [];
+  const missing = Object.keys(FOLLOW_UP_NEXT_ACTION_MAP).map(function(type) {
+    return FOLLOW_UP_NEXT_ACTION_MAP[type];
+  }).filter(function(value, index, values) {
+    return values.indexOf(value) === index && approved.indexOf(value) === -1;
+  });
+  if (missing.length) {
+    throw new Error(`Approved Next Action mapping is not present in the canonical validation vocabulary: ${missing.join(', ')}. No action was taken.`);
+  }
+}
+
+function resolveExactProspectForFollowUpSync_(ss, prospectId) {
+  const exactId = String(prospectId || '').trim();
+  if (!exactId) throw new Error('Prospect ID is required for synchronization. Company matching is not allowed.');
+  const sheet = ss.getSheetByName(MASTER_PROSPECT_SHEET);
+  if (!sheet) throw new Error('Master Prospect Tracker was not found.');
+  const table = getHeaderTable_(sheet, ['Prospect ID', 'Company', 'Status', 'Next Action', 'Follow-Up Date']);
+  const matches = findRowsByExactHeaderValue_(sheet, table, 'Prospect ID', exactId);
+  if (matches.length !== 1) {
+    throw new Error(matches.length
+      ? `Prospect ID ${exactId} is duplicated. Synchronization was blocked.`
+      : `Prospect ID ${exactId} was not found. Synchronization was blocked.`);
+  }
+  const rowNumber = matches[0];
+  const values = sheet.getRange(rowNumber, 1, 1, table.lastColumn).getValues()[0];
+  return {
+    sheet: sheet, table: table, rowNumber: rowNumber, values: values, prospectId: exactId,
+    company: String(getValueByHeader_(values, table.headers, 'Company') || '').trim(),
+    status: String(getValueByHeader_(values, table.headers, 'Status') || '').trim(),
+    nextAction: String(getValueByHeader_(values, table.headers, 'Next Action') || '').trim(),
+    followUpDate: dateValueOrNull_(getValueByHeader_(values, table.headers, 'Follow-Up Date'))
+  };
+}
+
+function getSelectedProspectIdForFollowUpSync_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss && ss.getActiveSheet();
+  const range = sheet && sheet.getActiveRange();
+  if (!sheet || !range || range.getNumRows() !== 1) {
+    throw new Error('Select exactly one Prospect or prospect-linked Follow-Up row.');
+  }
+  if (sheet.getName() === MASTER_PROSPECT_SHEET) {
+    const table = getHeaderTable_(sheet, ['Prospect ID']);
+    if (range.getRow() <= table.headerRow) throw new Error('Select one Prospect data row.');
+    const id = String(sheet.getRange(range.getRow(), table.headers['Prospect ID']).getValue() || '').trim();
+    if (!id) throw new Error('The selected Prospect is missing Prospect ID. Synchronization was blocked.');
+    return { ss: ss, prospectId: id };
+  }
+  if (sheet.getName() === FOLLOW_UPS_SHEET) {
+    const context = getSelectedFollowUpContext_();
+    if (!context.prospectId) {
+      throw new Error(context.clientId
+        ? 'Client-only Follow-Ups are not eligible for Prospect synchronization.'
+        : 'Legacy company-only Follow-Ups are not eligible for synchronization. Prospect ID is required.');
+    }
+    if (context.clientId) throw new Error('A Follow-Up linked to both Prospect and Client is ambiguous. Synchronization was blocked.');
+    return { ss: ss, prospectId: context.prospectId };
+  }
+  throw new Error('Run synchronization from Master Prospect Tracker or Follow-Ups.');
+}
+
+function resolvePrimaryOpenFollowUpForProspect_(ss, prospectId) {
+  const sheet = ss.getSheetByName(FOLLOW_UPS_SHEET);
+  if (!sheet) throw new Error('Follow-Ups sheet was not found.');
+  const table = getHeaderTable_(sheet, FOLLOW_UP_COLUMNS);
+  const start = table.headerRow + 1;
+  const count = Math.max(sheet.getLastRow() - table.headerRow, 0);
+  const eligible = [];
+  const ids = {};
+  if (count) {
+    sheet.getRange(start, 1, count, table.lastColumn).getValues().forEach(function(values, index) {
+      const rowProspectId = String(getValueByHeader_(values, table.headers, 'Related Prospect ID') || '').trim();
+      if (rowProspectId !== prospectId) return;
+      const clientId = String(getValueByHeader_(values, table.headers, 'Related Client ID') || '').trim();
+      if (clientId) throw new Error(`Follow-Up row ${start + index} has both Prospect and Client linkage. Synchronization was blocked.`);
+      if (isFollowUpCompletedValue_(getValueByHeader_(values, table.headers, 'Completed'))) return;
+      const followUpId = String(getValueByHeader_(values, table.headers, 'Follow-Up ID') || '').trim();
+      if (!followUpId) throw new Error(`An eligible open Follow-Up on row ${start + index} is missing Follow-Up ID. Synchronization was blocked.`);
+      if (ids[followUpId]) throw new Error(`Follow-Up ID ${followUpId} is duplicated among eligible open Follow-Ups. Synchronization was blocked.`);
+      const allMatches = findRowsByExactHeaderValue_(sheet, table, 'Follow-Up ID', followUpId);
+      if (allMatches.length !== 1) throw new Error(`Follow-Up ID ${followUpId} is not globally unique. Synchronization was blocked.`);
+      ids[followUpId] = true;
+      const dueDate = dateValueOrNull_(getValueByHeader_(values, table.headers, 'Due Date'));
+      eligible.push({
+        sheet: sheet, table: table, rowNumber: start + index, values: values,
+        followUpId: followUpId,
+        followUpType: String(getValueByHeader_(values, table.headers, 'Follow-Up Type') || '').trim(),
+        assignedTo: String(getValueByHeader_(values, table.headers, 'Assigned To') || '').trim(),
+        notes: String(getValueByHeader_(values, table.headers, 'Notes') || '').trim(),
+        dueDate: dueDate
+      });
+    });
+  }
+  if (!eligible.length) return null;
+  eligible.sort(function(left, right) {
+    const leftTime = left.dueDate ? startOfDay_(left.dueDate).getTime() : Number.POSITIVE_INFINITY;
+    const rightTime = right.dueDate ? startOfDay_(right.dueDate).getTime() : Number.POSITIVE_INFINITY;
+    if (leftTime !== rightTime) return leftTime - rightTime;
+    return left.followUpId < right.followUpId ? -1 : left.followUpId > right.followUpId ? 1 : 0;
+  });
+  return { primary: eligible[0], eligible: eligible };
+}
+
+function buildFollowUpSynchronizationState_(ss, prospectId) {
+  assertFollowUpNextActionVocabulary_();
+  const prospect = resolveExactProspectForFollowUpSync_(ss, prospectId);
+  const resolved = resolvePrimaryOpenFollowUpForProspect_(ss, prospectId);
+  if (!resolved) throw new Error(`Prospect ${prospect.company || prospectId} has no eligible open Follow-Up to synchronize. No changes were made.`);
+  const primary = resolved.primary;
+  if (primary.followUpType === 'Client Welcome Task') throw new Error('Client Welcome Task is not eligible for Prospect Next Action synchronization.');
+  const proposedNextAction = FOLLOW_UP_NEXT_ACTION_MAP[primary.followUpType];
+  if (!proposedNextAction) throw new Error(`Follow-Up Type ${primary.followUpType || '(blank)'} is not approved for Next Action synchronization. No changes were made.`);
+  const proposedFollowUpDate = primary.dueDate;
+  const signature = deterministicSynchronizationHash_([
+    prospect.prospectId, prospect.rowNumber, prospect.company, prospect.status, prospect.nextAction,
+    synchronizationDateKey_(prospect.followUpDate), primary.followUpId, primary.followUpType,
+    primary.assignedTo, synchronizationDateKey_(primary.dueDate), primary.notes,
+    resolved.eligible.map(function(item) {
+      return [item.followUpId, item.followUpType, synchronizationDateKey_(item.dueDate), item.assignedTo, item.notes].join('|');
+    }).join('||')
+  ]);
+  return {
+    ss: ss, prospect: prospect, primary: primary, eligible: resolved.eligible,
+    proposedNextAction: proposedNextAction, proposedFollowUpDate: proposedFollowUpDate,
+    signature: signature
+  };
+}
+
+function buildFollowUpSynchronizationOperationKey_(state) {
+  const transitionHash = deterministicSynchronizationHash_([
+    state.prospect.nextAction, synchronizationDateKey_(state.prospect.followUpDate),
+    state.proposedNextAction, synchronizationDateKey_(state.proposedFollowUpDate)
+  ]);
+  return `FOLLOWUPSYNC:${state.prospect.prospectId}:${state.primary.followUpId}:${transitionHash}`;
+}
+
+function findFollowUpSynchronizationActivity_(ss, operationKey) {
+  const sheet = ss.getSheetByName(ACTIVITY_FEED_SHEET);
+  if (!sheet) throw new Error('Activity Feed was not found.');
+  const table = getHeaderTable_(sheet, ['Date', 'Company', 'Activity Type', 'Activity Notes', 'Prospect ID', 'Operation Key']);
+  return { sheet: sheet, table: table, rows: findRowsByExactHeaderValue_(sheet, table, 'Operation Key', operationKey) };
+}
+
+function restoreProspectSynchronizationFields_(state) {
+  const nextActionCell = state.prospect.sheet.getRange(state.prospect.rowNumber, state.prospect.table.headers['Next Action']);
+  const followUpDateCell = state.prospect.sheet.getRange(state.prospect.rowNumber, state.prospect.table.headers['Follow-Up Date']);
+  nextActionCell.setValue(state.prospect.nextAction);
+  followUpDateCell.setValue(state.prospect.followUpDate || '');
+  if (String(nextActionCell.getValue() || '').trim() !== state.prospect.nextAction ||
+      synchronizationDateKey_(followUpDateCell.getValue()) !== synchronizationDateKey_(state.prospect.followUpDate)) {
+    throw new Error('Prior Prospect synchronization fields could not be restored. Reconciliation is required.');
+  }
+}
+
+function persistFollowUpSynchronization_(state) {
+  const operationKey = buildFollowUpSynchronizationOperationKey_(state);
+  const existing = findFollowUpSynchronizationActivity_(state.ss, operationKey);
+  if (existing.rows.length > 1) throw new Error(`Activity operation ${operationKey} is duplicated. Synchronization was blocked.`);
+  const nextActionCell = state.prospect.sheet.getRange(state.prospect.rowNumber, state.prospect.table.headers['Next Action']);
+  const followUpDateCell = state.prospect.sheet.getRange(state.prospect.rowNumber, state.prospect.table.headers['Follow-Up Date']);
+  const changed = state.prospect.nextAction !== state.proposedNextAction ||
+    synchronizationDateKey_(state.prospect.followUpDate) !== synchronizationDateKey_(state.proposedFollowUpDate);
+  if (!changed) return { changed: false, idempotent: true, operationKey: '' };
+  try {
+    nextActionCell.setValue(state.proposedNextAction);
+    followUpDateCell.setValue(state.proposedFollowUpDate || '');
+    if (String(nextActionCell.getValue() || '').trim() !== state.proposedNextAction ||
+        synchronizationDateKey_(followUpDateCell.getValue()) !== synchronizationDateKey_(state.proposedFollowUpDate)) {
+      throw new Error('Prospect synchronization write verification failed.');
+    }
+    if (!existing.rows.length) {
+      const rowValues = new Array(existing.table.lastColumn).fill('');
+      setIfHeader_(rowValues, existing.table.headers, 'Date', new Date());
+      setIfHeader_(rowValues, existing.table.headers, 'Company', state.prospect.company);
+      setIfHeader_(rowValues, existing.table.headers, 'Activity Type', 'Follow-Up');
+      setIfHeader_(rowValues, existing.table.headers, 'Activity Notes', `Primary Follow-Up ${state.primary.followUpId}; Next Action: ${state.prospect.nextAction || '(blank)'} -> ${state.proposedNextAction || '(blank)'}; Follow-Up Date: ${synchronizationDateKey_(state.prospect.followUpDate) || '(blank)'} -> ${synchronizationDateKey_(state.proposedFollowUpDate) || '(blank)'}; Assigned To: ${state.primary.assignedTo || '(unassigned)'}.`);
+      setIfHeader_(rowValues, existing.table.headers, 'Prospect ID', state.prospect.prospectId);
+      setIfHeader_(rowValues, existing.table.headers, 'Operation Key', operationKey);
+      const rowNumber = Math.max(existing.sheet.getLastRow() + 1, existing.table.headerRow + 1);
+      existing.sheet.getRange(rowNumber, 1, 1, existing.table.lastColumn).setValues([literalizeBusinessSnapshotSheetRow_(rowValues)]);
+    }
+    const verified = findFollowUpSynchronizationActivity_(state.ss, operationKey);
+    if (verified.rows.length !== 1) throw new Error('Synchronization Activity could not be verified.');
+    return { changed: true, idempotent: existing.rows.length === 1, operationKey: operationKey };
+  } catch (error) {
+    try {
+      restoreProspectSynchronizationFields_(state);
+    } catch (restoreError) {
+      throw restoreError;
+    }
+    throw new Error(`Prospect synchronization failed; prior fields were restored. ${error && error.message ? error.message : String(error)}`);
+  }
+}
+
+function formatFollowUpSynchronizationPreview_(state) {
+  return [
+    `Prospect: ${state.prospect.company || '(blank)'} (${state.prospect.prospectId})`,
+    `Current Status: ${state.prospect.status || '(blank)'}`,
+    'Status: UNCHANGED — synchronization will not advance lifecycle state.',
+    '',
+    `Primary Follow-Up ID: ${state.primary.followUpId}`,
+    `Follow-Up Type: ${state.primary.followUpType}`,
+    `Assigned To: ${state.primary.assignedTo || '(unassigned)'}`,
+    `Due Date: ${synchronizationDateKey_(state.primary.dueDate) || '(blank)'}`,
+    `Notes: ${state.primary.notes || '(blank)'}`,
+    '',
+    `Next Action: ${state.prospect.nextAction || '(blank)'} -> ${state.proposedNextAction || '(blank)'}`,
+    `Follow-Up Date: ${synchronizationDateKey_(state.prospect.followUpDate) || '(blank)'} -> ${synchronizationDateKey_(state.proposedFollowUpDate) || '(blank)'}`,
+    '',
+    'Synchronize these two Prospect fields?'
+  ].join('\n');
+}
+
+function syncProspectNextActionFromOpenFollowUps() {
+  let lock = null;
+  try {
+    const selected = getSelectedProspectIdForFollowUpSync_();
+    const preview = buildFollowUpSynchronizationState_(selected.ss, selected.prospectId);
+    const ui = SpreadsheetApp.getUi();
+    if (ui.alert('Sync Prospect Next Action', formatFollowUpSynchronizationPreview_(preview), ui.ButtonSet.YES_NO) !== ui.Button.YES) {
+      return { changed: false, cancelled: true };
+    }
+    lock = LockService.getDocumentLock();
+    lock.waitLock(30000);
+    const current = buildFollowUpSynchronizationState_(selected.ss, selected.prospectId);
+    if (current.signature !== preview.signature) {
+      throw new Error('Prospect or open Follow-Up state changed after the preview. No changes were made; run synchronization again for a new preview.');
+    }
+    const result = persistFollowUpSynchronization_(current);
+    ui.alert('Business Optimization Platform', result.changed
+      ? `Prospect Next Action and Follow-Up Date synchronized from ${current.primary.followUpId}. Status remained unchanged.`
+      : `Prospect Next Action and Follow-Up Date already match ${current.primary.followUpId}. No changes were made.`, ui.ButtonSet.OK);
+    return result;
+  } catch (error) {
+    SpreadsheetApp.getUi().alert('Business Optimization Platform', error && error.message ? error.message : String(error), SpreadsheetApp.getUi().ButtonSet.OK);
+    return null;
+  } finally {
+    if (lock) lock.releaseLock();
+  }
+}
+
 function completeFollowUp() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const ui = SpreadsheetApp.getUi();
