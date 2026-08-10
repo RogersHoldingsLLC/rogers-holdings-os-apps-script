@@ -56,9 +56,7 @@ function onOpen(e) {
 
   const followUpMenu = ui.createMenu('Follow-Ups')
     .addItem('Create Follow-Up', 'createFollowUp')
-    .addItem('Review Selected Follow-Up', 'showSelectedFollowUpContext')
-    .addItem('Open Related Record', 'openSelectedFollowUpRelatedRecord')
-    .addItem('Complete Selected Follow-Up', 'completeSelectedFollowUpControlled')
+    .addItem('Complete Follow-Up', 'completeFollowUp')
     .addItem('Refresh Follow-Ups', 'refreshFollowUps');
 
   const clientProjectMenu = ui.createMenu('Clients & Projects')
