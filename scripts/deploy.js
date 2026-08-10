@@ -124,6 +124,8 @@ async function deploy(targetName, options = {}) {
   if (targetName === 'production') {
     assertProductionGitSafety(projectRoot, capture, environment);
     run('npm', ['run', 'validate'], projectRoot);
+    run('npm', ['run', 'test:follow-up-execution'], projectRoot);
+    run('npm', ['run', 'test:business-snapshot-naming'], projectRoot);
     run('npm', ['run', 'test:prospect-revenue'], projectRoot);
     run('npm', ['run', 'test:lifecycle'], projectRoot);
     run('npm', ['run', 'test:audit-rendering'], projectRoot);

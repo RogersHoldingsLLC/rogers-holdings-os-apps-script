@@ -78,8 +78,10 @@ async function main() {
         commands.push([command].concat(args).join(' '));
       }
     }));
-    assert.deepStrictEqual(commands.slice(0, 7), [
+    assert.deepStrictEqual(commands.slice(0, 9), [
       'npm run validate',
+      'npm run test:follow-up-execution',
+      'npm run test:business-snapshot-naming',
       'npm run test:prospect-revenue',
       'npm run test:lifecycle',
       'npm run test:audit-rendering',

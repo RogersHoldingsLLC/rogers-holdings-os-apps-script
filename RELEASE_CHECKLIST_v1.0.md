@@ -2,7 +2,7 @@
 
 Candidate: `1.0.0-rc`
 
-Build: `2026.07.20-rc`
+Build: `2026.08.10-rc`
 
 Target release: `1.0.0`
 
@@ -19,7 +19,7 @@ This checklist is the release-control record for Version 1.0. Check an item only
 - [ ] Confirm the release candidate is on `main` or an explicitly approved release branch.
 - [ ] Confirm the working tree is clean.
 - [ ] Record the candidate Git commit and source fingerprint.
-- [ ] Confirm `VERSION.md`, `CHANGELOG.md`, `README.md`, `PROJECT_MEMORY.md`, and the acceptance documents identify candidate `1.0.0-rc`, build `2026.07.20-rc`, target release `1.0.0`, release-candidate status, and Business Optimization Platform.
+- [ ] Confirm `VERSION.md`, `CHANGELOG.md`, `README.md`, and `PROJECT_MEMORY.md` identify candidate `1.0.0-rc`, build `2026.08.10-rc`, target release `1.0.0`, release-candidate status, and Business Optimization Platform. Preserve dated acceptance documents as historical evidence of the build they validated.
 - [ ] Confirm `.clasp.json` identifies the disposable acceptance project.
 - [ ] Confirm `.clasp.production.json` identifies the intended production project.
 - [ ] Confirm no real prospect or client data is present in the disposable acceptance workbook.

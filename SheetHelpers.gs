@@ -517,6 +517,350 @@ function createFollowUp() {
   ui.alert('Business Optimization Platform', result.created ? 'Follow-Up created.' : 'Existing open Follow-Up updated.', ui.ButtonSet.OK);
 }
 
+function getSelectedFollowUpContext_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss && ss.getActiveSheet();
+  if (!sheet || sheet.getName() !== FOLLOW_UPS_SHEET) {
+    throw new Error('Select one Follow-Up row on the Follow-Ups sheet.');
+  }
+
+  const activeRange = sheet.getActiveRange();
+  const table = getHeaderTable_(sheet, FOLLOW_UP_COLUMNS);
+  if (!activeRange || activeRange.getNumRows() !== 1 || activeRange.getRow() <= table.headerRow) {
+    throw new Error('Select exactly one Follow-Up data row.');
+  }
+
+  const selectedValues = sheet.getRange(activeRange.getRow(), 1, 1, table.lastColumn).getValues()[0];
+  const followUpId = String(getValueByHeader_(selectedValues, table.headers, 'Follow-Up ID') || '').trim();
+  if (!followUpId) {
+    throw new Error('The selected Follow-Up is missing Follow-Up ID. No action was taken.');
+  }
+
+  const matches = findRowsByExactHeaderValue_(sheet, table, 'Follow-Up ID', followUpId);
+  if (matches.length !== 1) {
+    throw new Error(matches.length
+      ? `Follow-Up ID ${followUpId} is duplicated. Reconcile the duplicate before continuing.`
+      : `Follow-Up ID ${followUpId} could not be reverified. No action was taken.`);
+  }
+
+  const rowNumber = matches[0];
+  const values = sheet.getRange(rowNumber, 1, 1, table.lastColumn).getValues()[0];
+  const verifiedId = String(getValueByHeader_(values, table.headers, 'Follow-Up ID') || '').trim();
+  if (verifiedId !== followUpId) {
+    throw new Error('The selected Follow-Up changed during verification. No action was taken.');
+  }
+
+  const prospectId = String(getValueByHeader_(values, table.headers, 'Related Prospect ID') || '').trim();
+  const clientId = String(getValueByHeader_(values, table.headers, 'Related Client ID') || '').trim();
+  if (prospectId && clientId) {
+    throw new Error('The selected Follow-Up has both Prospect and Client linkage. Reconcile the ambiguous linkage before continuing.');
+  }
+
+  const dueDate = dateValueOrNull_(getValueByHeader_(values, table.headers, 'Due Date'));
+  const completed = isFollowUpCompletedValue_(getValueByHeader_(values, table.headers, 'Completed'));
+  return {
+    ss: ss,
+    sheet: sheet,
+    table: table,
+    rowNumber: rowNumber,
+    values: values,
+    followUpId: followUpId,
+    prospectId: prospectId,
+    clientId: clientId,
+    company: String(getValueByHeader_(values, table.headers, 'Company') || '').trim(),
+    contact: getValueByHeader_(values, table.headers, 'Contact'),
+    email: getValueByHeader_(values, table.headers, 'Email'),
+    followUpType: getValueByHeader_(values, table.headers, 'Follow-Up Type'),
+    notes: getValueByHeader_(values, table.headers, 'Notes'),
+    dueDate: dueDate,
+    dueState: getFollowUpDueState_(dueDate, completed),
+    assignedTo: getValueByHeader_(values, table.headers, 'Assigned To'),
+    completed: completed,
+    completedDate: dateValueOrNull_(getValueByHeader_(values, table.headers, 'Completed Date'))
+  };
+}
+
+function getFollowUpDueState_(dueDate, completed) {
+  if (completed) return 'Completed';
+  if (!dueDate) return 'No due date';
+  const today = startOfDay_(new Date()).getTime();
+  const due = startOfDay_(dueDate).getTime();
+  if (due < today) return 'Overdue';
+  if (due === today) return 'Due today';
+  return 'Upcoming';
+}
+
+function findUniqueRowByExactHeaderValue_(sheet, header, expected, label) {
+  const table = getHeaderTable_(sheet, [header]);
+  const matches = findRowsByExactHeaderValue_(sheet, table, header, expected);
+  if (matches.length !== 1) {
+    throw new Error(matches.length
+      ? `${label} ${expected} is duplicated. Navigation was blocked.`
+      : `${label} ${expected} was not found. Navigation was blocked.`);
+  }
+  return { sheet: sheet, table: table, rowNumber: matches[0] };
+}
+
+function findUniqueLegacyCompanyRecord_(ss, company) {
+  const companyKey = normalizeLookupKey_(company);
+  if (!companyKey) {
+    throw new Error('The legacy Follow-Up has no usable company linkage. Navigation was blocked.');
+  }
+
+  const matches = [];
+  [
+    { sheetName: MASTER_PROSPECT_SHEET, headers: ['Company'], type: 'Prospect' },
+    { sheetName: CLIENTS_SHEET, headers: ['Company', 'Client Name'], type: 'Client' }
+  ].forEach(function(definition) {
+    const sheet = ss.getSheetByName(definition.sheetName);
+    if (!sheet) return;
+    const table = getHeaderTable_(sheet, definition.headers);
+    const start = table.headerRow + 1;
+    const count = Math.max(sheet.getLastRow() - table.headerRow, 0);
+    if (!count) return;
+    const rows = sheet.getRange(start, 1, count, table.lastColumn).getValues();
+    rows.forEach(function(values, index) {
+      const candidate = definition.type === 'Prospect'
+        ? getValueByHeader_(values, table.headers, 'Company')
+        : firstNonBlank_([
+          getValueByHeader_(values, table.headers, 'Company'),
+          getValueByHeader_(values, table.headers, 'Client Name')
+        ]);
+      if (normalizeLookupKey_(candidate) === companyKey) {
+        matches.push({ sheet: sheet, table: table, rowNumber: start + index, type: definition.type });
+      }
+    });
+  });
+
+  if (matches.length !== 1) {
+    throw new Error(matches.length
+      ? `Company ${company} matches multiple prospect/client records. Legacy navigation was blocked.`
+      : `Company ${company} has no unique prospect/client record. Navigation was blocked.`);
+  }
+  return matches[0];
+}
+
+function resolveSelectedFollowUpRelatedRecord_(context) {
+  if (context.prospectId) {
+    const prospectSheet = context.ss.getSheetByName(MASTER_PROSPECT_SHEET);
+    if (!prospectSheet) throw new Error('Master Prospect Tracker was not found.');
+    return Object.assign(
+      findUniqueRowByExactHeaderValue_(prospectSheet, 'Prospect ID', context.prospectId, 'Prospect ID'),
+      { type: 'Prospect' }
+    );
+  }
+  if (context.clientId) {
+    const clientSheet = context.ss.getSheetByName(CLIENTS_SHEET);
+    if (!clientSheet) throw new Error('Clients sheet was not found.');
+    return Object.assign(
+      findUniqueRowByExactHeaderValue_(clientSheet, 'Client ID', context.clientId, 'Client ID'),
+      { type: 'Client' }
+    );
+  }
+  return findUniqueLegacyCompanyRecord_(context.ss, context.company);
+}
+
+function openFollowUpRelatedRecord_(context) {
+  const related = resolveSelectedFollowUpRelatedRecord_(context);
+  context.ss.setActiveSheet(related.sheet);
+  related.sheet.setActiveRange(related.sheet.getRange(related.rowNumber, 1, 1, related.table.lastColumn));
+  if (related.type === 'Prospect') {
+    openProspectWorkspace();
+  } else if (related.type === 'Client') {
+    const workspace = context.ss.getSheetByName(CLIENT_WORKSPACE_SHEET);
+    const workspaceClientId = workspace ? String(workspace.getRange(4, 2).getValue() || '').trim() : '';
+    const selectedClientId = String(getValueByHeader_(
+      related.sheet.getRange(related.rowNumber, 1, 1, related.table.lastColumn).getValues()[0],
+      related.table.headers,
+      'Client ID'
+    ) || '').trim();
+    if (workspace && selectedClientId && workspaceClientId === selectedClientId) {
+      context.ss.setActiveSheet(workspace);
+    }
+  }
+  return related;
+}
+
+function openSelectedFollowUpRelatedRecord() {
+  try {
+    return openFollowUpRelatedRecord_(getSelectedFollowUpContext_());
+  } catch (error) {
+    SpreadsheetApp.getUi().alert('Business Optimization Platform', error && error.message ? error.message : String(error), SpreadsheetApp.getUi().ButtonSet.OK);
+    return null;
+  }
+}
+
+function getLiveProspectFollowUpState_(context) {
+  if (!context.prospectId) return { status: '', nextAction: '' };
+  const sheet = context.ss.getSheetByName(MASTER_PROSPECT_SHEET);
+  if (!sheet) throw new Error('Master Prospect Tracker was not found.');
+  const related = findUniqueRowByExactHeaderValue_(sheet, 'Prospect ID', context.prospectId, 'Prospect ID');
+  const values = sheet.getRange(related.rowNumber, 1, 1, related.table.lastColumn).getValues()[0];
+  return {
+    status: getValueByHeader_(values, related.table.headers, 'Status'),
+    nextAction: getValueByHeader_(values, related.table.headers, 'Next Action')
+  };
+}
+
+function getRecentCorrelatedFollowUpActivity_(context, limit) {
+  const sheet = context.ss.getSheetByName(ACTIVITY_FEED_SHEET);
+  if (!sheet) return [];
+  const table = getHeaderTable_(sheet, ['Date', 'Company', 'Activity Type', 'Activity Notes', 'Prospect ID', 'Operation Key']);
+  const start = table.headerRow + 1;
+  const count = Math.max(sheet.getLastRow() - table.headerRow, 0);
+  if (!count) return [];
+  const companyKey = normalizeLookupKey_(context.company);
+  return sheet.getRange(start, 1, count, table.lastColumn).getValues().map(function(values) {
+    return {
+      date: getValueByHeader_(values, table.headers, 'Date'),
+      company: getValueByHeader_(values, table.headers, 'Company'),
+      activityType: getValueByHeader_(values, table.headers, 'Activity Type'),
+      notes: getValueByHeader_(values, table.headers, 'Activity Notes'),
+      prospectId: String(getValueByHeader_(values, table.headers, 'Prospect ID') || '').trim(),
+      operationKey: String(getValueByHeader_(values, table.headers, 'Operation Key') || '').trim()
+    };
+  }).filter(function(activity) {
+    if (context.prospectId) return activity.prospectId === context.prospectId;
+    return companyKey && normalizeLookupKey_(activity.company) === companyKey;
+  }).sort(function(a, b) {
+    return dateSortValue_(b.date) - dateSortValue_(a.date);
+  }).slice(0, limit || 5);
+}
+
+function showSelectedFollowUpContext() {
+  try {
+    const context = getSelectedFollowUpContext_();
+    const prospect = getLiveProspectFollowUpState_(context);
+    const activities = getRecentCorrelatedFollowUpActivity_(context, 5);
+    const activityHtml = activities.length ? activities.map(function(activity) {
+      return `<li><strong>${escapeHtml_(formatDisplayDate_(activity.date))}</strong> — ${escapeHtml_(activity.activityType)}${activity.notes ? `: ${escapeHtml_(activity.notes)}` : ''}</li>`;
+    }).join('') : '<li>No correlated Activity records found.</li>';
+    const html = HtmlService.createHtmlOutput(`
+      <div style="font-family:Arial,sans-serif;padding:20px;color:#202020">
+        <h2 style="margin:0 0 12px">${escapeHtml_(context.company || 'Selected Follow-Up')}</h2>
+        <p>${escapeHtml_(context.contact || '')}${context.email ? ` · ${escapeHtml_(context.email)}` : ''}</p>
+        <p><strong>Task:</strong> ${escapeHtml_(context.followUpType || '')}</p>
+        <p><strong>Due:</strong> ${escapeHtml_(formatDisplayDate_(context.dueDate))} (${escapeHtml_(context.dueState)})</p>
+        <p><strong>Owner:</strong> ${escapeHtml_(context.assignedTo || '')}</p>
+        <p><strong>Notes:</strong> ${escapeHtml_(context.notes || '')}</p>
+        <p><strong>Live Status:</strong> ${escapeHtml_(prospect.status || 'Not linked to a prospect')}</p>
+        <p><strong>Live Next Action:</strong> ${escapeHtml_(prospect.nextAction || 'Not available')}</p>
+        <h3>Recent Activity</h3><ol>${activityHtml}</ol>
+      </div>
+    `).setWidth(620).setHeight(620);
+    SpreadsheetApp.getUi().showModalDialog(html, 'Selected Follow-Up');
+    return { context: context, prospect: prospect, activities: activities };
+  } catch (error) {
+    SpreadsheetApp.getUi().alert('Business Optimization Platform', error && error.message ? error.message : String(error), SpreadsheetApp.getUi().ButtonSet.OK);
+    return null;
+  }
+}
+
+function buildFollowUpCompletionOperationKey_(followUpId) {
+  return `FOLLOWUP:${String(followUpId || '').trim()}:COMPLETE`;
+}
+
+function findFollowUpCompletionActivityRows_(ss, operationKey) {
+  const sheet = ss.getSheetByName(ACTIVITY_FEED_SHEET);
+  if (!sheet) throw new Error('Activity Feed was not found.');
+  const table = getHeaderTable_(sheet, ['Operation Key']);
+  return {
+    sheet: sheet,
+    table: table,
+    rows: findRowsByExactHeaderValue_(sheet, table, 'Operation Key', operationKey)
+  };
+}
+
+function appendFollowUpCompletionActivity_(context, operationKey) {
+  if (!context.prospectId) return { appended: false, operationKey: operationKey };
+  const existing = findFollowUpCompletionActivityRows_(context.ss, operationKey);
+  if (existing.rows.length > 1) {
+    throw new Error(`Completion Activity operation ${operationKey} is duplicated. Reconciliation is required.`);
+  }
+  if (existing.rows.length === 1) return { appended: false, operationKey: operationKey };
+
+  const rowValues = new Array(existing.table.lastColumn).fill('');
+  setIfHeader_(rowValues, existing.table.headers, 'Date', new Date());
+  setIfHeader_(rowValues, existing.table.headers, 'Company', context.company);
+  setIfHeader_(rowValues, existing.table.headers, 'Activity Type', 'Follow-Up Completed');
+  setIfHeader_(rowValues, existing.table.headers, 'Activity Notes', `Completed Follow-Up ${context.followUpId}: ${context.followUpType || 'Follow-Up'}.`);
+  setIfHeader_(rowValues, existing.table.headers, 'Prospect ID', context.prospectId);
+  setIfHeader_(rowValues, existing.table.headers, 'Operation Key', operationKey);
+  const targetRow = Math.max(existing.sheet.getLastRow() + 1, existing.table.headerRow + 1);
+  existing.sheet.getRange(targetRow, 1, 1, existing.table.lastColumn)
+    .setValues([literalizeBusinessSnapshotSheetRow_(rowValues)]);
+
+  const verified = findFollowUpCompletionActivityRows_(context.ss, operationKey);
+  if (verified.rows.length !== 1) {
+    throw new Error('Follow-Up completion Activity could not be verified. Retry the same completion to reconcile.');
+  }
+  return { appended: true, operationKey: operationKey };
+}
+
+function writeSelectedFollowUpCompletion_(context, completedAt) {
+  const completedCell = context.sheet.getRange(context.rowNumber, context.table.headers.Completed);
+  const completedDateCell = context.sheet.getRange(context.rowNumber, context.table.headers['Completed Date']);
+  const beforeCompleted = completedCell.getValue();
+  const beforeCompletedDate = completedDateCell.getValue();
+  try {
+    completedCell.setValue(true);
+    completedDateCell.setValue(completedAt);
+    const persistedCompleted = isFollowUpCompletedValue_(completedCell.getValue());
+    const persistedDate = dateValueOrNull_(completedDateCell.getValue());
+    if (!persistedCompleted || !persistedDate || persistedDate.getTime() !== completedAt.getTime()) {
+      throw new Error('Follow-Up completion verification failed.');
+    }
+  } catch (error) {
+    let restored = false;
+    try {
+      completedCell.setValue(beforeCompleted);
+      completedDateCell.setValue(beforeCompletedDate);
+      restored = completedCell.getValue() === beforeCompleted && completedDateCell.getValue() === beforeCompletedDate;
+    } catch (restoreError) {
+      console.error(restoreError);
+    }
+    throw new Error(restored
+      ? 'Follow-Up completion failed; the original completion fields were restored.'
+      : 'Follow-Up completion failed and the original completion fields could not be verified. Reconciliation is required.');
+  }
+}
+
+function completeSelectedFollowUpControlled() {
+  let lock = null;
+  try {
+    const selected = getSelectedFollowUpContext_();
+    lock = LockService.getDocumentLock();
+    lock.waitLock(30000);
+    const context = getSelectedFollowUpContext_();
+    if (context.followUpId !== selected.followUpId) {
+      throw new Error('The selected Follow-Up changed before the lock was acquired. No action was taken.');
+    }
+
+    const operationKey = buildFollowUpCompletionOperationKey_(context.followUpId);
+    if (!context.completed) {
+      writeSelectedFollowUpCompletion_(context, new Date());
+    }
+    const activity = appendFollowUpCompletionActivity_(context, operationKey);
+    const prospect = getLiveProspectFollowUpState_(context);
+    const message = context.completed
+      ? `Follow-Up ${context.followUpId} was already complete. Idempotent reconciliation finished.`
+      : `Follow-Up ${context.followUpId} is complete.`;
+    const ui = SpreadsheetApp.getUi();
+    const response = ui.alert(
+      'Follow-Up Complete',
+      `${message}\n\nCurrent Next Action: ${prospect.nextAction || 'Not available'}\n\nOpen the related record now?`,
+      ui.ButtonSet.YES_NO
+    );
+    if (response === ui.Button.YES) openFollowUpRelatedRecord_(context);
+    return { completed: true, idempotent: context.completed, activityAppended: activity.appended, operationKey: operationKey };
+  } catch (error) {
+    SpreadsheetApp.getUi().alert('Business Optimization Platform', error && error.message ? error.message : String(error), SpreadsheetApp.getUi().ButtonSet.OK);
+    return null;
+  } finally {
+    if (lock) lock.releaseLock();
+  }
+}
+
 function completeFollowUp() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const ui = SpreadsheetApp.getUi();

@@ -4,7 +4,7 @@
 
 `1.0.0-rc`
 
-Build: `2026.07.20-rc`
+Build: `2026.08.10-rc`
 
 Product: Business Optimization Platform
 

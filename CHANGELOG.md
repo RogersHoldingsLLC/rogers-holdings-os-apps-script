@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-08-09 — Phase 2A Follow-Up Execution Improvements
+
+- Advanced the release-candidate build identifier to `2026.08.10-rc` while retaining semantic product version `1.0.0-rc`.
+- Added exact-ID selected Follow-Up context, fail-closed prospect/client navigation, safe opening of an already-correlated Client Workspace without refresh, and unique-company legacy fallback without changing workbook schema.
+- Added a read-only Follow-Up review dialog with live prospect Status, live Next Action, due state, ownership, notes, and the five newest Prospect-ID-correlated Activity records.
+- Added document-locked, exact-row Follow-Up completion with persisted verification and idempotent `FOLLOWUP:<Follow-Up ID>:COMPLETE` Activity correlation.
+- Added focused regression coverage for exact linkage, ambiguity handling, sibling-task isolation, completion-field boundaries, Activity idempotency, recent context, Business Snapshot replay, and prohibited external/generated-surface actions.
+- Preserved lifecycle state, Next Action, workbook headers/validations/formatting, Business Snapshot intake, Gmail, Calendar, Drive, Dashboard, and Client Workspace behavior.
+
 ## 2026-08-09 — Workbook Optimization Safety Foundation
 
 - Captured a read-only production workbook baseline covering sheet structure, exact headers, populated row counts, validation rules, conditional formatting, entity counts, accepted Business Snapshot correlation evidence, and fixed Apps Script layout coordinates.

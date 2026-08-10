@@ -4,7 +4,9 @@ This document preserves the current operating knowledge for future Business Opti
 
 ## Current Status
 
-The Business Optimization Platform is at Version `1.0.0-rc` (build `2026.07.20-rc`). It is a release candidate, not production-ready or released. The target `1.0.0` release remains pending final live acceptance, final release sign-off, and production approval.
+The Business Optimization Platform is at Version `1.0.0-rc` (build `2026.08.10-rc`). It is a release candidate, not production-ready or released. The target `1.0.0` release remains pending final live acceptance, final release sign-off, and production approval.
+
+Phase 2A Follow-Up execution improvements are implemented locally for isolated acceptance review only. The change adds exact Follow-Up ID context and navigation, a read-only review dialog, and controlled idempotent completion correlated through `FOLLOWUP:<Follow-Up ID>:COMPLETE`. It adds no workbook fields and does not change Status, Next Action, lifecycle transitions, Business Snapshot intake, Gmail, Calendar, Drive, Executive Dashboard, or Client Workspace. Production deployment remains unapproved.
 
 Feature development is frozen for V1.0. Current work should focus on release acceptance, bug fixes, documentation, and production readiness.
 

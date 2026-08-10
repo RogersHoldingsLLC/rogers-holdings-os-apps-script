@@ -81,7 +81,7 @@ const realLogPipelineActivity = context.logPipelineActivity_;
 context.showProductAbout();
 assert.strictEqual(aboutDialogTitle, 'About');
 assert.match(aboutHtml, /1\.0\.0-rc/, 'About displays the release-candidate version');
-assert.match(aboutHtml, /2026\.07\.20-rc/, 'About displays the release-candidate build');
+assert.match(aboutHtml, /2026\.08\.10-rc/, 'About displays the release-candidate build');
 assert.match(aboutHtml, /not yet approved for production/, 'About identifies the production gate');
 
 const verified = {

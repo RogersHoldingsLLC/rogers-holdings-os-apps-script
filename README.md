@@ -38,7 +38,7 @@ Lead Found -> Executive Brief Sent -> Discovery Meeting Scheduled -> Digital Bus
 
 Release candidate: `1.0.0-rc`
 
-Build: `2026.07.20-rc`
+Build: `2026.08.10-rc`
 
 Target release: `1.0.0` after final acceptance and production approval
 
