@@ -18,7 +18,9 @@ const requiredFiles = [
   'CalendarEngine.gs',
   'DriveEngine.gs',
   'DemoData.gs',
-  'HealthCheck.gs'
+  'HealthCheck.gs',
+  'BusinessSnapshotIntake.gs',
+  'HeadquartersSalesFeed.gs'
 ];
 
 function fail(message) {
