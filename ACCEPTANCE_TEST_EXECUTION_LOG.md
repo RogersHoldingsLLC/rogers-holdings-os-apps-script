@@ -35,6 +35,32 @@ This summary records only evidence available in the repository or reproduced loc
 
 Use with `BUSINESS_OPTIMIZATION_PLATFORM_ACCEPTANCE_TEST_PLAN.md`. The local RC evidence summary above is populated; the live execution fields below remain open. Duplicate test rows when a scenario requires multiple stages, services, browsers, or retries.
 
+## Paused acceptance checkpoint — 2026-08-11
+
+Acceptance paused at a verified local checkpoint on `main` commit `024815cc521d7dd5c20f226dddb2b3f262be7505`. The working tree was clean and `HEAD` matched `origin/main` before this documentation-only checkpoint was added. No production or real customer data was read or changed, no Apps Script deployment was performed, and no live Google Workspace acceptance action was executed.
+
+Completed local evidence reproduced against this candidate:
+
+- `git diff --check` passed.
+- `npm run status:acceptance` and `npm run status:production` confirmed distinct configured targets.
+- `npm run validate` passed for 27 authoritative Apps Script files.
+- `npm run test:lifecycle`, `npm run test:audit-rendering`, `npm run test:ebi`, `npm run test:prospect-revenue`, `npm run test:follow-up-execution`, `npm run test:headquarters-sales-feed`, and `npm test` passed.
+- Follow-Up execution recorded 32 passing deterministic tests; deployment safety recorded 10 passing tests.
+- `npm run acceptance:ebi` regenerated `test-output/EXECUTIVE_BUSINESS_INTELLIGENCE_ACCEPTANCE_COMPARISON.md`; the tracked artifact remained unchanged. Its SHA-256 at the checkpoint was `20e27b56160167f314cd0980417f30e2700a0c5726755d49bf72d0fb59591731`.
+- Read-only `clasp status` confirmed the acceptance target's tracked source set. Further remote version/deployment inspection stopped when Google required interactive reauthentication (`invalid_grant` / `invalid_rapt`).
+
+Deferred and explicitly not complete:
+
+- Google reauthentication.
+- Acceptance project isolation audit, including properties, triggers, deployments, libraries, OAuth scopes, workbook mapping, and external destinations.
+- Any separately approved disposable acceptance deployment.
+- Live synthetic lifecycle execution.
+- Live generated customer-package verification and Brian visual/business approval.
+- Live Gmail, Calendar, Drive, failure-injection, reconciliation, and recovery tests.
+- Named reviewer decisions and final acceptance sign-off.
+
+Resume from this checkpoint by completing interactive Google reauthentication with `npx clasp login`, then perform the read-only isolation audit required by `docs/BOP_WORKBOOK_ACCEPTANCE_ISOLATION_PLAN.md`. Do not deploy or run workbook automation until that audit is recorded and separate approval is given.
+
 ## Execution metadata
 
 - Workbook name: ______________________________________________
