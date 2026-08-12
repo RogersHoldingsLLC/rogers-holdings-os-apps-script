@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-08-12 — Playground and Client Drive Root Isolation
+
+- Added the durable Production + Playground workbook model and documented the temporary acceptance-checkpoint migration path.
+- Added `BOP_CLIENT_DRIVE_ROOT_ID` so configured production artifact lookup and creation remain under the stable Rogers Holdings Clients folder instead of using global Drive name discovery.
+- Added fail-closed duplicate/unavailable-root behavior and deterministic isolation tests while preserving legacy lookup only when the property is absent.
+- Recorded the production workbook timezone mismatch as a separate controlled follow-up; no timezone was changed.
+
 ## 2026-08-10 — Phase 2B Next Action Synchronization (Acceptance Candidate)
 
 - Added the controlled `Sync Prospect Next Action from Open Follow-Ups` action for an exact-ID selected Prospect or prospect-linked Follow-Up.

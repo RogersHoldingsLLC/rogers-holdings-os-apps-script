@@ -203,6 +203,8 @@ Acceptance uses `.clasp.json` and requires `DEPLOY ACCEPTANCE`. Production uses 
 
 ## Known Technical Debt
 
+- Production workbook timezone is `America/Los_Angeles` while business and Apps Script operations use `America/New_York`. Migrate only in a separately approved, date-boundary-tested change after workbook consolidation.
+
 - `SheetHelpers.gs` is large and may eventually need another careful split.
 - `refreshSalesOperatingSystem_()` performs several expensive operations and may need a lighter startup path.
 - Root `.js` duplicate files are ignored by deployment but create validation noise.

@@ -204,13 +204,58 @@ function buildOnboardingChecklistText_(prospect) {
   ].join('\n');
 }
 
+var BOP_CLIENT_DRIVE_ROOT_PROPERTY = 'BOP_CLIENT_DRIVE_ROOT_ID';
+
+function getConfiguredClientDriveRootFolder_() {
+  const folderId = String(
+    PropertiesService.getScriptProperties().getProperty(BOP_CLIENT_DRIVE_ROOT_PROPERTY) || ''
+  ).trim();
+  if (!folderId) {
+    return null;
+  }
+
+  try {
+    return DriveApp.getFolderById(folderId);
+  } catch (error) {
+    throw new Error('The configured production client Drive root is unavailable. Review BOP_CLIENT_DRIVE_ROOT_ID.');
+  }
+}
+
+function getExactChildFolderOrThrow_(parentFolder, folderName) {
+  const folders = parentFolder.getFoldersByName(folderName);
+  if (!folders.hasNext()) {
+    return null;
+  }
+  const folder = folders.next();
+  if (folders.hasNext()) {
+    throw new Error(`Multiple client folders named "${folderName}" exist under the configured client Drive root.`);
+  }
+  return folder;
+}
+
+function getExistingClientArtifactFolder_(company) {
+  const folderName = sanitizeDriveFileName_(company || 'Audit Package');
+  const configuredRoot = getConfiguredClientDriveRootFolder_();
+  if (configuredRoot) {
+    return getExactChildFolderOrThrow_(configuredRoot, folderName);
+  }
+
+  const folders = DriveApp.getFoldersByName(folderName);
+  return folders.hasNext() ? folders.next() : null;
+}
+
 function getOrCreateAuditPackageFolder_(company) {
   const folderName = sanitizeDriveFileName_(company || 'Audit Package');
+  const configuredRoot = getConfiguredClientDriveRootFolder_();
+  if (configuredRoot) {
+    const existing = getExactChildFolderOrThrow_(configuredRoot, folderName);
+    return existing || configuredRoot.createFolder(folderName);
+  }
+
   const folders = DriveApp.getFoldersByName(folderName);
   if (folders.hasNext()) {
     return folders.next();
   }
-
   return DriveApp.createFolder(folderName);
 }
 

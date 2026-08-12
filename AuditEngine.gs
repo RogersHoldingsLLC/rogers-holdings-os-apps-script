@@ -827,9 +827,7 @@ function isAuditPackageGenerated_(rowValues, headers) {
 }
 
 function getAuditPackageFolder_(company) {
-  const folderName = sanitizeDriveFileName_(company || 'Audit Package');
-  const folders = DriveApp.getFoldersByName(folderName);
-  return folders.hasNext() ? folders.next() : null;
+  return getExistingClientArtifactFolder_(company);
 }
 
 function buildSelectedProspectForAuditPackage_(context) {
