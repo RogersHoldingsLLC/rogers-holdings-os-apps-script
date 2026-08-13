@@ -134,8 +134,17 @@ function assertUniqueProspectRevenueId_(sheet, table, selectedRow, prospectId) {
 function runProspectRevenuePreparation_(isResume) {
   const context = getSelectedProspectContext_(['Company']);
   if (!context) return null;
-  const validation = validateProspectRevenueContext_(context);
   const ui = SpreadsheetApp.getUi();
+  let goldStandardPreflight;
+  try {
+    goldStandardPreflight = preflightProspectRevenueGoldStandard_(context);
+  } catch (error) {
+    const message = error && error.message ? error.message : String(error);
+    ui.alert('Prospect Not Ready', message, ui.ButtonSet.OK);
+    return { readyForReview: false, failedStep: 'Gold Standard evidence preflight', error: message };
+  }
+
+  const validation = validateProspectRevenueContext_(context);
   if (!validation.ready) {
     ui.alert('Prospect Not Ready', validation.details, ui.ButtonSet.OK);
     return validation;
@@ -165,7 +174,7 @@ function runProspectRevenuePreparation_(isResume) {
     prospect = buildSelectedProspectForAuditPackage_(activeContext);
     prospect.email = getValueByHeader_(activeContext.values, activeContext.table.headers, 'Email');
     currentStep = 'Executive deliverables';
-    generateExecutiveSnapshotForRevenueContext_(activeContext, prospect);
+    generateExecutiveSnapshotForRevenueContext_(activeContext, prospect, goldStandardPreflight.input);
     generateAuditPackageForContext_(activeContext, prospect);
 
     currentStep = 'Outreach Gmail draft';
@@ -193,8 +202,21 @@ function runProspectRevenuePreparation_(isResume) {
   }
 }
 
-function generateExecutiveSnapshotForRevenueContext_(context, prospect) {
-  const folder = getOrCreateAuditPackageFolder_(prospect.company);
+function preflightProspectRevenueGoldStandard_(context) {
+  const prospect = buildSelectedProspectForAuditPackage_(context);
+  prospect.email = getValueByHeader_(context.values, context.table.headers, 'Email');
+  const reportFile = buildLocalAuditReportInput_(prospect);
+  const input = buildGoldStandardDeliverableInput_(prospect, reportFile);
+
+  // Build all client-facing HTML in memory so content/lineage errors fail before
+  // validation state, Activity, Drive, or any other external mutation.
+  buildGoldStandardExecutiveBriefHtml_(input);
+  buildGoldStandardAssessmentHtml_(input);
+  buildGoldStandardImprovementPlanHtml_(input);
+  return { prospect: prospect, reportFile: reportFile, input: input };
+}
+
+function generateExecutiveSnapshotForRevenueContext_(context, prospect, preflightInput) {
   const reportFile = {
     sourceUrl: prospect.website,
     websiteScreenshotUrl: prospect.websiteScreenshotUrl,
@@ -208,7 +230,9 @@ function generateExecutiveSnapshotForRevenueContext_(context, prospect) {
       mobileScreenshotBase64: prospect.mobileScreenshotBase64
     }
   };
-  upsertAuditPackageBlobFile_(folder, 'Executive Brief.pdf', buildExecutiveSnapshotPdfBlob_(prospect, reportFile));
+  const goldStandardInput = preflightInput || buildGoldStandardDeliverableInput_(prospect, reportFile);
+  const folder = getOrCreateAuditPackageFolder_(prospect.company);
+  upsertAuditPackageBlobFile_(folder, 'Executive Brief.pdf', buildGoldStandardExecutiveBriefPdfBlob_(goldStandardInput));
   logPipelineActivity_(context.ss, prospect.company, 'Executive Brief Generated', 'Generated through Prospect-to-Revenue Workflow v1.');
 }
 

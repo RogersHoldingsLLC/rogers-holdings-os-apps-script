@@ -8,6 +8,8 @@ const root = path.resolve(__dirname, '..');
 const source = fs.readFileSync(path.join(root, 'GoldStandardDeliverables.gs'), 'utf8');
 const pdfSource = fs.readFileSync(path.join(root, 'PdfEngine.gs'), 'utf8');
 const driveSource = fs.readFileSync(path.join(root, 'DriveEngine.gs'), 'utf8');
+const auditSource = fs.readFileSync(path.join(root, 'AuditEngine.gs'), 'utf8');
+const revenueSource = fs.readFileSync(path.join(root, 'ProspectRevenueWorkflow.gs'), 'utf8');
 
 function load() {
   const context = vm.createContext({
@@ -173,4 +175,63 @@ test('authoritative print styles preserve solid black/gold CTA treatment', () =>
   const html = context.buildGoldStandardExecutiveBriefHtml_(context.buildGoldStandardDeliverableInput_({}, {}, { reviewedInput: reviewed() }));
   assert.match(html, /print-color-adjust:exact/);
   assert.match(html, /\.score p,.brief \.cta p,.decision p\{color:#fff!important;opacity:1\}/);
+});
+
+test('all direct document actions preflight before external mutation', () => {
+  const assessment = auditSource.slice(auditSource.indexOf('function generateAuditPackageForContext_'), auditSource.indexOf('function getBulkAuditPipelineEligibleRows_'));
+  const publicAssessment = auditSource.slice(auditSource.indexOf('function generateAuditPackage()'), auditSource.indexOf('function generateExecutiveSnapshot()'));
+  const brief = auditSource.slice(auditSource.indexOf('function generateExecutiveSnapshot()'), auditSource.indexOf('function runFullProspectPackage()'));
+  const plan = pdfSource.slice(pdfSource.indexOf('function generateProposal()'), pdfSource.indexOf('function buildProposal_'));
+  assert.ok(assessment.indexOf('buildGoldStandardDeliverableInput_') < assessment.indexOf('getOrCreateAuditPackageFolder_'));
+  assert.ok(publicAssessment.indexOf('buildGoldStandardDeliverableInput_') < publicAssessment.indexOf('runWebsiteAuditToolWorkflow_'));
+  assert.ok(publicAssessment.indexOf('buildGoldStandardDeliverableInput_') < publicAssessment.indexOf('applyWebsiteAuditToolResults_'));
+  assert.ok(brief.indexOf('buildGoldStandardDeliverableInput_') < brief.indexOf('getOrCreateAuditPackageFolder_'));
+  assert.ok(plan.indexOf('buildGoldStandardDeliverableInput_') < plan.indexOf('applySmartFindingsToProspect_'));
+  assert.ok(plan.indexOf('buildGoldStandardDeliverableInput_') < plan.indexOf('getOrCreateAuditPackageFolder_'));
+});
+
+test('Prospect-to-Revenue insufficient evidence exits before every mutation surface', () => {
+  const calls = [];
+  const context = vm.createContext({
+    SpreadsheetApp: { getUi: () => ({ ButtonSet: { OK: 'OK' }, alert: (...args) => calls.push(['alert', ...args]) }) },
+    getSelectedProspectContext_: () => ({ values: [], table: { headers: {} } }),
+    buildSelectedProspectForAuditPackage_: () => ({ company: 'North Point Fitness' }),
+    getValueByHeader_: () => '',
+    buildLocalAuditReportInput_: () => ({}),
+    buildGoldStandardDeliverableInput_: () => { throw new Error('Gold Standard generation blocked: insufficient reviewed evidence.'); },
+    validateProspectRevenueContext_: () => { calls.push(['validation-mutation']); return { ready: true, prospectId: 'PROS-1' }; },
+    setProspectRevenueWorkflowState_: () => calls.push(['workflow-mutation']),
+    logProspectRevenueActivity_: () => calls.push(['activity']),
+    getOrCreateAuditPackageFolder_: () => calls.push(['drive-folder']),
+    upsertAuditPackageBlobFile_: () => calls.push(['drive-file']),
+    setIfHeaderCell_: () => calls.push(['cell-write']),
+    updateSelectedProspectLastActivity_: () => calls.push(['last-activity']),
+    refreshSalesOperatingSystem_: () => calls.push(['dashboard']),
+    reconcileExactGmailDraft_: () => calls.push(['gmail']),
+    runWebsiteAuditToolWorkflow_: () => calls.push(['inspection'])
+  });
+  vm.runInContext(revenueSource, context);
+  const result = context.runProspectRevenuePreparation_(false);
+  assert.equal(result.failedStep, 'Gold Standard evidence preflight');
+  assert.deepEqual(calls.map(item => item[0]), ['alert']);
+});
+
+test('Prospect-to-Revenue rich evidence completes preflight before validation begins', () => {
+  const calls = [];
+  const context = vm.createContext({
+    SpreadsheetApp: { getUi: () => ({ ButtonSet: { OK: 'OK' }, alert: (...args) => calls.push(['alert', ...args]) }) },
+    getSelectedProspectContext_: () => ({ values: [], table: { headers: {} } }),
+    buildSelectedProspectForAuditPackage_: () => ({ company: 'Harbor Light Electrical LLC' }),
+    getValueByHeader_: () => '',
+    buildLocalAuditReportInput_: () => ({ evidence: 'reviewed' }),
+    buildGoldStandardDeliverableInput_: () => { calls.push(['preflight']); return { company: 'Harbor Light Electrical LLC' }; },
+    buildGoldStandardExecutiveBriefHtml_: () => calls.push(['brief-plan']),
+    buildGoldStandardAssessmentHtml_: () => calls.push(['assessment-plan']),
+    buildGoldStandardImprovementPlanHtml_: () => calls.push(['plan-plan']),
+    validateProspectRevenueContext_: () => { calls.push(['validation']); return { ready: false, details: 'Fixture stop after preflight.' }; }
+  });
+  vm.runInContext(revenueSource, context);
+  context.validateProspectRevenueContext_ = () => { calls.push(['validation']); return { ready: false, details: 'Fixture stop after preflight.' }; };
+  context.runProspectRevenuePreparation_(false);
+  assert.deepEqual(calls.map(item => item[0]), ['preflight', 'brief-plan', 'assessment-plan', 'plan-plan', 'validation', 'alert']);
 });

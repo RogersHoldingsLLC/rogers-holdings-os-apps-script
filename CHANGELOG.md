@@ -95,6 +95,10 @@ Build `2026.07.20-rc`. This is a release candidate, not production-ready or rele
 
 ### Fixed
 
+- Reconciled the production-only Headquarters Sales Feed and configured client-Drive-root/duplicate-folder protections into authoritative Git source, with an exact pre-Gold rollback snapshot retained separately.
+- Added a Prospect-to-Revenue Gold Standard preflight that validates and builds all three client-facing document plans before validation state, Activity, Drive, Gmail, Dashboard, or workbook mutation.
+- Added a production deployment inventory guard that clones the live Apps Script project read-only and refuses a push when remote-only source files are absent from Git.
+
 - Added a fail-closed Gold Standard evidence gate at the authoritative client-deliverable boundary. Unstructured legacy Notes/Summary prose, numeric audit scores, score-derived opportunity labels, placeholder priority titles, duplicated observation/recommendation text, unsupported generic impacts, and findings without traceable evidence can no longer create client PDFs.
 - Made Gold Standard finding, recommendation, and action counts evidence-driven; omitted unsupported Preserve What Works content; required every Improvement Plan action to retain exact recommendation lineage; and blocked operator generation before Drive or workbook mutation when reviewed evidence is insufficient.
 - Forced solid print-color treatment for the Executive Brief Focused Priorities and Recommended Next Step surfaces while preserving the approved Gold Standard layout.

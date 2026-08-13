@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const readline = require('readline');
 const { spawnSync } = require('child_process');
@@ -99,6 +100,30 @@ function assertProductionGitSafety(projectRoot, capture = captureCommand, enviro
   }
 }
 
+function compareProductionSourceInventories(localFiles, remoteFiles) {
+  const local = new Set(localFiles.filter((name) => name.endsWith('.gs')));
+  const remote = remoteFiles.filter((name) => name.endsWith('.js')).map((name) => name.slice(0, -3) + '.gs');
+  return remote.filter((name) => !local.has(name)).sort();
+}
+
+function verifyProductionSourceInventory(projectRoot, scriptId, capture = captureCommand) {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'bop-production-inventory-'));
+  try {
+    capture('clasp', ['clone', scriptId], tempRoot);
+    const localFiles = fs.readdirSync(projectRoot);
+    const remoteFiles = fs.readdirSync(tempRoot);
+    const remoteOnly = compareProductionSourceInventories(localFiles, remoteFiles);
+    if (remoteOnly.length) {
+      throw new Error(
+        'Production deployment refused: live Apps Script source is missing from Git: ' +
+        remoteOnly.join(', ') + '. Reconcile the remote-only source before pushing.'
+      );
+    }
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+}
+
 async function deploy(targetName, options = {}) {
   const projectRoot = options.projectRoot || defaultProjectRoot;
   const run = options.run || runCommand;
@@ -106,6 +131,7 @@ async function deploy(targetName, options = {}) {
   const confirm = options.confirm || askConfirmation;
   const exists = options.commandExists || commandExists;
   const environment = options.environment || process.env;
+  const verifyInventory = options.verifyProductionSourceInventory || verifyProductionSourceInventory;
   const target = readTargetConfig(projectRoot, targetName);
 
   console.log(`Deployment target: ${target.label}`);
@@ -123,7 +149,10 @@ async function deploy(targetName, options = {}) {
 
   if (targetName === 'production') {
     assertProductionGitSafety(projectRoot, capture, environment);
+    verifyInventory(projectRoot, target.config.scriptId, capture);
     run('npm', ['run', 'validate'], projectRoot);
+    run('npm', ['run', 'test:gold-standard-authoritative'], projectRoot);
+    run('npm', ['run', 'test:production-source-reconciliation'], projectRoot);
     run('npm', ['run', 'test:follow-up-execution'], projectRoot);
     run('npm', ['run', 'test:business-snapshot-naming'], projectRoot);
     run('npm', ['run', 'test:prospect-revenue'], projectRoot);
@@ -173,4 +202,11 @@ if (require.main === module) {
   });
 }
 
-module.exports = { TARGETS, assertProductionGitSafety, deploy, readTargetConfig };
+module.exports = {
+  TARGETS,
+  assertProductionGitSafety,
+  compareProductionSourceInventories,
+  deploy,
+  readTargetConfig,
+  verifyProductionSourceInventory
+};

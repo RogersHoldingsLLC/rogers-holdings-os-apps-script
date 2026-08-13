@@ -4,7 +4,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { deploy, readTargetConfig } = require('./deploy');
+const { compareProductionSourceInventories, deploy, readTargetConfig } = require('./deploy');
 
 const acceptance = JSON.stringify({ scriptId: 'acceptance-id' }, null, 2) + '\n';
 const production = JSON.stringify({ scriptId: 'production-id' }, null, 2) + '\n';
@@ -31,6 +31,7 @@ function options(root, overrides = {}) {
     confirm: async () => 'DEPLOY PRODUCTION',
     capture: (command, args) => args[0] === 'status' ? '' : 'main',
     run: () => {},
+    verifyProductionSourceInventory: () => {},
     ...overrides
   };
 }
@@ -70,6 +71,21 @@ async function main() {
       confirm: async () => 'deploy production'
     })), /confirmation did not exactly match/);
   });
+  await test('production source inventory rejects unexpected remote-only files', async () => {
+    assert.deepStrictEqual(
+      compareProductionSourceInventories(['AuditEngine.gs'], ['AuditEngine.js', 'HeadquartersSalesFeed.js']),
+      ['HeadquartersSalesFeed.gs']
+    );
+  });
+  await test('production source inventory allows reconciled remote files and candidate additions', async () => {
+    assert.deepStrictEqual(
+      compareProductionSourceInventories(
+        ['AuditEngine.gs', 'HeadquartersSalesFeed.gs', 'GoldStandardDeliverables.gs'],
+        ['AuditEngine.js', 'HeadquartersSalesFeed.js']
+      ),
+      []
+    );
+  });
   await test('production runs the complete release validation gate', async () => {
     const root = fixture();
     const commands = [];
@@ -78,8 +94,10 @@ async function main() {
         commands.push([command].concat(args).join(' '));
       }
     }));
-    assert.deepStrictEqual(commands.slice(0, 9), [
+    assert.deepStrictEqual(commands.slice(0, 11), [
       'npm run validate',
+      'npm run test:gold-standard-authoritative',
+      'npm run test:production-source-reconciliation',
       'npm run test:follow-up-execution',
       'npm run test:business-snapshot-naming',
       'npm run test:prospect-revenue',

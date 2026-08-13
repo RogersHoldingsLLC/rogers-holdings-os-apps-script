@@ -12,6 +12,7 @@
     "test:follow-up-execution": "node --test tests/follow-up-execution.test.js",
     "test:qa2-gold-standard": "node --test tests/qa2-gold-standard.test.js",
     "test:gold-standard-authoritative": "node --test tests/gold-standard-authoritative.test.js",
+    "test:production-source-reconciliation": "node --test tests/production-source-reconciliation.test.js",
     "generate:qa2-gold-standard": "node scripts/generate-qa2-gold-standard.js",
     "generate:qa2-final-gold-standard": "node scripts/generate-qa2-gold-standard.js",
     "acceptance:ebi": "node scripts/test-executive-business-intelligence.js --write-acceptance",

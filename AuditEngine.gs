@@ -450,6 +450,9 @@ function generateAuditPackage() {
   let auditWasRunFirst = false;
 
   try {
+    // Client-deliverable evidence must already support the Gold Standard before
+    // audit acquisition or any workbook/Drive mutation begins.
+    buildGoldStandardDeliverableInput_(prospect, buildLocalAuditReportInput_(prospect));
     if (!isVerifiedAuditDataForLocalRendering_(prospect)) {
       if (!getWebsiteAuditToolEndpoint_()) {
         throw new Error(buildVerifiedAuditRequiredMessage_(prospect));
