@@ -2379,12 +2379,11 @@ function inferProjectDeliverables_(service) {
 }
 
 function getClientProjectFolderUrl_(company) {
-  const folderName = sanitizeDriveFileName_(company || '');
-  if (!folderName) {
+  if (!sanitizeDriveFileName_(company || '')) {
     return '';
   }
-  const folders = DriveApp.getFoldersByName(folderName);
-  return folders.hasNext() ? folders.next().getUrl() : '';
+  const folder = getExistingClientArtifactFolder_(company);
+  return folder ? folder.getUrl() : '';
 }
 
 function generateProjectId_(company) {
@@ -3483,12 +3482,10 @@ function getClientWorkspaceFolderInfo_(company) {
     return result;
   }
 
-  const folders = DriveApp.getFoldersByName(folderName);
-  if (!folders.hasNext()) {
+  const folder = getExistingClientArtifactFolder_(company);
+  if (!folder) {
     return result;
   }
-
-  const folder = folders.next();
   result.url = folder.getUrl();
   const files = folder.getFiles();
   let count = 0;
