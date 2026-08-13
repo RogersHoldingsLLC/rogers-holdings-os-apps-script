@@ -4,90 +4,16 @@
  */
 
 function buildAuditReportPdfBlob_(prospect, reportFile) {
-  prospect = normalizeClientProspect_(prospect);
-  const safeReportFile = getClientSafeReportFile_(prospect, reportFile || {});
-  // PDF V3 CHANGE: add executive impression, divider sequencing, and score display guardrails.
-  const reportText = getAuditReportTextFromReportFile_(safeReportFile);
-  const findings = filterClientEligibleEvidence_([].concat(safeReportFile.findings || [], getSmartFindings_(prospect)), prospect, reportFile || {}, 'finding');
-  const opportunities = buildAuditOpportunities_(prospect, findings, reportText, safeReportFile);
-  let consultingFindings = buildConsultingFindingCards_(prospect, opportunities, safeReportFile);
-  consultingFindings = enforcePdfFindingEvidenceQuality_(prospect, safeReportFile, consultingFindings);
-  const screenshotHtml = buildWebsiteScreenshotHtml_(prospect, safeReportFile);
-  const nextStep = buildRecommendedNextStep_(prospect, safeReportFile);
-  const estimatedImpact = estimateAuditImpact_(prospect, consultingFindings);
-  const estimatedOpportunity = estimateAuditOpportunity_(prospect, consultingFindings);
-  const scoreContext = getReportScoreContext_(prospect, reportFile);
-  const recommendedPackage = buildRecommendedPackage_(prospect);
-  const visualEvidenceSource = getAuditEvidenceObject_(prospect, safeReportFile);
-  const html = buildBrandedPdfHtml_({
-    title: 'Digital Business Assessment',
-    subtitle: prospect.company,
-    badge: 'Digital Business Assessment',
-    bodyHtml: [
-      brandedPdfCoverHtml_('Digital Business Assessment', prospect.company, prospect.website, 'Business Review'),
-      brandedPdfSectionHtml_('Executive Briefing', buildAuditExecutiveBriefingHtml_(
-        prospect,
-        consultingFindings,
-        reportText,
-        scoreContext,
-        nextStep,
-        estimatedImpact,
-        estimatedOpportunity
-      )),
-      screenshotHtml,
-      renderPdfCompactDivider_('WEBSITE REVIEW FINDINGS'),
-      brandedPdfSectionHtml_('Key Findings', consultingFindingCardsHtml_(consultingFindings, visualEvidenceSource)),
-      proofOfFindingsSectionHtml_(prospect, safeReportFile, consultingFindings),
-      renderPdfSectionIntroGroup_(
-        'IMPROVEMENT ROADMAP',
-        'Business Impact',
-        businessImpactSectionHtml_(prospect, consultingFindings, safeReportFile)
-      ),
-      brandedPdfSectionHtml_('Quick Wins', quickWinsSectionHtml_(prospect, consultingFindings, safeReportFile)),
-      brandedPdfSectionHtml_('Improvement Roadmap', priorityRoadmapHtml_(prospect, safeReportFile), {
-        keepWithFirstBlock: true,
-        forcePageBreak: true,
-        pageTopSafe: true
-      }),
-      brandedPdfSectionHtml_('Digital Trust Checklist', trustChecklistHtml_(prospect, reportFile)),
-      brandedPdfSectionHtml_('Recommended Service Package', recommendedServicePackageHtml_(recommendedPackage, prospect, safeReportFile)),
-      buildCompetitivePositionSection_(prospect),
-      renderPdfCompactDivider_('RECOMMENDED NEXT STEPS'),
-      brandedPdfSectionHtml_('Recommended Next Step', finalRecommendationHtml_(prospect, nextStep, estimatedImpact, safeReportFile))
-    ].filter(Boolean).join('')
-  });
-  return htmlToPdfBlob_(html, 'Digital Business Assessment.pdf');
+  return buildGoldStandardAssessmentPdfBlob_(buildGoldStandardDeliverableInput_(prospect, reportFile));
 }
 
 function buildProposalPdfBlob_(prospect, proposal) {
-  prospect = normalizeClientProspect_(prospect);
-  proposal = Object.assign({}, proposal || {}, {
-    company: normalizeClientBusinessName_(proposal && proposal.company)
-  });
-  const recommendedPackage = buildRecommendedPackage_(prospect);
-  const html = buildBrandedPdfHtml_({
-    title: 'Improvement Plan',
-    subtitle: prospect.company,
-    badge: 'Improvement Plan',
-    bodyHtml: [
-      brandedPdfCoverHtml_('Improvement Plan', prospect.company, prospect.website, 'Recommended Solution'),
-      brandedPdfSectionHtml_('Thank You', proposalIntroHtml_(prospect)),
-      brandedPdfSectionHtml_('What We Found', proposalFindingsSummaryHtml_(prospect)),
-      brandedPdfSectionHtml_('Recommended Solution', proposalSolutionHtml_(prospect, recommendedPackage)),
-      brandedPdfSectionHtml_('Deliverables', deliverableCardsHtml_(recommendedPackage.deliverables)),
-      brandedPdfSectionHtml_('Timeline', projectRoadmapHtml_(), { keepWithFirstBlock: true, forcePageBreak: true, pageTopSafe: true }),
-      brandedPdfSectionHtml_('Why Rogers Holdings', whyRogersHoldingsHtml_()),
-      brandedPdfSectionHtml_('Investment', proposalInvestmentHtml_(recommendedPackage)),
-      brandedPdfSectionHtml_('Next Steps', proposalNextStepsHtml_(prospect)),
-      brandedPdfSectionHtml_('Acceptance', acceptancePageHtml_(prospect, recommendedPackage))
-    ].join('')
-  });
-  return htmlToPdfBlob_(html, 'Improvement Plan.pdf');
+  const reportFile = prospect && prospect.reportFile ? prospect.reportFile : buildLocalAuditReportInput_(prospect || {});
+  return buildGoldStandardImprovementPlanPdfBlob_(buildGoldStandardDeliverableInput_(prospect, reportFile));
 }
 
 function buildExecutiveSnapshotPdfBlob_(prospect, reportFile) {
-  const html = buildExecutiveSnapshotPdfHtml_(prospect || {}, reportFile || {});
-  return htmlToPdfBlob_(html, 'Executive Brief.pdf');
+  return buildGoldStandardExecutiveBriefPdfBlob_(buildGoldStandardDeliverableInput_(prospect || {}, reportFile || {}));
 }
 
 function buildDiscoveryCallBriefPdfBlob_(prospect, startDate, durationMinutes) {
@@ -1611,6 +1537,9 @@ function consultingFindingCardsHtml_(findings, visualEvidenceSource) {
     return renderPdfCardGroup_('<div class="summary-card preliminary-review"><h3>To Confirm During Discovery</h3><p>No client-facing findings are presented as verified because the available inspection evidence is incomplete. Confirm the business priorities and supporting evidence before recommending implementation work.</p></div>', { compact: true });
   }
   const cardsHtml = (findings || []).map(function(finding) {
+    const evidenceState = String(finding.evidenceState || finding.classification || 'ACTIONABLE').toUpperCase();
+    const verifiedStrength = evidenceState === 'VERIFIED STRENGTH' || evidenceState === 'STRENGTH';
+    const notVerified = evidenceState === 'NOT VERIFIED' || evidenceState === 'UNKNOWN';
     const impactClass = impactStatusClass_(finding.impactLevel);
     const evidenceDetail = finding.evidence && finding.evidence.detail ? String(finding.evidence.detail) : '';
     const evidenceLabel = finding.evidence && finding.evidence.sourceLabel ? String(finding.evidence.sourceLabel) : 'Supporting evidence';
@@ -1624,12 +1553,13 @@ function consultingFindingCardsHtml_(findings, visualEvidenceSource) {
       '<div class="finding-card">',
       '<div class="finding-card-top">',
       `<span class="finding-category">${escapeHtml_(finding.category)}</span>`,
-      `<span class="impact-pill ${impactClass}">${escapeHtml_(finding.impactLevel)} Impact</span>`,
+      `<span class="impact-pill ${impactClass}">${escapeHtml_(notVerified ? 'Not Verified' : (verifiedStrength ? 'Verified Strength' : finding.impactLevel + ' Impact'))}</span>`,
       '</div>',
-      `<h3>Finding</h3><p>${escapeHtml_(finding.observation)}</p>`,
-      `<h3>Why This Matters</h3><p>${escapeHtml_(buildFindingWhyThisMatters_(finding))}</p>`,
-      `<h3>Business Impact</h3><p>${escapeHtml_(finding.businessImpact)}</p>`,
-      `<h3>Recommended Action</h3><p>${escapeHtml_(finding.recommendedAction)}</p>`,
+      notVerified
+        ? `<h3>Evidence Gap</h3><p>${escapeHtml_(finding.observation)}</p><h3>Why Verification Matters</h3><p>${escapeHtml_(finding.verificationReason || buildFindingWhyThisMatters_(finding))}</p><h3>Verification Needed</h3><p>${escapeHtml_(finding.verificationNeeded || 'Confirm this point with direct evidence before recommending implementation work.')}</p><h3>Classification</h3><p>Not Verified</p>`
+        : (verifiedStrength
+          ? `<h3>Observation</h3><p>${escapeHtml_(finding.observation)}</p><h3>Business Value</h3><p>${escapeHtml_(finding.businessValue || finding.businessImpact)}</p><h3>Maintain</h3><p>${escapeHtml_(finding.maintain || 'Preserve this strength as other improvements are implemented.')}</p><h3>Classification</h3><p>Verified Strength</p>`
+          : `<h3>Observation</h3><p>${escapeHtml_(finding.observation)}</p><h3>Business Impact</h3><p>${escapeHtml_(finding.businessImpact)}</p><h3>Recommendation</h3><p>${escapeHtml_(finding.recommendedAction)}</p><h3>Priority</h3><p>${escapeHtml_(finding.priorityLabel || finding.impactLevel)}</p>`),
       visualEvidenceHtml,
       evidenceDetail ? `<div class="finding-evidence"><strong>${escapeHtml_(evidenceLabel)}:</strong> ${escapeHtml_(evidenceDetail)}</div>` : '',
       '</div>'
@@ -1923,7 +1853,6 @@ function buildExecutiveSnapshotPdfHtml_(prospect, reportFile) {
             <div class="meta">
               Prepared ${escapeHtml_(dateText)}<br>
               Rogers Holdings LLC<br>
-              Customer-facing summary
             </div>
           </div>
 
@@ -1972,7 +1901,7 @@ function buildExecutiveSnapshotPdfHtml_(prospect, reportFile) {
 
           <div class="footer">
             <span>${escapeHtml_(contact.name)} | ${escapeHtml_(contact.company)}</span>
-            <span>${escapeHtml_(contact.email)} | ${escapeHtml_(contact.phone)}</span>
+            <span>${[contact.email, contact.phone].filter(Boolean).map(escapeHtml_).join(' | ')}</span>
           </div>
         </div>
       </body>
@@ -2500,7 +2429,7 @@ function buildBrandedPdfHtml_(document) {
           .muted-copy { color: ${colors.muted}; }
           .impact-summary { border: ${borders.card}; background: linear-gradient(135deg, ${colors.paper} 0%, ${colors.neutral} 100%); padding: 18px; border-radius: ${radius.card}; margin-top: ${spacing.cardGap}; page-break-inside: avoid; }
           .priority-opportunities { margin-top: 14px; }
-          .finding-card { border: ${borders.card}; background: ${colors.paper}; padding: 16px 18px; margin-bottom: ${spacing.cardGap}; border-radius: ${radius.small}; page-break-inside: avoid; box-shadow: ${shadows.card}; }
+          .finding-card { border: ${borders.card}; background: ${colors.paper}; padding: 16px 18px; margin-bottom: ${spacing.cardGap}; border-radius: ${radius.small}; break-inside: avoid-page; page-break-inside: avoid; box-shadow: ${shadows.card}; }
           .finding-card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
           .finding-category { color: ${colors.black}; font-size: 10px; text-transform: uppercase; letter-spacing: 1.2px; font-weight: 700; }
           .impact-pill { color: #fff; font-size: ${typography.labelSize}; text-transform: uppercase; letter-spacing: 1px; border-radius: ${radius.pill}; padding: 5px 9px; }
@@ -2616,7 +2545,7 @@ function buildBrandedPdfHtml_(document) {
         <div class="doc-shell">
           ${watermarkHtml}
           <div class="header">${logoHtml}</div>
-          <div class="footer">Rogers Holdings LLC &nbsp; | &nbsp; ${escapeHtml_(contact.name)} &nbsp; | &nbsp; ${escapeHtml_(contact.email)} &nbsp; | &nbsp; ${escapeHtml_(contact.phone)} &nbsp; | &nbsp; ${escapeHtml_(document.title || '')}</div>
+          <div class="footer">${[contact.company || 'Rogers Holdings LLC', contact.name, contact.email, contact.phone, document.title].filter(Boolean).map(escapeHtml_).join(' &nbsp; | &nbsp; ')}</div>
           ${document.bodyHtml}
         </div>
       </body>
@@ -2665,7 +2594,6 @@ function brandedPdfCoverHtml_(title, company, detail, kicker) {
       <div class="cover-accent-bottom"></div>
       <div class="cover-side-panel">
         ${coverLogoHtml}
-        <div class="brand">Rogers Holdings LLC</div>
         <div class="cover-gold-rule"></div>
         <div class="badge">${escapeHtml_(coverLabel)}</div>
         <div class="cover-motto">Christ. Family. Business.</div>
@@ -3124,6 +3052,7 @@ function generateProposal() {
 
   const values = sheet.getRange(selectedRow, 1, 1, table.lastColumn).getValues()[0];
   const prospect = {
+    prospectId: getValueByHeader_(values, table.headers, 'Prospect ID'),
     company: getValueByHeader_(values, table.headers, 'Company'),
     website: getValueByHeader_(values, table.headers, 'Website'),
     auditScore: getValueByHeader_(values, table.headers, 'Audit Score'),
@@ -3144,11 +3073,19 @@ function generateProposal() {
 
   applySmartFindingsToProspect_(sheet, table.headers, selectedRow, prospect);
   const proposal = buildProposal_(prospect);
+  const reportFile = buildLocalAuditReportInput_(prospect);
+  const folder = getOrCreateAuditPackageFolder_(prospect.company);
+  const file = upsertAuditPackageBlobFile_(
+    folder,
+    'Improvement Plan.pdf',
+    buildGoldStandardImprovementPlanPdfBlob_(buildGoldStandardDeliverableInput_(prospect, reportFile))
+  );
   showProposalModal_(prospect, proposal);
   setIfHeaderCell_(sheet, table.headers, selectedRow, 'Next Action', 'Confirm Improvement Plan Sent');
   logProposalGenerated_(ss, prospect, proposal);
   updateSelectedProspectLastActivity_(sheet, table.headers, selectedRow);
   refreshSalesOperatingSystem_();
+  return { folder: folder, file: file, proposal: proposal };
 }
 
 function buildProposal_(prospect) {

@@ -836,6 +836,7 @@ function buildSelectedProspectForAuditPackage_(context) {
   const headers = context.table.headers;
   const values = context.values;
   return {
+    prospectId: getValueByHeader_(values, headers, 'Prospect ID'),
     company: getValueByHeader_(values, headers, 'Company'),
     website: getValueByHeader_(values, headers, 'Website'),
     city: getValueByHeader_(values, headers, 'City'),

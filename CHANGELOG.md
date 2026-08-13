@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-08-12 — QA-2 Final Gold Standard Polish
+
+- Consolidated the Executive Brief to one decisive closing action and clarified its qualitative review category as `Focused Priorities`.
+- Separated Digital Business Assessment deficiencies from the verified credential strength while preserving evidence lineage.
+- Reworded Assessment and Improvement Plan implementation paths to preserve the advisory boundary and optional separate implementation scope.
+- Regenerated and visually verified the final Harbor Light package under `test-output/qa2-final-gold-standard`; no production change or deployment was performed.
+
+## 2026-08-12 — QA-2 Gold Standard Package Refinement
+
+- Refined Executive Brief labeling, repetition, and footer composition while preserving its one-page editorial design.
+- Added evidence-state-specific finding language and print-safe atomic cards for Digital Business Assessment rendering.
+- Reclassified the Harbor Light service-boundary issue as a Priority Improvement so severity and the primary conclusion remain coherent.
+- Added a persistent 1/6/4-page Harbor Light acceptance package with explicit pagination, a consolidated Improvement Plan, extracted text, acceptance evidence, and rendered-page evidence.
+- Preserved production, workbook, intake, lifecycle, Gmail, Calendar, Receiver, Website, Cloudflare, and Script Property boundaries.
+
 ## 2026-08-10 — Phase 2B Next Action Synchronization (Acceptance Candidate)
 
 - Added the controlled `Sync Prospect Next Action from Open Follow-Ups` action for an exact-ID selected Prospect or prospect-linked Follow-Up.
@@ -27,6 +42,14 @@
 - Preserved prior receiver activation and release statements as historical evidence.
 
 ## [Unreleased]
+
+### Gold Standard production-path integration
+
+- Added one authoritative `buildGoldStandardDeliverableInput_()` boundary with immutable evidence, finding, recommendation, and Improvement Plan action lineage.
+- Routed Executive Brief, Digital Business Assessment, Improvement Plan, and Prospect-to-Revenue Executive Brief rendering through the approved Gold Standard Apps Script renderers and canonical filenames.
+- Corrected Generate Improvement Plan so the operator action creates or reconciles `Improvement Plan.pdf` while preserving its existing Activity, Next Action, Last Activity, and dashboard behavior.
+- Refactored the Harbor Light QA generator to call the authoritative Apps Script model and HTML renderers instead of maintaining an independent layout implementation.
+- Added deterministic authoritative integration, evidence-state, advisory-boundary, canonical-name, Drive-compatibility, and 1/6/4 visual regression coverage.
 
 ### Added
 

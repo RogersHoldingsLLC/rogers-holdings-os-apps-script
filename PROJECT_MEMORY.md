@@ -4,7 +4,13 @@ This document preserves the current operating knowledge for future Business Opti
 
 ## Current Status
 
+The owner-approved Gold Standard client package is now integrated locally into one authoritative Apps Script input/rendering boundary. Executive Brief, Digital Business Assessment, Improvement Plan, and the Prospect-to-Revenue Executive Brief path share the same reviewed evidence lineage and frozen layouts. Generate Improvement Plan now creates the canonical Drive PDF. The Harbor Light reference generator consumes these authoritative functions and retains the approved 1/6/4 page package. Production remains unchanged; acceptance deployment and actual-operator workflow validation are required before owner PDF review and any production decision.
+
 The Business Optimization Platform is at Version `1.0.0-rc` (build `2026.08.10-rc`). It is a release candidate, not production-ready or released. The target `1.0.0` release remains pending final live acceptance, final release sign-off, and production approval.
+
+QA-2 Gold Standard visual and page-flow remediation is complete locally for owner manual review. The Harbor Light Electrical LLC acceptance package is retained under `test-output/qa2-gold-standard` with HTML, PDFs, extracted text, acceptance evidence, and rendered images for all 11 pages. No production deployment or workbook/integration change is authorized by this result.
+
+Owner-approved minor QA-2 polish is retained separately under `test-output/qa2-final-gold-standard`. It consolidates the Executive Brief CTA, uses `Focused Priorities`, separates priority improvements from preserved strengths, and keeps Assessment/Improvement Plan implementation language advisory. This remains an owner-approval artifact, not a production release.
 
 Phase 2A Follow-Up execution is production accepted. Phase 2B Next Action synchronization is an acceptance-first candidate that adds one explicit action, `Sync Prospect Next Action from Open Follow-Ups`. It resolves Prospects and Follow-Ups only by exact IDs, computes the primary open task by valid/earliest Due Date and lexical Follow-Up ID, previews Status as unchanged, re-reads under a document lock, and writes only Prospect Next Action and Prospect Follow-Up Date plus one material-change Activity correlated by `FOLLOWUPSYNC:<Prospect ID>:<Follow-Up ID>:<transition hash>`. It adds no workbook fields and does not alter lifecycle transitions, Phase 2A completion, Business Snapshot intake, Gmail, Calendar, Drive, Executive Dashboard, Client Workspace, Receiver Version 2, or immutable BOP Version 7. Production deployment is not authorized.
 
