@@ -15,6 +15,13 @@
 - Added a persistent 1/6/4-page Harbor Light acceptance package with explicit pagination, a consolidated Improvement Plan, extracted text, acceptance evidence, and rendered-page evidence.
 - Preserved production, workbook, intake, lifecycle, Gmail, Calendar, Receiver, Website, Cloudflare, and Script Property boundaries.
 
+## 2026-08-12 — Playground and Client Drive Root Isolation
+
+- Added the durable Production + Playground workbook model and documented the temporary acceptance-checkpoint migration path.
+- Added `BOP_CLIENT_DRIVE_ROOT_ID` so configured production artifact lookup and creation remain under the stable Rogers Holdings Clients folder instead of using global Drive name discovery.
+- Added fail-closed duplicate/unavailable-root behavior and deterministic isolation tests while preserving legacy lookup only when the property is absent.
+- Recorded the production workbook timezone mismatch as a separate controlled follow-up; no timezone was changed.
+
 ## 2026-08-10 — Phase 2B Next Action Synchronization (Acceptance Candidate)
 
 - Added the controlled `Sync Prospect Next Action from Open Follow-Ups` action for an exact-ID selected Prospect or prospect-linked Follow-Up.
@@ -58,6 +65,9 @@
 - Added compensating rollback and reconciliation-required failure handling for partial tracker, Activity Feed, and Follow-Up writes, including verification that pre-existing Follow-Ups remain unchanged.
 - Added centralized literal-text protection at Business Snapshot tracker, Activity Feed, and Follow-Up write boundaries so leading `=` input cannot execute as a spreadsheet formula while legitimate values such as international `+` phone numbers remain unchanged.
 - Added Rogers Holdings Naming Standard v1.0 documentation and regression coverage for the canonical customer and operator journey: Executive Brief, Digital Business Assessment, and Improvement Plan.
+- Added the BOP-owned Headquarters Sales Feed v1 deterministic builder and authenticated, read-only Apps Script `doPost` endpoint.
+- Added fixture-only coverage for contract semantics, privacy, authentication, freshness, partial behavior, and absence of workbook writes.
+- Added deployment and consumption documentation in `HEADQUARTERS_SALES_FEED_V1.md`.
 - Added Prospect-to-Revenue Workflow v1 for one selected prospect, with stable Prospect IDs, persistent validation, inspection, workflow, recovery, and Brian-review state.
 - Added menu and Prospect Workspace actions to validate, prepare, resume, review, approve for manual outreach, or request changes.
 - Added Activity Feed correlation by Prospect ID and workflow operation key.
@@ -70,11 +80,14 @@
 - Canonical lifecycle writes use `Lead Found -> Executive Brief Sent -> Discovery Meeting Scheduled -> Digital Business Assessment -> Improvement Plan Sent -> Project Started -> Client`; legacy stored lifecycle and Next Action values normalize to these names without rewriting historical records.
 - `Website Audit Tool API` is the internal technical evidence-service identity. Historical `Website Audit Tool` and `Website Audit` evidence values, legacy lifecycle aliases, internal function/schema names, and legacy package filenames remain supported only where compatibility requires them.
 - Prospect preparation reuses the established Website Audit Tool API, Drive/PDF, and exact-match Gmail draft engines.
+- Added Script Property authentication through `HEADQUARTERS_SALES_FEED_TOKEN`, timing-resistant token comparison, generic failure responses, opaque action identifiers, and a no-write feed boundary.
 - Preparation never sends email and never advances confirmed CRM Status.
 - Explicit approval records Brian's decision but still requires manual Gmail sending and the existing sent-confirmation action.
 
 ### Acceptance
 
+- Completed live disposable-workbook acceptance for Headquarters Sales Feed v1, covering authenticated web-app transport, exact contract and freshness, workbook reconciliation, privacy, repeated-request determinism, and source-range mutation safety. Production remained untouched.
+- Reconciled the apparent disposable `BusinessSnapshotIntake.gs` source drift: the deployed acceptance source is byte-for-byte identical to current authoritative upstream, and the discrepancy was a stale local checkout rather than deployment divergence.
 - Completed a live disposable-workbook one-prospect run covering validation, verified audit reuse, deliverable reconciliation, exact-match Gmail draft update, Prospect Workspace review visibility, explicit approval, Activity Feed correlation, and idempotent resume.
 - Confirmed preparation and approval sent no email and did not advance CRM Status.
 - Verified Gmail contains one exact canonical recipient/subject draft; a separate historical mixed-case `LLc` subject remains a distinct legacy draft and was not modified or deleted.
