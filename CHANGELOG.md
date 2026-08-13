@@ -95,6 +95,10 @@ Build `2026.07.20-rc`. This is a release candidate, not production-ready or rele
 
 ### Fixed
 
+- Added a fail-closed Gold Standard evidence gate at the authoritative client-deliverable boundary. Unstructured legacy Notes/Summary prose, numeric audit scores, score-derived opportunity labels, placeholder priority titles, duplicated observation/recommendation text, unsupported generic impacts, and findings without traceable evidence can no longer create client PDFs.
+- Made Gold Standard finding, recommendation, and action counts evidence-driven; omitted unsupported Preserve What Works content; required every Improvement Plan action to retain exact recommendation lineage; and blocked operator generation before Drive or workbook mutation when reviewed evidence is insufficient.
+- Forced solid print-color treatment for the Executive Brief Focused Priorities and Recommended Next Step surfaces while preserving the approved Gold Standard layout.
+
 - Normalized client-visible business-name suffixes to `LLC` across the Executive Snapshot, Digital Business Assessment, Improvement Plan, and both outreach messages; unified Snapshot service terminology on `Digital Visibility & Conversion Improvement Package`; and made incomplete-evidence service language explicitly preliminary pending discovery.
 - Reflowed the Digital Business Assessment so the Improvement Roadmap divider stays with Business Impact, heading keep rules no longer force unintended standalone pages, and Quick Wins, roadmap, checklist, and service-package sections use a more intentional page sequence.
 - Completed live disposable-workbook artifact acceptance hardening: normalized structured screenshot evidence before filtering, removed unverified score/confidence/severity leakage from the Executive Snapshot, Assessment, and Improvement Plan, qualified unsupported findings as discovery items, and kept professional/B2B classification consistent across all four deliverables.
@@ -172,6 +176,8 @@ Build `2026.07.20-rc`. This is a release candidate, not production-ready or rele
 - Made operation-key fallback identity row-specific when Prospect ID is unavailable.
 
 ### Tests
+
+- Added the weak-evidence North Point Fitness regression, final-boundary score suppression, recommendation-integrity, placeholder-title, missing-lineage, variable-count, strength-omission, distinct action-mechanics, fail-closed operator-ordering, and authoritative print-style checks while retaining the Harbor Light 1/6/4 regression.
 
 - Added deterministic validation for anonymous web-app removal, developer-only reset menu visibility, direct-execution reset guards, and non-mutating Developer Mode reads.
 - Added deterministic deployment safety coverage for target rejection/selection, dirty-tree and confirmation rejection, configuration restoration after successful and failed pushes, and prevention of implicit production deployment.

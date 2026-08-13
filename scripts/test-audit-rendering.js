@@ -31,6 +31,9 @@ let aboutHtml = '';
 let aboutDialogTitle = '';
 const context = vm.createContext({
   console,
+  Object,
+  Utilities: { formatDate() { return 'August 12, 2026'; } },
+  Session: { getScriptTimeZone() { return 'America/New_York'; } },
   firstNonBlank_(values) {
     return values.find((value) => String(value || '').trim()) || '';
   },
@@ -62,6 +65,7 @@ vm.runInContext(fs.readFileSync(path.join(root, 'Config.gs'), 'utf8'), context, 
 vm.runInContext(fs.readFileSync(path.join(root, 'BusinessSnapshotIntake.gs'), 'utf8'), context, { filename: 'BusinessSnapshotIntake.gs' });
 vm.runInContext(fs.readFileSync(path.join(root, 'SheetHelpers.gs'), 'utf8'), context, { filename: 'SheetHelpers.gs' });
 vm.runInContext(fs.readFileSync(path.join(root, 'Menu.gs'), 'utf8'), context, { filename: 'Menu.gs' });
+vm.runInContext(goldStandardSource, context, { filename: 'GoldStandardDeliverables.gs' });
 vm.runInContext(fs.readFileSync(path.join(root, 'AuditEngine.gs'), 'utf8'), context, { filename: 'AuditEngine.gs' });
 vm.runInContext(fs.readFileSync(path.join(root, 'GmailEngine.gs'), 'utf8'), context, { filename: 'GmailEngine.gs' });
 vm.runInContext(fs.readFileSync(path.join(root, 'HealthCheck.gs'), 'utf8'), context, { filename: 'HealthCheck.gs' });
@@ -120,6 +124,20 @@ assert.throws(() => context.runWebsiteAuditToolWorkflow_(verified), /Fresh websi
 
 let endpointReportRequests = 0;
 context.requestWebsiteAuditPackageReport_ = () => { endpointReportRequests += 1; throw new Error('endpoint must not be called'); };
+context.normalizeClientProspect_ = prospect => prospect || {};
+context.getClientSafeReportFile_ = (_prospect, report) => report || {};
+context.getAuditEvidenceObject_ = () => ({});
+context.getAuditReportTextFromReportFile_ = report => String((report && report.text) || '');
+context.filterClientEligibleEvidence_ = values => values.filter(Boolean);
+context.getSmartFindings_ = () => [{
+  category: 'Contact Path Visibility',
+  observation: 'The reviewed homepage does not present the primary contact action prominently in the first customer decision area.',
+  businessImpact: 'Ready-to-act visitors may hesitate because the next contact step is not immediately clear.',
+  recommendedAction: 'Place one approved contact action in the homepage header and first customer decision area.',
+  priority: 'Priority Improvement',
+  source: 'Website screenshot',
+  supportingEvidence: 'The captured homepage first screen contains no prominent contact action.'
+}];
 context.buildOutreachDrafts_ = () => ({ subject: 'Assessment', initialEmail: 'Body' });
 context.buildProposal_ = () => ({});
 context.getOrCreateAuditPackageFolder_ = () => ({ getName: () => 'Acceptance Test Co' });

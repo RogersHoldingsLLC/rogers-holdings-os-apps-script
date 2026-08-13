@@ -3071,14 +3071,15 @@ function generateProposal() {
     return;
   }
 
+  const reportFile = buildLocalAuditReportInput_(prospect);
+  const goldStandardInput = buildGoldStandardDeliverableInput_(prospect, reportFile);
   applySmartFindingsToProspect_(sheet, table.headers, selectedRow, prospect);
   const proposal = buildProposal_(prospect);
-  const reportFile = buildLocalAuditReportInput_(prospect);
   const folder = getOrCreateAuditPackageFolder_(prospect.company);
   const file = upsertAuditPackageBlobFile_(
     folder,
     'Improvement Plan.pdf',
-    buildGoldStandardImprovementPlanPdfBlob_(buildGoldStandardDeliverableInput_(prospect, reportFile))
+    buildGoldStandardImprovementPlanPdfBlob_(goldStandardInput)
   );
   showProposalModal_(prospect, proposal);
   setIfHeaderCell_(sheet, table.headers, selectedRow, 'Next Action', 'Confirm Improvement Plan Sent');

@@ -156,6 +156,7 @@ function runBulkAuditPipelineForProspect_(ss, sheet, item) {
 function generateAuditPackageForContext_(context, prospect) {
   assertVerifiedAuditDataForLocalRendering_(prospect);
   const reportFile = buildLocalAuditReportInput_(prospect);
+  buildGoldStandardDeliverableInput_(prospect, reportFile);
   const drafts = buildOutreachDrafts_(prospect);
   const proposal = buildProposal_(prospect);
   const folder = getOrCreateAuditPackageFolder_(prospect.company);
@@ -512,7 +513,6 @@ function generateExecutiveSnapshot() {
   }
 
   try {
-    const folder = getOrCreateAuditPackageFolder_(prospect.company);
     const reportFile = {
       sourceUrl: prospect.website,
       screenshotUrl: prospect.websiteScreenshotUrl,
@@ -533,10 +533,12 @@ function generateExecutiveSnapshot() {
         mobileScreenshotMimeType: prospect.mobileScreenshotMimeType
       }
     };
+    const goldStandardInput = buildGoldStandardDeliverableInput_(prospect, reportFile);
+    const folder = getOrCreateAuditPackageFolder_(prospect.company);
     const file = upsertAuditPackageBlobFile_(
       folder,
       'Executive Brief.pdf',
-      buildExecutiveSnapshotPdfBlob_(prospect, reportFile)
+      buildGoldStandardExecutiveBriefPdfBlob_(goldStandardInput)
     );
 
     logPipelineActivity_(
