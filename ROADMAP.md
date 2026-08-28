@@ -28,6 +28,10 @@ Required before final release:
 
 The one-prospect coordinator is implemented on its approved feature branch and has passed disposable-workbook acceptance, including field validation, verified audit reuse, artifact reconciliation, one exact canonical Gmail draft across retries, visible Brian review, manual-send boundaries, Activity Feed correlation, and safe resume. Production deployment remains pending separate approval.
 
+### DE-002 identity exclusion snapshot v1
+
+The smallest BOP-owned read-only identity source is implemented locally on its isolated feature branch. Before Headquarters may acquire or enable the snapshot, it still requires separately authorized disposable-workbook acceptance, secret creation, Apps Script deployment, mutation-safety verification, and production approval. This milestone does not authorize those actions.
+
 Allowed:
 
 - Bug fixes.

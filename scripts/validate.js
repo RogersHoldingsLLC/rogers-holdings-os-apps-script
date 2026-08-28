@@ -20,7 +20,8 @@ const requiredFiles = [
   'DemoData.gs',
   'HealthCheck.gs',
   'BusinessSnapshotIntake.gs',
-  'HeadquartersSalesFeed.gs'
+  'HeadquartersSalesFeed.gs',
+  'HeadquartersIdentityExport.gs'
 ];
 
 function fail(message) {

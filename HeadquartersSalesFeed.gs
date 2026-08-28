@@ -13,27 +13,57 @@ function doPost(e) {
   const unauthorized = function() {
     return createHeadquartersSalesFeedJsonResponse_({ error: 'unauthorized' });
   };
+  let requestedVersion = '';
 
   try {
     const body = parseHeadquartersSalesFeedRequest_(e);
+    requestedVersion = body && String(body.version || '');
+    const tokenProperty = getHeadquartersRequestTokenProperty_(requestedVersion);
+    if (!body || !tokenProperty) {
+      return unauthorized();
+    }
     const configuredToken = PropertiesService.getScriptProperties()
-      .getProperty(HEADQUARTERS_SALES_FEED_TOKEN_PROPERTY);
+      .getProperty(tokenProperty);
 
-    if (!body || body.version !== HEADQUARTERS_SALES_FEED_VERSION ||
-        !configuredToken || !body.token ||
+    if (!configuredToken || !body.token ||
         !constantTimeStringEquals_(body.token, configuredToken)) {
       return unauthorized();
     }
 
-    return createHeadquartersSalesFeedJsonResponse_(buildHeadquartersSalesFeedV1_());
+    const response = requestedVersion === HEADQUARTERS_SALES_FEED_VERSION
+      ? buildHeadquartersSalesFeedV1_()
+      : buildHeadquartersIdentityExportV1_();
+    return createHeadquartersSalesFeedJsonResponse_(response);
   } catch (error) {
     // Deliberately do not log the request, token, or exception detail here.
+    if (isHeadquartersIdentityExportVersion_(requestedVersion)) {
+      return createHeadquartersSalesFeedJsonResponse_({
+        version: HEADQUARTERS_IDENTITY_EXPORT_VERSION,
+        complete: false,
+        error: 'unavailable'
+      });
+    }
     return createHeadquartersSalesFeedJsonResponse_({
       version: HEADQUARTERS_SALES_FEED_VERSION,
       status: { healthy: false, partial: false },
       error: 'unavailable'
     });
   }
+}
+
+function getHeadquartersRequestTokenProperty_(version) {
+  if (version === HEADQUARTERS_SALES_FEED_VERSION) {
+    return HEADQUARTERS_SALES_FEED_TOKEN_PROPERTY;
+  }
+  if (isHeadquartersIdentityExportVersion_(version)) {
+    return HEADQUARTERS_IDENTITY_EXPORT_TOKEN_PROPERTY;
+  }
+  return '';
+}
+
+function isHeadquartersIdentityExportVersion_(version) {
+  return typeof HEADQUARTERS_IDENTITY_EXPORT_VERSION !== 'undefined' &&
+    version === HEADQUARTERS_IDENTITY_EXPORT_VERSION;
 }
 
 function buildHeadquartersSalesFeedV1_() {
