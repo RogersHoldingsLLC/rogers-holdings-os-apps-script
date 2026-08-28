@@ -121,6 +121,8 @@ Root `.gs` files are the authoritative Apps Script source:
 - `DriveEngine.gs`
 - `GmailEngine.gs`
 - `HealthCheck.gs`
+- `HeadquartersIdentityExport.gs`
+- `HeadquartersSalesFeed.gs`
 - `HomepageInspector.gs`
 - `InspectionEngine.gs`
 - `InspectionIntelligenceEngine.gs`
@@ -222,6 +224,8 @@ Do not deploy unless validation passes.
 Common optional or recommended Apps Script properties:
 
 - `BOP_SPREADSHEET_ID` — required by the Business Snapshot library intake path; identifies the intended BOP workbook and has no active-workbook fallback
+- `HEADQUARTERS_IDENTITY_EXPORT_TOKEN` — required only for the separately versioned DE-002 identity exclusion snapshot; create manually through an approved secure process
+- `HEADQUARTERS_SALES_FEED_TOKEN` — required only for Headquarters Sales Feed v1; create manually through an approved secure process
 - `WEBSITE_AUDIT_TOOL_URL` or `WEBSITE_AUDIT_TOOL_ENDPOINT` — required only to acquire fresh real-audit data from the approved Website Audit Tool API
 - `BRAND_ASSET_FOLDER_ID` or `ROGERS_BRAND_ASSET_FOLDER_ID`
 

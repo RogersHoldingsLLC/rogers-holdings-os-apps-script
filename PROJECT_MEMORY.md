@@ -10,6 +10,8 @@ Phase 2A Follow-Up execution is production accepted. Phase 2B Next Action synchr
 
 Headquarters Sales Feed v1 is implemented locally as a BOP-owned, read-only Apps Script boundary. The root `HeadquartersSalesFeed.gs` builder owns all field meanings, reads operational sheets only through named headers, exposes privacy-minimized actions with opaque identifiers, and leaves revenue disconnected. Its `doPost` endpoint authenticates a JSON request-body token against the `HEADQUARTERS_SALES_FEED_TOKEN` Script Property. Disposable-workbook acceptance passed on 2026-08-11 for deployment version 5: authentication rejection/acceptance, exact contract and five-minute freshness, independent sales/delivery reconciliation, privacy, repeated-request determinism, and byte-for-byte source-range mutation safety all passed. Subsequent reconciliation proved the disposable `BusinessSnapshotIntake.gs` source is byte-for-byte identical to current authoritative upstream; the apparent drift was a stale local checkout. No production token has been created and no production deployment has occurred. See `HEADQUARTERS_SALES_FEED_V1.md` and `HEADQUARTERS_SALES_FEED_V1_ACCEPTANCE.md`.
 
+The DE-002 identity exclusion snapshot v1 is implemented locally as a separate BOP-owned, strictly read-only request version. It opens only the workbook identified by `BOP_SPREADSHEET_ID`, verifies the exact production workbook title, requires two identical complete read-only acquisitions of the documented row-4 Master Prospect Tracker and Clients sources, builds the exact response, and then requires a matching third complete acquisition as its final source operation. It rejects source mutation through that final boundary, sparse/null/undefined entry input, header/data formulas, malformed or globally duplicated IDs, contract-invalid business names/domains, more than 100,000 entries, and canonical JSON beyond 512 KiB. Its exact Headquarters-compatible response exposes only version/source/completeness/freshness plus record ID, literal lifecycle, business name, and a zero-or-one canonical domain array. It uses the separate `HEADQUARTERS_IDENTITY_EXPORT_TOKEN` property and does not change Headquarters Sales Feed v1 semantics. Local focused and regression validation is required in this milestone; no token, live access, Apps Script call, acceptance deployment, production deployment, or Headquarters enablement is authorized. See `HEADQUARTERS_IDENTITY_EXPORT_V1.md`.
+
 Feature development is frozen for V1.0. Current work should focus on release acceptance, bug fixes, documentation, and production readiness.
 
 The Business Snapshot production intake is live and has passed production acceptance. The accepted topology is Website -> Cloudflare -> Replacement Production Receiver Version 2 -> Authorized BOP Version 7 -> the authoritative `Rogers Holdings BOP — CRM & Delivery System` workbook. The fixed-version library boundary creates a Lead Found prospect, durable correlated activity, and an open Executive Brief Follow-Up in the explicitly configured workbook. The intake uses request-ID idempotency, duplicate-entity rejection, literal-text protection, and compensating rollback with reconciliation-required handling. Replaying the accepted request ID created no duplicate Prospect, Follow-Up, or Activity state.
@@ -95,6 +97,8 @@ Root `.gs` files are authoritative:
 - `DriveEngine.gs`
 - `GmailEngine.gs`
 - `HealthCheck.gs`
+- `HeadquartersIdentityExport.gs`
+- `HeadquartersSalesFeed.gs`
 - `HomepageInspector.gs`
 - `InspectionEngine.gs`
 - `InspectionIntelligenceEngine.gs`

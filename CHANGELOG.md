@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-08-27 — DE-002 Identity Exclusion Snapshot v1
+
+- Added a separately versioned, BOP-owned prospect/client identity snapshot that binds to the configured authoritative workbook and exposes only record ID, lifecycle, business name, and canonical domain arrays.
+- Added exact row-4 schema enforcement, matching initial full-source acquisitions plus a final complete fingerprint after snapshot construction, required-header/data formula rejection, case-insensitive global duplicate-ID rejection, fixed client-name compatibility precedence, and whole-snapshot fail-closed behavior.
+- Added exact Headquarters ID/name validation, 100,000-entry and 512 KiB canonical-payload ceilings, and a pure strict domain parser without changing `normalizeWebsiteKey_()` semantics; blank websites emit no domain while malformed, credential-bearing, port-bearing, unsupported-scheme, and noncanonical repeated-`www` inputs are safely normalized or rejected.
+- Added a separate Script Property token route with generic authentication/source failures and preserved Headquarters Sales Feed v1 response semantics.
+- Added focused local coverage for exact Headquarters compatibility, normalization, source mutation through the final validation boundary, dense-array enforcement, completeness, privacy, authentication, size limits, and no-write boundaries. No token was created, no live BOP data or Apps Script endpoint was accessed, and nothing was deployed.
+
 ## 2026-08-12 — Playground and Client Drive Root Isolation
 
 - Added the durable Production + Playground workbook model and documented the temporary acceptance-checkpoint migration path.
