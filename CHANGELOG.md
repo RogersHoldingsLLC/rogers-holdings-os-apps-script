@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-08-28 — DE-002 Disposable Workbook Identity Configuration
+
+- Replaced the identity exporter's embedded production workbook title with the required `HEADQUARTERS_IDENTITY_EXPORT_EXPECTED_WORKBOOK_TITLE` Script Property while retaining exact configured workbook-ID and workbook-title verification.
+- Added fail-closed coverage for missing, blank, malformed, changed, wrong, and near-match title configuration, exact production and disposable titles, wrong workbook identity, and the absence of any embedded title fallback.
+- Preserved the read-only boundary, exact Headquarters contract, complete source traversal and stability checks, separate identity-export authentication, and unchanged Headquarters Sales Feed v1 behavior. No Script Property was created, no workbook was accessed or modified, and nothing was deployed.
+
 ## 2026-08-27 — DE-002 Identity Exclusion Snapshot v1
 
 - Added a separately versioned, BOP-owned prospect/client identity snapshot that binds to the configured authoritative workbook and exposes only record ID, lifecycle, business name, and canonical domain arrays.

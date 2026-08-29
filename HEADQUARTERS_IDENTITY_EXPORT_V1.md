@@ -51,7 +51,9 @@ The top-level fields are exact. No completeness-count extension is included beca
 
 ## Authoritative source binding
 
-The exporter never calls `getActiveSpreadsheet()`. It reads the already-established `BOP_SPREADSHEET_ID` Script Property, validates its shape, opens exactly that ID with `SpreadsheetApp.openById()`, verifies the opened ID, and verifies the exact workbook title `Rogers Holdings BOP — CRM & Delivery System`.
+The exporter never calls `getActiveSpreadsheet()`. It requires both `BOP_SPREADSHEET_ID` and `HEADQUARTERS_IDENTITY_EXPORT_EXPECTED_WORKBOOK_TITLE` as explicit Script Properties, validates both values, opens exactly the configured ID with `SpreadsheetApp.openById()`, verifies the opened ID, and requires the opened workbook title to exactly equal the configured expected title. Missing, blank, malformed, changed, or mismatched configuration fails closed. There is no default, production-title fallback, disposable-title fallback, active-workbook fallback, or substring matching.
+
+Production must configure the expected title as `Rogers Holdings BOP — CRM & Delivery System` while mapping `BOP_SPREADSHEET_ID` to the production workbook. Disposable acceptance must configure the expected title as `NON-PRODUCTION — Rogers Holdings BOP — Workbook Optimization Acceptance` while mapping `BOP_SPREADSHEET_ID` to that approved disposable workbook. Both environments use the same exact ID-and-title verification path.
 
 Both mandatory sources are read from that workbook:
 
@@ -109,4 +111,4 @@ Partial identity snapshots are never returned. Internal errors use a fixed messa
 
 ## Remaining acquisition gates
 
-Before Headquarters can acquire a snapshot, separately authorize and complete disposable-workbook acceptance, create an approved secret in `HEADQUARTERS_IDENTITY_EXPORT_TOKEN`, deploy an approved Apps Script web-app version, validate the full response and mutation safety against the disposable workbook, then separately approve production deployment and production secret configuration. None of those actions is part of this milestone.
+Before Headquarters can acquire a snapshot, separately authorize and complete disposable-workbook acceptance, configure the acceptance-only `BOP_SPREADSHEET_ID` and exact `HEADQUARTERS_IDENTITY_EXPORT_EXPECTED_WORKBOOK_TITLE`, create an approved secret in `HEADQUARTERS_IDENTITY_EXPORT_TOKEN`, deploy an approved Apps Script web-app version, validate the full response and mutation safety against the disposable workbook, then separately approve production deployment and production Script Property configuration. None of those actions is part of this milestone.
