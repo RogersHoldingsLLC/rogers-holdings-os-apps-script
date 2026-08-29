@@ -9,10 +9,14 @@ const logged = [];
 const calls = { openById: 0, writes: 0 };
 const sourceSpreadsheetId = 'BOPProductionWorkbook12345';
 const token = 'identity-export-test-secret';
+const productionWorkbookTitle = 'Rogers Holdings BOP — CRM & Delivery System';
+const disposableWorkbookTitle = 'NON-PRODUCTION — Rogers Holdings BOP — Workbook Optimization Acceptance';
+const expectedWorkbookTitleProperty = 'HEADQUARTERS_IDENTITY_EXPORT_EXPECTED_WORKBOOK_TITLE';
 const prospectHeaders = ['Prospect ID', 'Status', 'Company', 'Website', 'Notes'];
 const clientHeaders = ['Client ID', 'Status', 'Company', 'Client Name', 'Website', 'Notes'];
 let properties = {
   BOP_SPREADSHEET_ID: sourceSpreadsheetId,
+  HEADQUARTERS_IDENTITY_EXPORT_EXPECTED_WORKBOOK_TITLE: productionWorkbookTitle,
   HEADQUARTERS_IDENTITY_EXPORT_TOKEN: token,
   HEADQUARTERS_SALES_FEED_TOKEN: 'sales-feed-test-secret'
 };
@@ -21,6 +25,19 @@ let responseConstructionHook;
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+function withPropertyOverrides(overrides, callback) {
+  const previous = properties;
+  properties = Object.assign({}, properties, overrides);
+  Object.keys(overrides).forEach((name) => {
+    if (overrides[name] === undefined) delete properties[name];
+  });
+  try {
+    return callback();
+  } finally {
+    properties = previous;
+  }
 }
 
 function createSheet(name, sheetId, headers, rows, options, state) {
@@ -136,7 +153,7 @@ function createSpreadsheet(options = {}) {
       }
       return options.id || sourceSpreadsheetId;
     },
-    getName: () => options.name || 'Rogers Holdings BOP — CRM & Delivery System',
+    getName: () => options.name === undefined ? productionWorkbookTitle : options.name,
     getSheetByName: (name) => sheets[name] || null
   };
 }
@@ -323,8 +340,61 @@ expectSourceFailure({
   prospectHeaderFormulas: ['', '', '=A1', '', '']
 }, 'UNTRUSTED_HEADER_FORMULA');
 
-// Explicit workbook binding rejects a lookalike workbook.
-expectSourceFailure({ name: 'Copy of Rogers Holdings BOP' }, 'SOURCE_IDENTITY_MISMATCH');
+// Explicit workbook binding requires exact configured ID and title in every environment.
+const productionBinding = buildSnapshot({ name: productionWorkbookTitle });
+assert.strictEqual(productionBinding.complete, true, 'exact production ID and explicitly configured title succeed');
+expectSourceFailure({ name: 'Wrong Workbook Title' }, 'SOURCE_IDENTITY_MISMATCH');
+expectSourceFailure({ id: 'DifferentWorkbookIdentity12345', name: productionWorkbookTitle }, 'SOURCE_IDENTITY_MISMATCH');
+expectSourceFailure({ name: productionWorkbookTitle + ' ' }, 'SOURCE_IDENTITY_MISMATCH');
+
+withPropertyOverrides({
+  [expectedWorkbookTitleProperty]: disposableWorkbookTitle
+}, () => {
+  const disposableBinding = buildSnapshot({ name: disposableWorkbookTitle });
+  assert.strictEqual(disposableBinding.complete, true, 'exact disposable ID and explicitly configured title succeed');
+});
+
+withPropertyOverrides({
+  [expectedWorkbookTitleProperty]: disposableWorkbookTitle
+}, () => {
+  expectSourceFailure({ name: productionWorkbookTitle }, 'SOURCE_IDENTITY_MISMATCH');
+});
+
+[undefined, '', '   ', ` ${productionWorkbookTitle}`, `${productionWorkbookTitle}\n`].forEach((configuredTitle) => {
+  withPropertyOverrides({
+    [expectedWorkbookTitleProperty]: configuredTitle
+  }, () => {
+    expectSourceFailure({ name: productionWorkbookTitle }, 'SOURCE_CONFIGURATION_INVALID');
+    assert.strictEqual(calls.openById, 0, 'invalid title configuration fails before workbook access');
+  });
+});
+
+withPropertyOverrides({
+  [expectedWorkbookTitleProperty]: undefined
+}, () => {
+  installSpreadsheet({ name: productionWorkbookTitle });
+  assert.deepStrictEqual(JSON.parse(post({
+    version: context.HEADQUARTERS_IDENTITY_EXPORT_VERSION,
+    token
+  }).text), {
+    version: 'rh-bop-identity-exclusion-snapshot-v1',
+    complete: false,
+    error: 'unavailable'
+  }, 'missing expected title returns the generic unavailable response');
+  assert.strictEqual(calls.openById, 0, 'production title is never an implicit fallback');
+});
+
+withPropertyOverrides({
+  [expectedWorkbookTitleProperty]: productionWorkbookTitle
+}, () => {
+  expectMutationUnavailable(() => ({
+    onRead({ sheetName, readNumber }) {
+      if (sheetName === 'Clients' && readNumber === 2) {
+        properties[expectedWorkbookTitleProperty] = disposableWorkbookTitle;
+      }
+    }
+  }));
+});
 
 // Entry and canonical serialized-payload limits fail before complete true can be returned.
 const tooMany = Array.from({ length: 100001 }, (_, index) => ({
@@ -471,6 +541,8 @@ expectMutationUnavailable(() => ({
 const identitySourceText = fs.readFileSync(path.join(root, 'HeadquartersIdentityExport.gs'), 'utf8');
 assert(!/\.(setValue|setValues|clearContent|appendRow|insertRow|insertSheet|deleteRow|deleteSheet|setProperty|createFile)\s*\(/.test(identitySourceText));
 assert(!/(getOrCreate|ensure[A-Z]|logPipelineActivity_|DriveApp|GmailApp|CalendarApp|UrlFetchApp|LockService|getActiveSpreadsheet)\b/.test(identitySourceText));
+assert.strictEqual(identitySourceText.includes(productionWorkbookTitle), false, 'no production-title fallback is embedded');
+assert.strictEqual(identitySourceText.includes(disposableWorkbookTitle), false, 'no disposable-title fallback is embedded');
 assert.strictEqual(calls.writes, 0);
 
 // Authentication and failures disclose neither tokens nor fixture identity values.

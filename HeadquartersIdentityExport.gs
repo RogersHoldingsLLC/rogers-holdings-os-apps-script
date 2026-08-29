@@ -9,7 +9,8 @@
 var HEADQUARTERS_IDENTITY_EXPORT_VERSION = 'rh-bop-identity-exclusion-snapshot-v1';
 var HEADQUARTERS_IDENTITY_EXPORT_TOKEN_PROPERTY = 'HEADQUARTERS_IDENTITY_EXPORT_TOKEN';
 var HEADQUARTERS_IDENTITY_EXPORT_SPREADSHEET_PROPERTY = 'BOP_SPREADSHEET_ID';
-var HEADQUARTERS_IDENTITY_EXPORT_WORKBOOK_NAME = 'Rogers Holdings BOP — CRM & Delivery System';
+var HEADQUARTERS_IDENTITY_EXPORT_EXPECTED_WORKBOOK_TITLE_PROPERTY =
+  'HEADQUARTERS_IDENTITY_EXPORT_EXPECTED_WORKBOOK_TITLE';
 var HEADQUARTERS_IDENTITY_EXPORT_HEADER_ROW = 4;
 var HEADQUARTERS_IDENTITY_EXPORT_FRESHNESS_MINUTES = 5;
 var HEADQUARTERS_IDENTITY_EXPORT_MAXIMUM_ENTRIES = 100000;
@@ -38,18 +39,20 @@ function readHeadquartersIdentityExportSourceV1_() {
 
 function acquireHeadquartersIdentityExportSourceV1_() {
   const spreadsheetId = readHeadquartersIdentityExportSpreadsheetIdV1_();
+  const expectedWorkbookTitle = readHeadquartersIdentityExportExpectedWorkbookTitleV1_();
   let spreadsheet;
   try {
     spreadsheet = SpreadsheetApp.openById(spreadsheetId);
   } catch (error) {
     throw createHeadquartersIdentityExportErrorV1_('SOURCE_UNAVAILABLE');
   }
-  assertHeadquartersIdentityWorkbookV1_(spreadsheet, spreadsheetId);
+  assertHeadquartersIdentityWorkbookV1_(spreadsheet, spreadsheetId, expectedWorkbookTitle);
 
   const first = readHeadquartersIdentityWorkbookSnapshotV1_(spreadsheet);
   const second = readHeadquartersIdentityWorkbookSnapshotV1_(spreadsheet);
-  assertHeadquartersIdentityWorkbookV1_(spreadsheet, spreadsheetId);
+  assertHeadquartersIdentityWorkbookV1_(spreadsheet, spreadsheetId, expectedWorkbookTitle);
   if (readHeadquartersIdentityExportSpreadsheetIdV1_() !== spreadsheetId ||
+      readHeadquartersIdentityExportExpectedWorkbookTitleV1_() !== expectedWorkbookTitle ||
       fingerprintHeadquartersIdentitySourceV1_(first) !== fingerprintHeadquartersIdentitySourceV1_(second)) {
     throw createHeadquartersIdentityExportErrorV1_('SOURCE_CHANGED_DURING_EXPORT');
   }
@@ -72,6 +75,7 @@ function acquireHeadquartersIdentityExportSourceV1_() {
   return {
     spreadsheet: spreadsheet,
     spreadsheetId: spreadsheetId,
+    expectedWorkbookTitle: expectedWorkbookTitle,
     sourceFingerprint: fingerprintHeadquartersIdentitySourceV1_(second),
     source: {
       prospects: prospects.entries,
@@ -82,11 +86,16 @@ function acquireHeadquartersIdentityExportSourceV1_() {
 
 function verifyHeadquartersIdentityExportSourceV1_(acquisition) {
   if (!acquisition || !acquisition.spreadsheet || !acquisition.spreadsheetId ||
-      !acquisition.sourceFingerprint) {
+      !acquisition.expectedWorkbookTitle || !acquisition.sourceFingerprint) {
     throw createHeadquartersIdentityExportErrorV1_('SOURCE_READ_INVALID');
   }
-  assertHeadquartersIdentityWorkbookV1_(acquisition.spreadsheet, acquisition.spreadsheetId);
-  if (readHeadquartersIdentityExportSpreadsheetIdV1_() !== acquisition.spreadsheetId) {
+  assertHeadquartersIdentityWorkbookV1_(
+    acquisition.spreadsheet,
+    acquisition.spreadsheetId,
+    acquisition.expectedWorkbookTitle
+  );
+  if (readHeadquartersIdentityExportSpreadsheetIdV1_() !== acquisition.spreadsheetId ||
+      readHeadquartersIdentityExportExpectedWorkbookTitleV1_() !== acquisition.expectedWorkbookTitle) {
     throw createHeadquartersIdentityExportErrorV1_('SOURCE_CHANGED_DURING_EXPORT');
   }
   const finalSnapshot = readHeadquartersIdentityWorkbookSnapshotV1_(acquisition.spreadsheet);
@@ -109,9 +118,25 @@ function readHeadquartersIdentityExportSpreadsheetIdV1_() {
   return spreadsheetId;
 }
 
-function assertHeadquartersIdentityWorkbookV1_(spreadsheet, spreadsheetId) {
+function readHeadquartersIdentityExportExpectedWorkbookTitleV1_() {
+  let expectedWorkbookTitle = '';
+  try {
+    expectedWorkbookTitle = String(PropertiesService.getScriptProperties()
+      .getProperty(HEADQUARTERS_IDENTITY_EXPORT_EXPECTED_WORKBOOK_TITLE_PROPERTY) || '');
+  } catch (error) {
+    throw createHeadquartersIdentityExportErrorV1_('SOURCE_CONFIGURATION_UNAVAILABLE');
+  }
+  if (expectedWorkbookTitle !== expectedWorkbookTitle.trim() ||
+      expectedWorkbookTitle.length < 1 || expectedWorkbookTitle.length > 300 ||
+      /[\u0000-\u001F\u007F]/.test(expectedWorkbookTitle)) {
+    throw createHeadquartersIdentityExportErrorV1_('SOURCE_CONFIGURATION_INVALID');
+  }
+  return expectedWorkbookTitle;
+}
+
+function assertHeadquartersIdentityWorkbookV1_(spreadsheet, spreadsheetId, expectedWorkbookTitle) {
   if (!spreadsheet || String(spreadsheet.getId() || '') !== spreadsheetId ||
-      String(spreadsheet.getName() || '') !== HEADQUARTERS_IDENTITY_EXPORT_WORKBOOK_NAME) {
+      String(spreadsheet.getName() || '') !== expectedWorkbookTitle) {
     throw createHeadquartersIdentityExportErrorV1_('SOURCE_IDENTITY_MISMATCH');
   }
 }
