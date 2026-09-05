@@ -247,6 +247,25 @@ function post(body) {
   return context.doPost({ postData: { contents: JSON.stringify(body) } });
 }
 
+function withContextOverrides(overrides, callback) {
+  const previous = {};
+  Object.keys(overrides).forEach((name) => {
+    previous[name] = context[name];
+    context[name] = overrides[name];
+  });
+  try {
+    return callback();
+  } finally {
+    Object.keys(previous).forEach((name) => { context[name] = previous[name]; });
+  }
+}
+
+// Bypass JSON only to preserve synthetic getters, coercion hooks, and undefined.
+function postDirect(body) {
+  return withContextOverrides({ parseHeadquartersSalesFeedRequest_: () => body },
+    () => context.doPost({}));
+}
+
 function expectMutationUnavailable(factory) {
   installSpreadsheet(factory());
   const response = JSON.parse(post({
@@ -545,10 +564,384 @@ assert.strictEqual(identitySourceText.includes(productionWorkbookTitle), false, 
 assert.strictEqual(identitySourceText.includes(disposableWorkbookTitle), false, 'no disposable-title fallback is embedded');
 assert.strictEqual(calls.writes, 0);
 
+// Identity authentication must finish before any versioned failure is observable.
+const unauthorizedBody = '{"error":"unauthorized"}';
+const unavailableBody = '{"version":"rh-bop-identity-exclusion-snapshot-v1","complete":false,"error":"unavailable"}';
+const identityVersion = context.HEADQUARTERS_IDENTITY_EXPORT_VERSION;
+let exporterCalls = 0;
+installSpreadsheet();
+withContextOverrides({
+  buildHeadquartersIdentityExportV1_() {
+    exporterCalls += 1;
+    throw new Error('synthetic exporter failure');
+  }
+}, () => {
+  // Exact byte equality also excludes diagnostics, extra fields, and leaked values.
+  [
+    { toString: null }, {}, [], [token], 42, 0, true, false, null, undefined,
+    new String(token)
+  ].forEach((candidate) => {
+    assert.strictEqual(postDirect({ version: identityVersion, token: candidate }).text,
+      unauthorizedBody, 'non-string candidate returns only unauthorized without throwing');
+  });
+  assert.strictEqual(post({ version: identityVersion, token: { toString: null } }).text,
+    unauthorizedBody, 'malformed truthy object also fails closed through JSON parsing');
+  assert.strictEqual(post({ version: identityVersion }).text, unauthorizedBody, 'missing token');
+  ['', 'wrong', ` ${token}`, token.toUpperCase()].forEach((candidate) => {
+    assert.strictEqual(post({ version: identityVersion, token: candidate }).text,
+      unauthorizedBody, 'empty, incorrect, or normalized tokens are not accepted');
+  });
+
+  let coercionCalls = 0;
+  const noCoercion = {
+    [Symbol.toPrimitive]() { coercionCalls += 1; throw new Error('synthetic coercion failure'); },
+    toString() { coercionCalls += 1; throw new Error('synthetic toString failure'); },
+    valueOf() { coercionCalls += 1; throw new Error('synthetic valueOf failure'); }
+  };
+  assert.strictEqual(postDirect({ version: identityVersion, token: noCoercion }).text, unauthorizedBody);
+  assert.strictEqual(coercionCalls, 0, 'candidate coercion hooks are never invoked');
+  ['toString', 'valueOf', Symbol.toPrimitive].forEach((hook) => {
+    [false, true].forEach((throws) => {
+      let hookCalls = 0;
+      const candidate = {
+        [hook]() {
+          hookCalls += 1;
+          if (throws) throw new Error('synthetic forbidden coercion');
+          return token;
+        }
+      };
+      assert.strictEqual(postDirect({ version: identityVersion, token: candidate }).text,
+        unauthorizedBody, 'each observable or throwing hook is rejected independently');
+      assert.strictEqual(hookCalls, 0, 'no individual candidate coercion hook executes');
+    });
+  });
+  [undefined, null, '', {}, [], 42, true, new String(token), noCoercion].forEach((expected) => {
+    withPropertyOverrides({ HEADQUARTERS_IDENTITY_EXPORT_TOKEN: expected }, () => {
+      assert.strictEqual(post({ version: identityVersion, token }).text,
+        unauthorizedBody, 'expected token must also be a nonempty primitive string');
+    });
+  });
+  assert.strictEqual(coercionCalls, 0, 'expected-token coercion hooks are never invoked');
+  [undefined, null, '', false, 0, {}, [], new String(token), noCoercion].forEach((expected) => {
+    let expectedReads = 0;
+    withContextOverrides({
+      PropertiesService: {
+        getScriptProperties() {
+          return {
+            getProperty() { expectedReads += 1; return expected; }
+          };
+        }
+      }
+    }, () => {
+      assert.strictEqual(post({ version: identityVersion, token }).text, unauthorizedBody,
+        'raw invalid expected values fail without mock truthiness normalization');
+    });
+    assert.strictEqual(expectedReads, 1, 'expected authentication token is acquired once');
+  });
+  assert.strictEqual(coercionCalls, 0, 'raw expected values are never coerced');
+
+  let propertyReads = 0;
+  withContextOverrides({
+    PropertiesService: {
+      getScriptProperties() {
+        return {
+          getProperty(name) {
+            propertyReads += 1;
+            assert.strictEqual(name, context.HEADQUARTERS_IDENTITY_EXPORT_TOKEN_PROPERTY);
+            throw new Error(`synthetic property read failure: ${name} ${token}`);
+          }
+        };
+      }
+    }
+  }, () => {
+    assert.strictEqual(post({ version: identityVersion, token }).text, unauthorizedBody);
+  });
+  assert.strictEqual(propertyReads, 1, 'only the authentication property was requested');
+  const propertiesServiceDescriptor = Object.getOwnPropertyDescriptor(context, 'PropertiesService');
+  let serviceAcquisitions = 0;
+  Object.defineProperty(context, 'PropertiesService', {
+    configurable: true,
+    get() {
+      serviceAcquisitions += 1;
+      throw new Error('synthetic PropertiesService acquisition failure');
+    }
+  });
+  try {
+    assert.strictEqual(post({ version: identityVersion, token }).text, unauthorizedBody);
+    assert.strictEqual(serviceAcquisitions, 1, 'PropertiesService acquisition is attempted once');
+  } finally {
+    Object.defineProperty(context, 'PropertiesService', propertiesServiceDescriptor);
+  }
+  withContextOverrides({
+    PropertiesService: {
+      getScriptProperties() { throw new Error('synthetic property service failure'); }
+    }
+  }, () => {
+    assert.strictEqual(post({ version: identityVersion, token }).text, unauthorizedBody);
+  });
+  assert.strictEqual(postDirect({
+    version: identityVersion,
+    get token() { throw new Error('synthetic candidate read failure'); }
+  }).text, unauthorizedBody, 'pre-authentication candidate validation exception');
+  withContextOverrides({
+    Utilities: Object.assign({}, context.Utilities, {
+      computeDigest() { throw new Error('synthetic comparison failure'); }
+    })
+  }, () => {
+    assert.strictEqual(post({ version: identityVersion, token }).text, unauthorizedBody);
+  });
+  assert.strictEqual(exporterCalls, 0, 'no pre-authentication failure invokes the exporter');
+  assert.strictEqual(calls.openById, 0, 'no pre-authentication failure opens the source');
+
+  assert.strictEqual(post({ version: identityVersion, token }).text, unavailableBody,
+    'successful primitive-string authentication precedes exporter failure');
+  assert.strictEqual(exporterCalls, 1, 'authenticated request invokes the exporter exactly once');
+  // A subsequent unauthorized request must not inherit authentication state.
+  assert.strictEqual(post({ version: identityVersion, token: 'wrong' }).text, unauthorizedBody);
+  assert.strictEqual(exporterCalls, 1);
+});
+assert.deepStrictEqual(logged, [], 'authentication and failure paths log no diagnostics or values');
+assert.strictEqual(calls.writes, 0);
+
+// Changing accessors exercise the production decision with the original comparator.
+const originalComparator = context.constantTimeStringEquals_;
+const originalExporter = context.buildHeadquartersIdentityExportV1_;
+const originalPropertiesService = context.PropertiesService;
+['second-object', 'second-throw', 'first-object', 'first-throw'].forEach((scenario) => {
+  installSpreadsheet();
+  let candidateReads = 0;
+  let expectedReads = 0;
+  let comparisonCalls = 0;
+  let capturedExporterCalls = 0;
+  let hookCalls = 0;
+  const malicious = {
+    [Symbol.toPrimitive]() { hookCalls += 1; return token; }
+  };
+  const request = {
+    version: identityVersion,
+    get token() {
+      candidateReads += 1;
+      if (scenario === 'first-throw' || (scenario === 'second-throw' && candidateReads > 1)) {
+        throw new Error('synthetic changing candidate access');
+      }
+      if (scenario === 'first-object') return candidateReads === 1 ? malicious : token;
+      return candidateReads === 1 ? token : malicious;
+    }
+  };
+  withContextOverrides({
+    PropertiesService: {
+      getScriptProperties() {
+        const originalProperties = originalPropertiesService.getScriptProperties();
+        return {
+          getProperty(name) {
+            if (name === context.HEADQUARTERS_IDENTITY_EXPORT_TOKEN_PROPERTY) expectedReads += 1;
+            return originalProperties.getProperty(name);
+          }
+        };
+      }
+    },
+    constantTimeStringEquals_(candidate, expected) {
+      comparisonCalls += 1;
+      assert.strictEqual(candidate, token, 'comparison receives the captured first primitive value');
+      assert.strictEqual(expected, token, 'comparison receives the acquired primitive expected token');
+      return originalComparator(candidate, expected);
+    },
+    buildHeadquartersIdentityExportV1_() {
+      capturedExporterCalls += 1;
+      return originalExporter();
+    }
+  }, () => {
+    const response = postDirect(request);
+    const validFirstRead = scenario === 'second-object' || scenario === 'second-throw';
+    if (validFirstRead) {
+      const payload = JSON.parse(response.text);
+      assert.strictEqual(payload.complete, true, 'valid captured token authenticates normally');
+      assert.strictEqual(response.text, JSON.stringify(payload), 'success remains canonical');
+    } else {
+      assert.strictEqual(response.text, unauthorizedBody);
+      assert.strictEqual(calls.openById, 0, 'invalid or throwing first access never opens the source');
+    }
+    assert.strictEqual(comparisonCalls, validFirstRead ? 1 : 0);
+    assert.strictEqual(capturedExporterCalls, validFirstRead ? 1 : 0);
+  });
+  assert.strictEqual(candidateReads, 1, 'identity authentication reads the candidate exactly once');
+  assert.strictEqual(expectedReads, 1, 'identity authentication reads its expected property exactly once');
+  assert.strictEqual(hookCalls, 0, 'a later malicious value is never obtained or coerced');
+});
+
+// Count primary construction and direct literal output separately, through doPost.
+function withFailingPrimaryResponseBuilder(platformFailure, callback) {
+  const attempts = { primary: [], literal: [] };
+  const originalContentService = context.ContentService;
+  withContextOverrides({
+    createHeadquartersSalesFeedJsonResponse_(payload) {
+      attempts.primary.push(JSON.stringify(payload));
+      throw new Error(`synthetic primary construction failure ${token}`);
+    },
+    ContentService: {
+      MimeType: originalContentService.MimeType,
+      createTextOutput(text) {
+        attempts.literal.push(text);
+        if (platformFailure) throw platformFailure;
+        return originalContentService.createTextOutput(text);
+      }
+    }
+  }, () => callback(attempts));
+}
+
+installSpreadsheet();
+let boundaryExporterCalls = 0;
+withContextOverrides({
+  buildHeadquartersIdentityExportV1_() {
+    boundaryExporterCalls += 1;
+    throw new Error('synthetic boundary exporter failure');
+  }
+}, () => {
+  withFailingPrimaryResponseBuilder(null, (attempts) => {
+    const response = post({ version: identityVersion, token: 'wrong' });
+    assert.strictEqual(response.text, unauthorizedBody);
+    assert.strictEqual(response.mimeType, 'application/json');
+    assert.deepStrictEqual(attempts.primary, [unauthorizedBody], 'one unauthorized primary attempt');
+    assert.deepStrictEqual(attempts.literal, [unauthorizedBody], 'one literal fallback, no retry');
+    assert.strictEqual(boundaryExporterCalls, 0);
+    assert.strictEqual(calls.openById, 0);
+  });
+  withFailingPrimaryResponseBuilder(null, (attempts) => {
+    const response = post({ version: identityVersion, token });
+    assert.strictEqual(response.text, unavailableBody);
+    assert.strictEqual(response.mimeType, 'application/json');
+    assert.deepStrictEqual(attempts.primary, [unavailableBody]);
+    assert.deepStrictEqual(attempts.literal, [unavailableBody]);
+    assert.strictEqual(boundaryExporterCalls, 1);
+  });
+});
+
+installSpreadsheet({ missingClients: true });
+withFailingPrimaryResponseBuilder(null, (attempts) => {
+  assert.strictEqual(post({ version: identityVersion, token }).text, unavailableBody);
+  assert.strictEqual(calls.openById, 1, 'authenticated source failure is exercised');
+  assert.deepStrictEqual(attempts.primary, [unavailableBody]);
+  assert.deepStrictEqual(attempts.literal, [unavailableBody]);
+});
+
+installSpreadsheet();
+withFailingPrimaryResponseBuilder(null, (attempts) => {
+  assert.strictEqual(post({ version: identityVersion, token }).text, unavailableBody);
+  assert.strictEqual(attempts.primary.length, 2, 'success attempt plus one unavailable-envelope attempt');
+  const successfulAttempt = JSON.parse(attempts.primary[0]);
+  assert.strictEqual(successfulAttempt.complete, true);
+  assert.deepStrictEqual(Object.keys(successfulAttempt),
+    ['version', 'source', 'complete', 'generatedAt', 'expiresAt', 'entries']);
+  assert.strictEqual(attempts.primary[1], unavailableBody);
+  assert.deepStrictEqual(attempts.literal, [unavailableBody], 'one bounded fallback after success construction fails');
+});
+
+// Platform output failures escape unchanged; no third attempt or delivered body is claimed.
+[false, true].forEach((authenticated) => {
+  installSpreadsheet();
+  const platformFailure = new Error('synthetic ContentService platform failure');
+  const originalFailureProperties = Object.getOwnPropertyDescriptors(platformFailure);
+  let platformExporterCalls = 0;
+  withContextOverrides({
+    buildHeadquartersIdentityExportV1_() {
+      platformExporterCalls += 1;
+      throw new Error(`synthetic exporter failure ${token} ${sourceSpreadsheetId}`);
+    }
+  }, () => {
+    withFailingPrimaryResponseBuilder(platformFailure, (attempts) => {
+      let response;
+      assert.throws(() => {
+        response = post({ version: identityVersion, token: authenticated ? token : 'wrong' });
+      }, (error) => error === platformFailure, 'platform error escapes without an application wrapper');
+      assert.strictEqual(response, undefined, 'no application response was delivered');
+      const intendedBody = authenticated ? unavailableBody : unauthorizedBody;
+      assert.deepStrictEqual(attempts.primary, [intendedBody]);
+      assert.deepStrictEqual(attempts.literal, [intendedBody], 'one fallback attempt and no recursion');
+      assert.deepStrictEqual(Object.getOwnPropertyDescriptors(platformFailure), originalFailureProperties,
+        'application attaches no diagnostic or credential detail to the platform failure');
+      assert.strictEqual(platformExporterCalls, authenticated ? 1 : 0);
+      assert.strictEqual(calls.openById, 0);
+    });
+  });
+  assert.deepStrictEqual(logged, [], 'platform boundary logs no credential or diagnostic detail');
+});
+
+// Authenticated serialization failure retains the same minimal unavailable body.
+withContextOverrides({
+  buildHeadquartersIdentityExportV1_() {
+    return { toJSON() { throw new Error('synthetic serialization failure'); } };
+  }
+}, () => {
+  assert.strictEqual(post({ version: identityVersion, token }).text, unavailableBody);
+});
+
+// With both modules loaded, Sales Feed keeps its existing routing and coercion.
+const salesUnavailableBody = '{"version":"1.0","status":{"healthy":false,"partial":false},"error":"unavailable"}';
+let salesCalls = 0;
+const salesResponse = { version: '1.0', status: { healthy: true, partial: false } };
+withContextOverrides({
+  buildHeadquartersSalesFeedV1_() { salesCalls += 1; return salesResponse; }
+}, () => {
+  assert.strictEqual(post({ version: '1.0', token: 'wrong' }).text, unauthorizedBody);
+  assert.strictEqual(salesCalls, 0);
+  assert.strictEqual(post({ version: '1.0', token: properties.HEADQUARTERS_SALES_FEED_TOKEN }).text,
+    JSON.stringify(salesResponse));
+  assert.strictEqual(post({ version: '1.0', token: [properties.HEADQUARTERS_SALES_FEED_TOKEN] }).text,
+    JSON.stringify(salesResponse), 'existing Sales Feed token coercion remains unchanged');
+  assert.strictEqual(salesCalls, 2);
+  assert.strictEqual(post({ version: '1.0', token: { toString: null } }).text, salesUnavailableBody);
+});
+withContextOverrides({
+  buildHeadquartersSalesFeedV1_() { throw new Error('synthetic sales source failure'); }
+}, () => {
+  assert.strictEqual(post({ version: '1.0', token: properties.HEADQUARTERS_SALES_FEED_TOKEN }).text,
+    salesUnavailableBody);
+});
+withContextOverrides({
+  PropertiesService: {
+    getScriptProperties() { throw new Error('synthetic sales property failure'); }
+  }
+}, () => {
+  assert.strictEqual(post({ version: '1.0', token: properties.HEADQUARTERS_SALES_FEED_TOKEN }).text,
+    salesUnavailableBody, 'existing Sales Feed pre-authentication exception envelope is unchanged');
+});
+
+// Committed doPost's catch selects the Sales v1 envelope before version assignment completes.
+[
+  () => context.doPost({ get postData() { throw new Error('synthetic event access failure'); } }),
+  () => postDirect({ get version() { throw new Error('synthetic version access failure'); } }),
+  () => postDirect({ version: { toString: null }, token })
+].forEach((request) => {
+  assert.strictEqual(request().text, salesUnavailableBody,
+    'exception before conclusive identity classification retains committed Sales dispatch behavior');
+});
+
+// Both route orders share this VM: neither successful route authenticates the other.
+installSpreadsheet();
+let isolatedSalesCalls = 0;
+withContextOverrides({
+  buildHeadquartersSalesFeedV1_() { isolatedSalesCalls += 1; return salesResponse; }
+}, () => {
+  assert.strictEqual(JSON.parse(post({ version: identityVersion, token }).text).complete, true);
+  assert.strictEqual(post({ version: '1.0', token }).text, unauthorizedBody,
+    'identity success cannot authenticate a Sales request');
+  assert.strictEqual(isolatedSalesCalls, 0);
+  assert.strictEqual(post({ version: '1.0', token: properties.HEADQUARTERS_SALES_FEED_TOKEN }).text,
+    JSON.stringify(salesResponse), 'Sales success follows identity independently');
+  const openedBeforeUnauthorized = calls.openById;
+  assert.strictEqual(post({ version: identityVersion, token: properties.HEADQUARTERS_SALES_FEED_TOKEN }).text,
+    unauthorizedBody, 'Sales success cannot authenticate an identity request');
+  assert.strictEqual(calls.openById, openedBeforeUnauthorized);
+  assert.strictEqual(JSON.parse(post({ version: identityVersion, token }).text).complete, true,
+    'identity success follows Sales independently');
+  assert.strictEqual(isolatedSalesCalls, 1);
+});
+
 // Authentication and failures disclose neither tokens nor fixture identity values.
 installSpreadsheet({ prospectRows: [['LEAK-ID', 'Lead Found', 'Sensitive Company', 'bad..secret.example', '']] });
 assert.deepStrictEqual(JSON.parse(post({ version: context.HEADQUARTERS_IDENTITY_EXPORT_VERSION, token: 'wrong' }).text), { error: 'unauthorized' });
 const unavailable = post({ version: context.HEADQUARTERS_IDENTITY_EXPORT_VERSION, token }).text;
+assert.strictEqual(unavailable, unavailableBody, 'authenticated source failure has exact compact bytes');
 assert.deepStrictEqual(JSON.parse(unavailable), {
   version: 'rh-bop-identity-exclusion-snapshot-v1',
   complete: false,
@@ -567,6 +960,10 @@ assert.strictEqual(successfulPost.text, JSON.stringify(successfulPayload), 'dire
 assert.deepStrictEqual(Object.keys(successfulPayload), ['version', 'source', 'complete', 'generatedAt', 'expiresAt', 'entries']);
 assert.strictEqual(successfulPayload.complete, true);
 assert.strictEqual(calls.writes, 0);
+const successfulSourceCalls = calls.openById;
+assert.strictEqual(post({ version: identityVersion, token: 'wrong' }).text, unauthorizedBody,
+  'unauthorized request immediately after successful identity export remains unauthorized');
+assert.strictEqual(calls.openById, successfulSourceCalls, 'prior success never authorizes later source access');
 
 // Once final verification and JSON serialization are complete, a later source
 // edit cannot change the already-fixed point-in-time response.
