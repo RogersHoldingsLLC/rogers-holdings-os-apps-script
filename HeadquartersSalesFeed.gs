@@ -13,27 +13,81 @@ function doPost(e) {
   const unauthorized = function() {
     return createHeadquartersSalesFeedJsonResponse_({ error: 'unauthorized' });
   };
+  let requestedVersion = '';
+  let identityExportRequest = false;
+  let identityExportAuthenticated = false;
 
   try {
     const body = parseHeadquartersSalesFeedRequest_(e);
-    const configuredToken = PropertiesService.getScriptProperties()
-      .getProperty(HEADQUARTERS_SALES_FEED_TOKEN_PROPERTY);
+    requestedVersion = body && String(body.version || '');
+    identityExportRequest = isHeadquartersIdentityExportVersion_(requestedVersion);
+    const tokenProperty = getHeadquartersRequestTokenProperty_(requestedVersion);
+    if (!body || !tokenProperty) {
+      if (!identityExportRequest) return unauthorized();
+    } else {
+      const configuredToken = PropertiesService.getScriptProperties()
+        .getProperty(tokenProperty);
 
-    if (!body || body.version !== HEADQUARTERS_SALES_FEED_VERSION ||
-        !configuredToken || !body.token ||
-        !constantTimeStringEquals_(body.token, configuredToken)) {
-      return unauthorized();
+      if (identityExportRequest) {
+        // Capture once: a synthetic accessor must not change the value compared.
+        const candidateToken = body.token;
+        if (typeof configuredToken === 'string' && typeof candidateToken === 'string' &&
+            configuredToken.length > 0 && candidateToken.length > 0 &&
+            constantTimeStringEquals_(candidateToken, configuredToken) === true) {
+          identityExportAuthenticated = true;
+        }
+      } else if (!configuredToken || !body.token ||
+          !constantTimeStringEquals_(body.token, configuredToken)) {
+        return unauthorized();
+      }
+
+      if (!identityExportRequest || identityExportAuthenticated) {
+        const response = requestedVersion === HEADQUARTERS_SALES_FEED_VERSION
+          ? buildHeadquartersSalesFeedV1_()
+          : buildHeadquartersIdentityExportV1_();
+        return createHeadquartersSalesFeedJsonResponse_(response);
+      }
     }
-
-    return createHeadquartersSalesFeedJsonResponse_(buildHeadquartersSalesFeedV1_());
   } catch (error) {
     // Deliberately do not log the request, token, or exception detail here.
-    return createHeadquartersSalesFeedJsonResponse_({
-      version: HEADQUARTERS_SALES_FEED_VERSION,
-      status: { healthy: false, partial: false },
-      error: 'unavailable'
-    });
+    if (!identityExportRequest) {
+      return createHeadquartersSalesFeedJsonResponse_({
+        version: HEADQUARTERS_SALES_FEED_VERSION,
+        status: { healthy: false, partial: false },
+        error: 'unavailable'
+      });
+    }
   }
+  // Outside the dispatcher catch so a platform failure cannot retry the response.
+  return createHeadquartersIdentityExportErrorResponse_(identityExportAuthenticated);
+}
+
+function createHeadquartersIdentityExportErrorResponse_(authenticated) {
+  const text = authenticated
+    ? '{"version":"rh-bop-identity-exclusion-snapshot-v1","complete":false,"error":"unavailable"}'
+    : '{"error":"unauthorized"}';
+  try {
+    return createHeadquartersSalesFeedJsonResponse_(JSON.parse(text));
+  } catch (error) {
+    // One literal fallback; never include or log the primary builder's exception.
+  }
+  // ContentService failure is a platform boundary: no further response attempt.
+  return ContentService.createTextOutput(text).setMimeType(ContentService.MimeType.JSON);
+}
+
+function getHeadquartersRequestTokenProperty_(version) {
+  if (version === HEADQUARTERS_SALES_FEED_VERSION) {
+    return HEADQUARTERS_SALES_FEED_TOKEN_PROPERTY;
+  }
+  if (isHeadquartersIdentityExportVersion_(version)) {
+    return HEADQUARTERS_IDENTITY_EXPORT_TOKEN_PROPERTY;
+  }
+  return '';
+}
+
+function isHeadquartersIdentityExportVersion_(version) {
+  return typeof HEADQUARTERS_IDENTITY_EXPORT_VERSION !== 'undefined' &&
+    version === HEADQUARTERS_IDENTITY_EXPORT_VERSION;
 }
 
 function buildHeadquartersSalesFeedV1_() {

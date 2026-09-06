@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-08-28 — DE-002 Disposable Workbook Identity Configuration
+
+- Replaced the identity exporter's embedded production workbook title with the required `HEADQUARTERS_IDENTITY_EXPORT_EXPECTED_WORKBOOK_TITLE` Script Property while retaining exact configured workbook-ID and workbook-title verification.
+- Added fail-closed coverage for missing, blank, malformed, changed, wrong, and near-match title configuration, exact production and disposable titles, wrong workbook identity, and the absence of any embedded title fallback.
+- Preserved the read-only boundary, exact Headquarters contract, complete source traversal and stability checks, separate identity-export authentication, and unchanged Headquarters Sales Feed v1 behavior. No Script Property was created, no workbook was accessed or modified, and nothing was deployed.
+
+## 2026-08-27 — DE-002 Identity Exclusion Snapshot v1
+
+- Added a separately versioned, BOP-owned prospect/client identity snapshot that binds to the configured authoritative workbook and exposes only record ID, lifecycle, business name, and canonical domain arrays.
+- Added exact row-4 schema enforcement, matching initial full-source acquisitions plus a final complete fingerprint after snapshot construction, required-header/data formula rejection, case-insensitive global duplicate-ID rejection, fixed client-name compatibility precedence, and whole-snapshot fail-closed behavior.
+- Added exact Headquarters ID/name validation, 100,000-entry and 512 KiB canonical-payload ceilings, and a pure strict domain parser without changing `normalizeWebsiteKey_()` semantics; blank websites emit no domain while malformed, credential-bearing, port-bearing, unsupported-scheme, and noncanonical repeated-`www` inputs are safely normalized or rejected.
+- Added a separate Script Property token route with generic authentication/source failures and preserved Headquarters Sales Feed v1 response semantics.
+- Added focused local coverage for exact Headquarters compatibility, normalization, source mutation through the final validation boundary, dense-array enforcement, completeness, privacy, authentication, size limits, and no-write boundaries. No token was created, no live BOP data or Apps Script endpoint was accessed, and nothing was deployed.
+
 ## 2026-08-12 — QA-2 Final Gold Standard Polish
 
 - Consolidated the Executive Brief to one decisive closing action and clarified its qualitative review category as `Focused Priorities`.
