@@ -4,6 +4,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { spawnSync } = require('child_process');
 const { compareProductionSourceInventories, deploy, readTargetConfig } = require('./deploy');
 
 const acceptance = JSON.stringify({ scriptId: 'acceptance-id' }, null, 2) + '\n';
@@ -22,6 +23,32 @@ function fixture() {
   fs.writeFileSync(path.join(root, '.clasp.json'), acceptance);
   fs.writeFileSync(path.join(root, '.clasp.production.json'), production);
   return root;
+}
+
+function validatorFixture() {
+  const root = fixture();
+  const sourceRoot = path.resolve(__dirname, '..');
+  fs.mkdirSync(path.join(root, 'scripts'));
+  fs.copyFileSync(path.join(__dirname, 'validate.js'), path.join(root, 'scripts', 'validate.js'));
+  fs.readdirSync(sourceRoot).filter((file) => file.endsWith('.gs')).forEach((file) => {
+    fs.copyFileSync(path.join(sourceRoot, file), path.join(root, file));
+  });
+  fs.copyFileSync(path.join(sourceRoot, '.claspignore'), path.join(root, '.claspignore'));
+  fs.writeFileSync(path.join(root, '.clasp.json'), JSON.stringify({
+    scriptId: 'acceptance-id', scriptExtensions: ['.gs'], skipSubdirectories: true
+  }));
+  return root;
+}
+
+function runValidator(root, manifestText) {
+  // Only the isolated fixture changes. Run the actual CLI, including all security checks.
+  fs.writeFileSync(path.join(root, 'appsscript.json'), manifestText);
+  const result = spawnSync(process.execPath, [path.join(root, 'scripts', 'validate.js')], {
+    cwd: root, encoding: 'utf8'
+  });
+  assert.ifError(result.error);
+  assert.strictEqual(result.signal, null);
+  return { status: result.status, output: result.stdout + result.stderr };
 }
 
 function options(root, overrides = {}) {
@@ -131,6 +158,76 @@ async function main() {
   await test('no deploy command defaults to production', async () => {
     const root = fixture();
     assert.throws(() => readTargetConfig(root, ''), /Invalid deployment target/);
+  });
+
+  const validatorRoot = validatorFixture();
+  const baseManifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'appsscript.json'), 'utf8'));
+  delete baseManifest.webapp;
+  const approvedWebapp = { access: 'ANYONE_ANONYMOUS', executeAs: 'USER_DEPLOYING' };
+  const approvedManifest = { ...baseManifest, webapp: approvedWebapp };
+  for (const [name, manifest] of [
+    ['absent webapp', baseManifest],
+    ['approved webapp', approvedManifest],
+    ['reversed webapp key order', {
+      ...baseManifest, webapp: { executeAs: 'USER_DEPLOYING', access: 'ANYONE_ANONYMOUS' }
+    }]
+  ]) {
+    await test(`validator accepts ${name}`, () => {
+      const result = runValidator(validatorRoot, JSON.stringify(manifest, null, 2));
+      assert.strictEqual(result.status, 0, result.output);
+      assert.match(result.output, /Validation passed for \d+ Apps Script files/);
+    });
+  }
+  for (const [name, webapp] of [
+    ['null', null], ['false', false], ['true', true], ['number', 0],
+    ['empty string', ''], ['string', 'approved'], ['array', []],
+    ['empty object', {}],
+    ['missing access', { executeAs: 'USER_DEPLOYING' }],
+    ['missing executeAs', { access: 'ANYONE_ANONYMOUS' }],
+    ['extra key', { ...approvedWebapp, extra: true }],
+    ['non-string access', { ...approvedWebapp, access: true }],
+    ['non-string executeAs', { ...approvedWebapp, executeAs: 1 }],
+    ['null access', { ...approvedWebapp, access: null }],
+    ['array executeAs', { ...approvedWebapp, executeAs: ['USER_DEPLOYING'] }],
+    ['empty access', { ...approvedWebapp, access: '' }],
+    ['empty executeAs', { ...approvedWebapp, executeAs: '' }],
+    ['access capitalization', { ...approvedWebapp, access: 'anyone_anonymous' }],
+    ['executeAs capitalization', { ...approvedWebapp, executeAs: 'user_deploying' }],
+    ['access whitespace', { ...approvedWebapp, access: ' ANYONE_ANONYMOUS ' }],
+    ['executeAs whitespace', { ...approvedWebapp, executeAs: ' USER_DEPLOYING ' }],
+    ['different access', { ...approvedWebapp, access: 'ANYONE' }],
+    ['different executeAs', { ...approvedWebapp, executeAs: 'USER_ACCESSING' }]
+  ]) {
+    await test(`validator rejects webapp ${name}`, () => {
+      const result = runValidator(validatorRoot, JSON.stringify({ ...baseManifest, webapp }));
+      assert.strictEqual(result.status, 1, result.output);
+      assert.match(result.output, /appsscript\.json \/webapp must contain exactly/);
+    });
+  }
+  for (const [name, manifest] of [['absent', baseManifest], ['approved', approvedManifest]]) {
+    await test(`validator rejects anonymous access elsewhere with ${name} root webapp`, () => {
+      const result = runValidator(validatorRoot, JSON.stringify({
+        ...manifest, nested: { webapp: approvedWebapp }
+      }));
+      assert.strictEqual(result.status, 1, result.output);
+      assert.match(result.output, /anonymous web-app access outside the approved root \/webapp/);
+    });
+  }
+  await test('validator still rejects malformed manifest JSON', () => {
+    const result = runValidator(validatorRoot, '{');
+    assert.strictEqual(result.status, 1, result.output);
+    assert.match(result.output, /appsscript\.json is not valid JSON/);
+  });
+  await test('approved webapp does not bypass later reset security checks', () => {
+    const menuPath = path.join(validatorRoot, 'Menu.gs');
+    const originalMenu = fs.readFileSync(menuPath, 'utf8');
+    const resetItem = ".addItem('Reset Test Data', 'resetTestData')";
+    assert(originalMenu.includes(resetItem), 'reset fixture must change an existing menu action');
+    fs.writeFileSync(menuPath, originalMenu.replace(resetItem, ''));
+    const result = runValidator(validatorRoot, JSON.stringify(approvedManifest));
+    assert.strictEqual(result.status, 1, result.output);
+    assert.match(result.output, /Reset menu actions must be added only through read-only developer-mode logic/);
+    assert.doesNotMatch(result.output, /appsscript\.json/);
   });
   console.log(`\n${passed} deployment safety tests passed.`);
 }

@@ -109,6 +109,12 @@ An authenticated source or validation failure returns only:
 
 Partial identity snapshots are never returned. Internal errors use a fixed message without IDs, business names, websites, workbook IDs, row numbers, or source values, and the public dispatcher does not log exception details.
 
+## Local manifest policy
+
+The local validator permits an absent root `webapp` property or exactly the owner-approved two-key object `{ "access": "ANYONE_ANONYMOUS", "executeAs": "USER_DEPLOYING" }`. Key order and insignificant JSON whitespace do not affect acceptance. Null, non-object values, missing or extra keys, and any other field values are rejected. The existing prohibition on anonymous-access declarations elsewhere in the manifest remains active, including when the approved root object is present. Reset and other security checks still run.
+
+Platform web-app access is distinct from application authentication. The Sales Feed and identity-export authentication boundaries, including their separate secrets and fail-closed checks, remain necessary and unchanged. Manifest acceptance does not check runtime credential readiness, create credentials, configure Script Properties, activate DE-002, or authorize deployment. The amended artifact remains pending focused review and separate publication/deployment decisions; this local policy does not establish live Google settings.
+
 ## Remaining acquisition gates
 
 Before Headquarters can acquire a snapshot, separately authorize and complete disposable-workbook acceptance, configure the acceptance-only `BOP_SPREADSHEET_ID` and exact `HEADQUARTERS_IDENTITY_EXPORT_EXPECTED_WORKBOOK_TITLE`, create an approved secret in `HEADQUARTERS_IDENTITY_EXPORT_TOKEN`, deploy an approved Apps Script web-app version, validate the full response and mutation safety against the disposable workbook, then separately approve production deployment and production Script Property configuration. None of those actions is part of this milestone.
