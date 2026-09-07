@@ -190,8 +190,23 @@ function assertV1SecurityHardening() {
     return;
   }
   const anonymousAccessValue = ['ANYONE', 'ANONYMOUS'].join('_');
-  if (manifest.webapp || JSON.stringify(manifest).includes(anonymousAccessValue)) {
-    fail('appsscript.json must not declare anonymous web-app access.');
+  let manifestOutsideWebapp = manifest;
+  if (Object.prototype.hasOwnProperty.call(manifest, 'webapp')) {
+    const webapp = manifest.webapp;
+    if (webapp === null || typeof webapp !== 'object' || Array.isArray(webapp) ||
+        Object.keys(webapp).length !== 2 ||
+        !Object.prototype.hasOwnProperty.call(webapp, 'access') ||
+        !Object.prototype.hasOwnProperty.call(webapp, 'executeAs') ||
+        webapp.access !== anonymousAccessValue || webapp.executeAs !== 'USER_DEPLOYING') {
+      fail('appsscript.json /webapp must contain exactly access: "ANYONE_ANONYMOUS" and executeAs: "USER_DEPLOYING", or be absent.');
+    } else {
+      // Exempt only the validated root property; retain the prohibition everywhere else.
+      manifestOutsideWebapp = { ...manifest };
+      delete manifestOutsideWebapp.webapp;
+    }
+  }
+  if (JSON.stringify(manifestOutsideWebapp).includes(anonymousAccessValue)) {
+    fail('appsscript.json must not declare anonymous web-app access outside the approved root /webapp configuration.');
   }
 
   const menuSource = fs.readFileSync(path.join(projectRoot, 'Menu.gs'), 'utf8');
