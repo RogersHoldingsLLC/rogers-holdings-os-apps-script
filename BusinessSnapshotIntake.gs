@@ -239,6 +239,10 @@ function publicBusinessSnapshotErrorCode_(error) {
  * Safe retries return the Prospect ID associated with INTAKE:<requestId>.
  */
 function ingestBusinessSnapshot(input) {
+  return ingestBusinessSnapshotWithOptions_(input, {});
+}
+
+function ingestBusinessSnapshotWithOptions_(input, options) {
   let submission = null;
   let lock = null;
   let lockAcquired = false;
@@ -269,7 +273,7 @@ function ingestBusinessSnapshot(input) {
       );
     }
     phase = 'spreadsheet resolution';
-    const ss = getBusinessSnapshotSpreadsheet_();
+    const ss = getBusinessSnapshotSpreadsheet_(options || {});
     const operationKey = BUSINESS_SNAPSHOT_OPERATION_PREFIX + submission.requestId;
     phase = 'idempotency lookup';
     const existing = findBusinessSnapshotIntakeActivity_(ss, operationKey);
@@ -286,7 +290,7 @@ function ingestBusinessSnapshot(input) {
       phase = 'new submission validation';
       validateBusinessSnapshotInput_(submission);
       phase = 'duplicate entity check';
-      assertBusinessSnapshotProspectIsNew_(ss, submission);
+      assertBusinessSnapshotProspectIsNew_(ss, submission, options || {});
       phase = 'prospect creation';
       result = createBusinessSnapshotProspect_(ss, submission, operationKey);
     }
@@ -320,7 +324,37 @@ function ingestBusinessSnapshot(input) {
   return result;
 }
 
-function getBusinessSnapshotSpreadsheet_() {
+function getBusinessSnapshotSpreadsheet_(options) {
+  const verifiedSpreadsheet = options && options.verifiedSpreadsheet;
+  const requiredSpreadsheetId = String(options && options.requiredSpreadsheetId || '').trim();
+  if (verifiedSpreadsheet || requiredSpreadsheetId) {
+    if (!verifiedSpreadsheet || !requiredSpreadsheetId || !/^[A-Za-z0-9_-]{20,}$/.test(requiredSpreadsheetId)) {
+      throw createBusinessSnapshotError_(
+        BUSINESS_SNAPSHOT_ERROR_CODES.CONFIGURATION,
+        'A verified bound spreadsheet and exact required spreadsheet ID are required together.',
+        { property: BUSINESS_SNAPSHOT_SPREADSHEET_PROPERTY }
+      );
+    }
+    let actualSpreadsheetId;
+    try {
+      actualSpreadsheetId = String(verifiedSpreadsheet.getId() || '').trim();
+    } catch (error) {
+      throw createBusinessSnapshotError_(
+        BUSINESS_SNAPSHOT_ERROR_CODES.CONFIGURATION,
+        'The verified bound spreadsheet ID could not be read.',
+        { expectedSpreadsheetId: requiredSpreadsheetId },
+        error
+      );
+    }
+    if (actualSpreadsheetId !== requiredSpreadsheetId) {
+      throw createBusinessSnapshotError_(
+        BUSINESS_SNAPSHOT_ERROR_CODES.CONFIGURATION,
+        'The bound spreadsheet does not match the required Business Snapshot workbook.',
+        { expectedSpreadsheetId: requiredSpreadsheetId, actualSpreadsheetId: actualSpreadsheetId }
+      );
+    }
+    return verifiedSpreadsheet;
+  }
   let spreadsheetId;
   try {
     spreadsheetId = String(
@@ -638,9 +672,9 @@ function assertBusinessSnapshotRetryFollowUpExists_(ss, prospectId) {
   }
 }
 
-function assertBusinessSnapshotProspectIsNew_(ss, submission) {
+function assertBusinessSnapshotProspectIsNew_(ss, submission, options) {
   const sheet = getRequiredSheet_(ss, MASTER_PROSPECT_SHEET);
-  const table = getHeaderTable_(sheet, ['Company', 'Email']);
+  const table = getHeaderTable_(sheet, ['Company', 'Email', 'Website', 'Contact', 'Notes', 'Prospect ID']);
   const start = table.headerRow + 1;
   const count = Math.max(sheet.getLastRow() - table.headerRow, 0);
   if (!count) return;
@@ -660,6 +694,46 @@ function assertBusinessSnapshotProspectIsNew_(ss, submission) {
       { company: submission.businessName, email: submission.email }
     );
   }
+  if (!(options && options.realProspect)) return;
+  const websiteKey = normalizeWebsiteKey_(submission.website);
+  if (!websiteKey) return;
+  const websiteMatches = values.map(function(row, index) {
+    return { row: start + index, values: row };
+  }).filter(function(item) {
+    return normalizeWebsiteKey_(getValueByHeader_(item.values, table.headers, 'Website')) === websiteKey;
+  });
+  if (!websiteMatches.length) return;
+  const reviewed = options && options.reviewedWebsiteCollision;
+  if (!reviewed || reviewed.websiteKey !== websiteKey) {
+    throw createBusinessSnapshotError_(
+      BUSINESS_SNAPSHOT_ERROR_CODES.DUPLICATE_ENTITY,
+      'A matching website exists without an explicit reviewed collision decision.',
+      { website: submission.website, matchCount: websiteMatches.length }
+    );
+  }
+  if (websiteMatches.length !== 1 || !isRecognizedBusinessSnapshotSyntheticQaRow_(websiteMatches[0].values, table.headers)) {
+    throw createBusinessSnapshotError_(
+      BUSINESS_SNAPSHOT_ERROR_CODES.RECONCILIATION_REQUIRED,
+      'The reviewed website collision is missing, ambiguous, or no longer the recognized synthetic QA record.',
+      { website: submission.website, matchCount: websiteMatches.length }
+    );
+  }
+  const matchProspectId = String(getValueByHeader_(websiteMatches[0].values, table.headers, 'Prospect ID') || '').trim();
+  if (String(reviewed.syntheticProspectId || '') !== matchProspectId) {
+    throw createBusinessSnapshotError_(
+      BUSINESS_SNAPSHOT_ERROR_CODES.RECONCILIATION_REQUIRED,
+      'The reviewed synthetic website collision changed before commit.',
+      { website: submission.website, expectedProspectId: reviewed.syntheticProspectId, actualProspectId: matchProspectId }
+    );
+  }
+}
+
+function isRecognizedBusinessSnapshotSyntheticQaRow_(row, headers) {
+  return /^Rogers Holdings Smoke Test /i.test(String(getValueByHeader_(row, headers, 'Company') || '').trim()) &&
+    String(getValueByHeader_(row, headers, 'Contact') || '').trim() === 'Rogers Holdings Synthetic QA' &&
+    /@example\.invalid$/i.test(String(getValueByHeader_(row, headers, 'Email') || '').trim()) &&
+    /Synthetic production smoke test only\./i.test(String(getValueByHeader_(row, headers, 'Notes') || '')) &&
+    Boolean(String(getValueByHeader_(row, headers, 'Prospect ID') || '').trim());
 }
 
 function rollbackBusinessSnapshotIntake_(

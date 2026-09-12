@@ -422,147 +422,37 @@ function applyWebsiteAuditToolResults_(context, auditPayload) {
 }
 
 function generateAuditPackage() {
-  const context = getSelectedProspectContext_([
-    'Company',
-    'Website'
-  ]);
-  if (!context) {
-    return;
-  }
-
+  const context = getSelectedProspectContext_(['Company', 'Prospect ID']);
+  if (!context) return;
   const ui = SpreadsheetApp.getUi();
-  let activeContext = context;
-  let prospect = buildSelectedProspectForAuditPackage_(activeContext);
-  const missing = requiredProspectFieldsMissing_(prospect, [
-    ['Company', 'company'],
-    ['Website', 'website']
-  ]);
-
-  if (missing.length) {
-    ui.alert(
-      'Business Optimization Platform',
-      'Add the missing required fields before generating the Digital Business Assessment: ' + missing.join(', '),
-      ui.ButtonSet.OK
-    );
-    return;
-  }
-
-  let auditWasRunFirst = false;
-
+  const prospect = buildSelectedProspectForAuditPackage_(context);
   try {
-    // Client-deliverable evidence must already support the Gold Standard before
-    // audit acquisition or any workbook/Drive mutation begins.
-    buildGoldStandardDeliverableInput_(prospect, buildLocalAuditReportInput_(prospect));
-    if (!isVerifiedAuditDataForLocalRendering_(prospect)) {
-      if (!getWebsiteAuditToolEndpoint_()) {
-        throw new Error(buildVerifiedAuditRequiredMessage_(prospect));
-      }
-      const auditPayload = runWebsiteAuditToolWorkflow_(prospect);
-      applyWebsiteAuditToolResults_(activeContext, auditPayload);
-      activeContext = buildProspectContextForRow_(context.ss, context.sheet, context.selectedRow);
-      prospect = buildSelectedProspectForAuditPackage_(activeContext);
-      auditWasRunFirst = true;
-    }
-
-    const packageResult = generateAuditPackageForContext_(activeContext, prospect);
-    refreshSalesOperatingSystem_();
-
-    if (typeof showDigitalBusinessAssessmentPreview_ === 'function') {
-      showDigitalBusinessAssessmentPreview_(prospect, packageResult.reportFile);
-    } else {
-      ui.alert(
-        'Business Optimization Platform',
-        auditWasRunFirst
-          ? `Audit data was missing, so Business Optimization Platform ran the website audit first and then generated the Digital Business Assessment.\n\nFolder: ${packageResult.folder.getName()}`
-          : `Digital Business Assessment generated for ${prospect.company}.\n\nFolder: ${packageResult.folder.getName()}`,
-        ui.ButtonSet.OK
-      );
-    }
+    const plan = buildGoldStandardDocumentPlan_('assessment', prospect, {});
+    showDigitalBusinessAssessmentPreview_(prospect, plan);
   } catch (error) {
-    console.error('Digital Business Assessment generation failed', error && error.stack ? error.stack : error);
-    ui.alert(
-      'Business Optimization Platform',
-      /WEBSITE_AUDIT_TOOL_URL|WEBSITE_AUDIT_TOOL_ENDPOINT|HTTP|UrlFetch|request failed|valid JSON|audit payload|required result fields/i.test(error && error.message ? error.message : String(error))
-        ? getWebsiteAuditOperatorErrorMessage_(error)
-        : (error && error.message ? error.message : String(error)),
-      ui.ButtonSet.OK
-    );
+    ui.alert('Business Optimization Platform', error && error.message ? error.message : String(error), ui.ButtonSet.OK);
   }
 }
 
-function generateExecutiveSnapshot() {
-  const context = getSelectedProspectContext_([
-    'Company',
-    'Website'
-  ]);
-  if (!context) {
-    return;
-  }
+function generateDigitalBusinessAssessmentPdfFromPreview(approvedFindingSetReference) {
+  const context = getSelectedProspectContext_(['Company', 'Prospect ID']);
+  if (!context) return;
+  const prospect = buildSelectedProspectForAuditPackage_(context);
+  return serializeGoldStandardGenerationClientResult_(executeGoldStandardDocumentGeneration_(context, prospect, 'assessment', approvedFindingSetReference, {
+    'Audit Package Generated': 'Yes',
+    'Audit Package Date': new Date(),
+    'Next Action': 'Present Digital Business Assessment'
+  }));
+}
 
+function generateExecutiveSnapshot() {
+  const context = getSelectedProspectContext_(['Company', 'Prospect ID']);
+  if (!context) return;
   const ui = SpreadsheetApp.getUi();
   const prospect = buildSelectedProspectForAuditPackage_(context);
-  const missing = requiredProspectFieldsMissing_(prospect, [
-    ['Company', 'company'],
-    ['Website', 'website']
-  ]);
-
-  if (missing.length) {
-    ui.alert(
-      'Business Optimization Platform',
-      'Add the missing required fields before generating the Executive Brief: ' + missing.join(', '),
-      ui.ButtonSet.OK
-    );
-    return;
-  }
-
   try {
-    const reportFile = {
-      sourceUrl: prospect.website,
-      screenshotUrl: prospect.websiteScreenshotUrl,
-      screenshotBase64: prospect.websiteScreenshotBase64,
-      screenshotMimeType: prospect.websiteScreenshotMimeType,
-      websiteScreenshotUrl: prospect.websiteScreenshotUrl,
-      websiteScreenshotBase64: prospect.websiteScreenshotBase64,
-      websiteScreenshotMimeType: prospect.websiteScreenshotMimeType,
-      mobileScreenshotUrl: prospect.mobileScreenshotUrl,
-      mobileScreenshotBase64: prospect.mobileScreenshotBase64,
-      mobileScreenshotMimeType: prospect.mobileScreenshotMimeType,
-      evidence: {
-        websiteScreenshotUrl: prospect.websiteScreenshotUrl,
-        websiteScreenshotBase64: prospect.websiteScreenshotBase64,
-        websiteScreenshotMimeType: prospect.websiteScreenshotMimeType,
-        mobileScreenshotUrl: prospect.mobileScreenshotUrl,
-        mobileScreenshotBase64: prospect.mobileScreenshotBase64,
-        mobileScreenshotMimeType: prospect.mobileScreenshotMimeType
-      }
-    };
-    const goldStandardInput = buildGoldStandardDeliverableInput_(prospect, reportFile);
-    const folder = getOrCreateAuditPackageFolder_(prospect.company);
-    const file = upsertAuditPackageBlobFile_(
-      folder,
-      'Executive Brief.pdf',
-      buildGoldStandardExecutiveBriefPdfBlob_(goldStandardInput)
-    );
-
-    logPipelineActivity_(
-      context.ss,
-      prospect.company,
-      'Executive Brief Generated',
-      'Generated Executive Brief.pdf for meeting-focused outreach.'
-    );
-    setIfHeaderCell_(context.sheet, context.table.headers, context.selectedRow, 'Next Action', 'Create Outreach Draft');
-    updateSelectedProspectLastActivity_(context.sheet, context.table.headers, context.selectedRow);
-    refreshSalesOperatingSystem_();
-
-    if (typeof showExecutiveSnapshotPreview_ === 'function') {
-      showExecutiveSnapshotPreview_(prospect, reportFile);
-    } else {
-      ui.alert(
-        'Business Optimization Platform',
-        `Executive Brief generated for ${prospect.company}.\n\nFile: ${file.getName()}\nFolder: ${folder.getName()}`,
-        ui.ButtonSet.OK
-      );
-    }
+    const plan = buildGoldStandardDocumentPlan_('executiveBrief', prospect, {});
+    showExecutiveSnapshotPreview_(prospect, plan);
   } catch (error) {
     ui.alert(
       'Business Optimization Platform',
@@ -570,6 +460,15 @@ function generateExecutiveSnapshot() {
       ui.ButtonSet.OK
     );
   }
+}
+
+function generateExecutiveBriefPdfFromPreview(approvedFindingSetReference) {
+  const context = getSelectedProspectContext_(['Company', 'Prospect ID']);
+  if (!context) return;
+  const prospect = buildSelectedProspectForAuditPackage_(context);
+  return serializeGoldStandardGenerationClientResult_(executeGoldStandardDocumentGeneration_(context, prospect, 'executiveBrief', approvedFindingSetReference, {
+    'Next Action': 'Create Outreach Draft'
+  }));
 }
 
 function runFullProspectPackage() {

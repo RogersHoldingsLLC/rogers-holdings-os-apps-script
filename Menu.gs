@@ -29,7 +29,12 @@ function onOpen(e) {
     .addItem('Run Full Prospect Package', 'runFullProspectPackage')
     .addSeparator()
     .addItem('Generate Executive Brief', 'generateExecutiveSnapshot')
+    .addItem('Replace Current Executive Brief PDF', 'replaceCurrentExecutiveBriefPdf')
     .addItem('Create Outreach Gmail Draft', 'createOutreachGmailDraft')
+    .addItem('Create Executive Brief Delivery Draft', 'createExecutiveBriefDeliveryDraft')
+    .addItem('Reconcile Sent Executive Brief', 'reconcileSentExecutiveBrief')
+    .addItem('Create Complete Client Package Gmail Draft', 'createClientPackageGmailDraft')
+    .addItem('Reconcile Manually Sent Client Package', 'reconcileManuallySentClientPackage')
     .addItem('Generate Digital Business Assessment', 'generateAuditPackage')
     .addItem('Generate Improvement Plan', 'generateProposal')
     .addItem('Create Discovery Call', 'createDiscoveryCall');
@@ -37,6 +42,8 @@ function onOpen(e) {
   const pipelineMenu = ui.createMenu('Pipeline')
     .addItem('Run Next Action', 'runNextAction')
     .addItem('Bulk Prospect Import', 'openBulkProspectImport')
+    .addItem('Reconcile Orphan Prospect Activity', 'reconcileOrphanProspectActivity')
+    .addItem('Create Real Prospect', 'createRealProspect')
     .addItem('Run Bulk Audit Pipeline', 'runBulkAuditPipeline')
     .addItem('Send Digital Business Assessment', 'sendAuditPackage')
     .addSeparator()
@@ -74,6 +81,36 @@ function onOpen(e) {
     .addSeparator()
     .addItem('About Business Optimization Platform', 'showProductAbout');
 
+  const findingQualityMenu = ui.createMenu('Finding Quality')
+    .addItem('Set Up Finding Quality Foundation', 'setupFindingQualityFoundation')
+    .addItem('Seed Selected Prospect Business Context', 'seedSelectedProspectBusinessContext')
+    .addItem('Seed Selected Prospect Presence Inventory', 'seedSelectedProspectPresenceInventory')
+    .addItem('Seed Selected Presence Evidence Drafts', 'seedSelectedPresenceEvidenceDrafts')
+    .addItem('Seed Reviewed Evidence Finding Draft', 'seedReviewedEvidenceFindingDraft')
+    .addItem('Seed Selected Finding Recommendation Draft', 'seedSelectedFindingRecommendationDraft')
+    .addSeparator()
+    .addItem('Mark Selected Context Reviewed', 'markSelectedBusinessContextReviewed')
+    .addItem('Mark Selected Presence Reviewed', 'markSelectedPresenceReviewed')
+    .addItem('Mark Selected Evidence Reviewed', 'markSelectedEvidenceReviewed')
+    .addItem('Mark Selected Recommendation Reviewed', 'markSelectedRecommendationReviewed')
+    .addSeparator()
+    .addItem('Move Selected Finding to Review', 'moveSelectedFindingToReview')
+    .addItem('Mark Selected Finding Needs Evidence', 'markSelectedFindingNeedsEvidence')
+    .addItem('Mark Selected Finding Needs Changes', 'markSelectedFindingNeedsChanges')
+    .addItem('Reject Selected Finding', 'rejectSelectedFinding')
+    .addItem('Withdraw Selected Unreferenced Draft Finding', 'withdrawSelectedUnreferencedDraftFinding')
+    .addItem('Approve Selected Finding for Client', 'approveSelectedFindingForClient')
+    .addItem('Create Pre-Snapshot Correction Draft', 'createPreSnapshotCorrectionDraft')
+    .addSeparator()
+    .addItem('Move Selected Finding Set to Review', 'moveSelectedFindingSetToReview')
+    .addItem('Return Selected Finding Set to Draft for Correction', 'returnSelectedFindingSetToDraftForCorrection')
+    .addItem('Mark Selected Finding Set Needs Evidence', 'markSelectedFindingSetNeedsEvidence')
+    .addItem('Mark Selected Finding Set Needs Changes', 'markSelectedFindingSetNeedsChanges')
+    .addItem('Approve Selected Finding Set for Client', 'approveSelectedFindingSetForClient')
+    .addItem('Create Successor Finding Set', 'createSuccessorFindingSet')
+    .addItem('Seed Selected Plain-Language Draft Successor', 'seedSelectedPlainLanguageDraftSuccessor')
+    .addItem('Supersede Selected Finding Set', 'supersedeSelectedFindingSet');
+
   const systemMenu = ui.createMenu('System')
     .addItem('Refresh Executive Dashboard', 'refreshExecutiveDashboard')
     .addItem('Open Daily Friction Log', 'openDailyFrictionLog')
@@ -94,6 +131,7 @@ function onOpen(e) {
     .addSubMenu(workspaceMenu)
     .addSubMenu(followUpMenu)
     .addSubMenu(clientProjectMenu)
+    .addSubMenu(findingQualityMenu)
     .addSubMenu(productMenu)
     .addSubMenu(systemMenu);
 
@@ -172,6 +210,9 @@ function onEdit(e) {
     }
 
     const sheet = e.range.getSheet();
+    if (typeof handleFindingQualityEdit_ === 'function' && handleFindingQualityEdit_(e)) {
+      return;
+    }
     if (!sheet || sheet.getName() !== MASTER_PROSPECT_SHEET) {
       return;
     }
