@@ -1,5 +1,12 @@
 # Changelog
 
+## Local DE-002 source reconciliation candidate
+
+- Restored the exact production-matching workflow source at `9bca6d62` into an isolated candidate based on canonical main `537800f3`; preserved the reviewed identity exporter and hardened Sales Feed bytes.
+- Combined existing Advanced Gmail v1 with the reviewed web-app manifest policy; no production settings were changed.
+- Added synthetic regression/provenance coverage and updated stale renderer harness assumptions. This is local source preservation only; see `docs/DE002_SOURCE_RECONCILIATION.md` for validation and execution boundaries. Upload, deployment and business execution remain unauthorized; independent review is a separate milestone.
+
+
 ## 2026-08-28 — DE-002 Disposable Workbook Identity Configuration
 
 - Replaced the identity exporter's embedded production workbook title with the required `HEADQUARTERS_IDENTITY_EXPORT_EXPECTED_WORKBOOK_TITLE` Script Property while retaining exact configured workbook-ID and workbook-title verification.

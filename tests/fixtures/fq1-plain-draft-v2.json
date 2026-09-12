@@ -1,0 +1,46 @@
+{
+  "company": "FQ-1 Fixture Electrical LLC",
+  "website": "https://fixture-web-gbp.example/request",
+  "packagePreparedAt": "2026-08-16T02:59:38.341Z",
+  "businessContext": {
+    "version": "2",
+    "primaryService": "Home electrical repair",
+    "targetCustomer": "Homeowners who need planned electrical work",
+    "serviceArea": "Acceptance County",
+    "desiredCustomerAction": "Send a service request",
+    "primaryBusinessObjective": "Get more service requests from the right customers",
+    "relevantConversionDestination": "https://fixture-web-gbp.example/request",
+    "knownConstraints": "Do not claim emergency service",
+    "industryContext": "Local service"
+  },
+  "businessContextVersion": "2",
+  "presenceInventoryVersion": "2",
+  "presence": [
+    { "channelType": "Website", "channelName": "Website", "presenceState": "Verified Present", "applicability": "Applicable", "roleInCustomerJourney": "Helps customers learn about services and ask for help", "limitations": [] },
+    { "channelType": "Google Business Profile", "channelName": "Google Business Profile", "presenceState": "Verified Present", "applicability": "Applicable", "roleInCustomerJourney": "Helps local customers find and identify the business", "limitations": ["We only checked that the listing exists. We did not review it in depth."] }
+  ],
+  "evidence": [
+    {
+      "key": "EVID-WEB-1", "label": "Element Inspection — Services page primary navigation", "detail": "No request-service link in primary navigation", "state": "Actionable",
+      "sourceType": "Element Inspection", "sourceUrl": "https://fixture-web-gbp.example/services", "pageTitle": "Services", "pagePath": "/services", "elementType": "Link", "elementLabel": "Primary navigation", "evidenceLocation": "Services page primary navigation", "capturedAt": "2026-08-13T18:00:00Z", "captureMethod": "Controlled manual fixture", "desktopMobileContext": "Both", "evidenceExcerpt": "No request-service link in primary navigation", "testPerformed": "Non-submitting navigation review", "testResult": "No direct route to inquiry form", "confidence": 0.95, "limitations": ["Fictional public-page evidence"]
+    }
+  ],
+  "findings": [
+    {
+      "key": "FND-VALID-1-V2", "category": "The Services page menu needs a Request Service link", "state": "Actionable", "channelType": "Website", "customerJourneyStage": "Asking for service", "businessObjective": "Get more service requests from the right customers", "evidenceSource": "Element Inspection", "evidenceLocation": "Services page primary navigation", "evidenceExcerpt": "No request-service destination is shown.",
+      "observation": "The Services page menu has no Request Service link.", "expectedCondition": "A customer should reach the request form from the Services page menu.", "businessImpact": "A customer must search for the request form.", "consequenceBasis": "The Services page menu has no direct link to the request form.", "recommendation": "Add a Request Service link to the Services page menu. Point it to the approved request form.", "implementationLocation": "Services page menu template", "intendedOutcome": "Customers can open the request form without searching.", "completionTest": "Test the link on a phone and a computer. It should open the request form in one click.", "evidenceConfidence": 0.95, "priority": "Main problem", "evidenceKeys": ["EVID-WEB-1"], "limitations": ["Form submission not tested."]
+    }
+  ],
+  "recommendations": [
+    { "key": "REC-VALID-1-V2", "findingKey": "FND-VALID-1-V2", "title": "The Services page menu needs a Request Service link", "change": "Add a Request Service link to the Services page menu. Point it to the approved request form.", "why": "Customers can open the request form without searching.", "dependency": "Form submission not tested" }
+  ],
+  "actions": [
+    { "key": "ACT-REC-VALID-1-V2", "recommendationKey": "REC-VALID-1-V2", "sequence": 1, "title": "Add the Request Service link", "outcome": "Customers can open the request form without searching.", "implementationPath": "Add the link in the Services page menu template.", "dependency": "Form submission not tested", "completionTest": "Test the link on a phone and a computer. It should open the request form in one click." }
+  ],
+  "limitations": [],
+  "primaryConclusion": "The Services page menu needs a Request Service link",
+  "primaryConclusionDetail": "The Services page menu has no Request Service link.",
+  "businessImplication": "A customer must search for the request form.",
+  "firstStep": "Add a Request Service link to the Services page menu. Point it to the approved request form.",
+  "nextStep": "Read the full check. Then choose who will make the change."
+}
