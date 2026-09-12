@@ -1,0 +1,112 @@
+{
+  "packagePreparedAt": "2026-08-18T03:01:44.180Z",
+  "company": "Rogers Holdings LLC",
+  "website": "https://rogersholdingsllc.com/business-snapshot/",
+  "businessContext": {
+    "version": "1",
+    "primaryService": "Business Snapshot",
+    "targetCustomer": "Small and growing business owners who need more customers and better systems.",
+    "serviceArea": "Kentucky and businesses nationwide served online.",
+    "desiredCustomerAction": "Request a Business Snapshot",
+    "primaryBusinessObjective": "Get more customers and build steady revenue as soon as possible.",
+    "relevantConversionDestination": "https://rogersholdingsllc.com/business-snapshot/",
+    "knownConstraints": "Do not promise guaranteed results or immediate revenue.",
+    "industryContext": "Business optimization and consulting"
+  },
+  "businessContextVersion": "1",
+  "presenceInventoryVersion": "1",
+  "presence": [{
+    "channelType": "Website",
+    "channelName": "Website",
+    "presenceState": "Verified Present",
+    "applicability": "Applicable",
+    "roleInCustomerJourney": "Website and request path for the reviewed business goal",
+    "verifiedUrlOrIdentifier": "https://www.rogersholdingsllc.com",
+    "limitations": [
+      "Public pages verified reachable and ownership confirmed. The secure submission endpoint is not connected",
+      "the Business Snapshot form prepares an email for the customer to review and send. No submission was performed."
+    ]
+  }],
+  "evidence": [
+    {
+      "key": "EVID-532383d3ad14734d",
+      "label": "Page Content — https://rogersholdingsllc.com/",
+      "detail": "The reviewed canonical website returned a readable HTML page.",
+      "state": "Actionable",
+      "sourceType": "Page Content",
+      "sourceUrl": "https://www.rogersholdingsllc.com",
+      "evidenceLocation": "https://rogersholdingsllc.com/",
+      "testPerformed": "Read-only page availability and HTML content check.",
+      "testResult": "The reviewed canonical website returned a readable HTML page.",
+      "limitations": ["Read-only page capture. No form or state-changing request was sent."]
+    },
+    {
+      "key": "EVID-12c69abfb37aa49a",
+      "label": "Page Content — https://rogersholdingsllc.com/business-snapshot/",
+      "detail": "The reviewed conversion destination returned a readable HTML page.",
+      "state": "Actionable",
+      "sourceType": "Page Content",
+      "sourceUrl": "https://rogersholdingsllc.com/business-snapshot/",
+      "evidenceLocation": "https://rogersholdingsllc.com/business-snapshot/",
+      "testPerformed": "Read-only page availability and HTML content check.",
+      "testResult": "The reviewed conversion destination returned a readable HTML page.",
+      "limitations": [
+        "Public pages verified reachable and ownership confirmed. The secure submission endpoint is not connected",
+        "the Business Snapshot form prepares an email for the customer to review and send. No submission was performed."
+      ]
+    }
+  ],
+  "findings": [{
+    "key": "FND-0aff56a349dd3d12",
+    "category": "Business Snapshot intake adds an email handoff",
+    "state": "Actionable",
+    "channelType": "Website",
+    "presenceState": "Verified Present",
+    "customerJourneyStage": "Request a Business Snapshot",
+    "businessObjective": "Get more customers and build steady revenue as soon as possible.",
+    "evidenceSource": "Page Content, Page Content",
+    "evidenceLocation": "https://rogersholdingsllc.com/business-snapshot/",
+    "evidenceExcerpt": "The reviewed conversion destination returned a readable HTML page.",
+    "observation": "The Business Snapshot form is not connected to a secure submission endpoint. It prepares an email for the visitor to review and send.",
+    "expectedCondition": "Visitors submit the Business Snapshot directly on the website and receive confirmation without opening or sending an email.",
+    "businessImpact": "The extra step can cause abandoned or incomplete requests. It also makes lead tracking less dependable.",
+    "consequenceBasis": "The page states that its secure submission endpoint is not connected. The form instead prepares an email that the visitor must send. This added handoff prevents the website from recording a completed structured submission directly.",
+    "recommendation": "Connect the Business Snapshot form to a secure submission system so customers can submit directly from the website. Each valid submission should create the appropriate linked intake records and preserve explicit consent. Rogers Holdings should receive a notification, and the visitor should receive clear confirmation. No manually sent email should be required.",
+    "implementationLocation": "Business Snapshot form submission workflow",
+    "intendedOutcome": "Create a simpler and more dependable lead-capture path with structured intake records and auditable follow-up.",
+    "completionTest": "Submit an authorized test Business Snapshot through the published form. Verify that no email client is required. Confirm one complete linked intake record contains the submitted fields and consent. Confirm Rogers Holdings receives the configured notification. Confirm the visitor receives a clear confirmation. Verify invalid submissions create no incomplete records.",
+    "evidenceConfidence": 0.9,
+    "evidenceKeys": ["EVID-532383d3ad14734d", "EVID-12c69abfb37aa49a"],
+    "limitations": [
+      "Public pages verified reachable and ownership confirmed. The secure submission endpoint is not connected",
+      "the Business Snapshot form prepares an email for the customer to review and send. No submission was performed."
+    ]
+  }],
+  "recommendations": [{
+    "key": "REC-e18120dc8a9d4e51",
+    "findingKey": "FND-0aff56a349dd3d12",
+    "title": "Connect the Business Snapshot form to secure direct submission",
+    "change": "Connect the Business Snapshot form to a secure submission system so customers can submit directly from the website. Each valid submission should create the appropriate linked intake records and preserve explicit consent. Rogers Holdings should receive a notification, and the visitor should receive clear confirmation. No manually sent email should be required.",
+    "why": "Create a simpler and more dependable lead-capture path with structured intake records and auditable follow-up.",
+    "dependency": "The secure submission endpoint is not connected."
+  }],
+  "actions": [{
+    "key": "ACT-REC-e18120dc8a9d4e51",
+    "recommendationKey": "REC-e18120dc8a9d4e51",
+    "sequence": 1,
+    "title": "Connect the Business Snapshot form to secure direct submission",
+    "outcome": "Create a simpler and more dependable lead-capture path with structured intake records and auditable follow-up.",
+    "implementationPath": "Connect the Business Snapshot form to a secure submission system so customers can submit directly from the website. Each valid submission should create the appropriate linked intake records and preserve explicit consent. Rogers Holdings should receive a notification, and the visitor should receive clear confirmation. No manually sent email should be required. at Business Snapshot form submission workflow",
+    "dependency": "The secure submission endpoint is not connected.",
+    "completionTest": "Submit an authorized test Business Snapshot through the published form. Verify that no email client is required. Confirm one complete linked intake record contains the submitted fields and consent. Confirm Rogers Holdings receives the configured notification. Confirm the visitor receives a clear confirmation. Verify invalid submissions create no incomplete records."
+  }],
+  "limitations": [
+    "Public pages verified reachable and ownership confirmed. The secure submission endpoint is not connected",
+    "the Business Snapshot form prepares an email for the customer to review and send. No submission was performed."
+  ],
+  "primaryConclusion": "Business Snapshot intake adds an email handoff",
+  "primaryConclusionDetail": "The Business Snapshot form is not connected to a secure submission endpoint. It prepares an email for the visitor to review and send.",
+  "businessImplication": "The extra step can cause abandoned or incomplete requests. It also makes lead tracking less dependable.",
+  "firstStep": "Connect the Business Snapshot form to secure direct submission.",
+  "nextStep": "Review the Digital Business Assessment. Choose who will make the change."
+}

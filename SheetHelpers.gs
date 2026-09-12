@@ -4884,7 +4884,12 @@ function getSelectedProspectContext_(requiredHeaders) {
     return null;
   }
 
-  const selectedRow = sheet.getActiveRange().getRow();
+  const activeRange = sheet.getActiveRange();
+  if (!activeRange || (typeof activeRange.getNumRows === 'function' && activeRange.getNumRows() !== 1)) {
+    ui.alert('Business Optimization Platform', 'Select exactly one prospect row.', ui.ButtonSet.OK);
+    return null;
+  }
+  const selectedRow = activeRange.getRow();
   const table = getHeaderTable_(sheet, requiredHeaders || ['Company']);
 
   if (selectedRow <= table.headerRow) {
@@ -4895,7 +4900,16 @@ function getSelectedProspectContext_(requiredHeaders) {
   const values = sheet.getRange(selectedRow, 1, 1, table.lastColumn).getValues()[0];
   const prospect = {
     company: getValueByHeader_(values, table.headers, 'Company'),
-    status: getValueByHeader_(values, table.headers, 'Status')
+    status: getValueByHeader_(values, table.headers, 'Status'),
+    prospectId: getValueByHeader_(values, table.headers, 'Prospect ID'),
+    contact: getValueByHeader_(values, table.headers, 'Contact'),
+    email: getValueByHeader_(values, table.headers, 'Email'),
+    phone: getValueByHeader_(values, table.headers, 'Phone'),
+    website: getValueByHeader_(values, table.headers, 'Website'),
+    city: getValueByHeader_(values, table.headers, 'City'),
+    state: getValueByHeader_(values, table.headers, 'State'),
+    industry: getValueByHeader_(values, table.headers, 'Industry'),
+    offer: getValueByHeader_(values, table.headers, 'Offer / Service')
   };
 
   if (!prospect.company) {
@@ -5136,8 +5150,10 @@ function getHeaderTable_(sheet, requiredHeaders) {
 
   for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
     const headers = {};
+    const headerCounts = {};
     rows[rowIndex].forEach(function(value, colIndex) {
       const header = String(value || '').trim();
+      if (header) headerCounts[header] = (headerCounts[header] || 0) + 1;
       if (header && !headers[header]) {
         headers[header] = colIndex + 1;
       }
@@ -5148,6 +5164,10 @@ function getHeaderTable_(sheet, requiredHeaders) {
     });
 
     if (missing.length === 0) {
+      const ambiguous = requiredHeaders.filter(function(header) { return headerCounts[header] > 1; });
+      if (ambiguous.length) {
+        throw new Error(`Required headers are ambiguous on sheet "${sheet.getName()}": ${ambiguous.join(', ')}`);
+      }
       return {
         headerRow: rowIndex + 1,
         headers: headers,

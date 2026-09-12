@@ -1,0 +1,443 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const crypto = require('node:crypto');
+const root = path.resolve(__dirname, '..');
+const source = fs.readFileSync(path.join(root, 'ExecutiveBriefDeliveryEngine.gs'), 'utf8');
+const OWNER = 'briankeith@rogersholdingsllc.com';
+const sha = v => crypto.createHash('sha256').update(Buffer.from(v)).digest('hex');
+const snapshot = v => JSON.stringify(v);
+function blob(bytes = 'PDF approved bytes', name = 'Executive Brief.pdf') {
+  return { getBytes: () => [...Buffer.from(bytes)], getName: () => name, setName(n) { name = n; return this; } };
+}
+class Sheet {
+  constructor(name, headers, rows) { this.name = name; this.rows = [headers, ...rows.map(r => headers.map(k => r[k] ?? ''))]; this.writes = 0; this.sheetId = ++Sheet.nextId; }
+  getName() { return this.name; }
+  getSheetId() { return this.sheetId; }
+  getMaxRows() { return 1000; }
+  getLastColumn() { return this.rows[0].length; }
+  getLastRow() { return this.rows.length; }
+  getActiveRange() { return this.activeRange || this.getRange(2, 1); }
+  getActiveRangeList() { return { getRanges: () => this.activeRanges || [this.getActiveRange()] }; }
+  getRange(r, c, nr = 1, nc = 1) {
+    const sheet = this;
+    return {
+      getRow: () => r, getColumn: () => c, getNumRows: () => nr, getNumColumns: () => nc,
+      getDisplayValues() { return this.getValues().map(row => row.map(String)); },
+      getValues() { return Array.from({ length: nr }, (_, i) => Array.from({ length: nc }, (_, j) => sheet.rows[r + i - 1]?.[c + j - 1] ?? '')); },
+      getValue() { return this.getValues()[0][0]; },
+      setValues(values) { values.forEach((row, i) => row.forEach((v, j) => { if (sheet.fail?.(r + i, c + j, v)) throw Error('Injected write failure'); while (sheet.rows.length < r + i) sheet.rows.push(new Array(sheet.getLastColumn()).fill('')); sheet.rows[r + i - 1][c + j - 1] = v; sheet.writes++; })); return this; },
+      setValue(v) { return this.setValues([[v]]); }
+    };
+  }
+  deleteRow(r) { this.rows.splice(r - 1, 1); this.writes++; }
+  field(r, key, value) { const c = this.rows[0].indexOf(key); if (arguments.length === 3) this.rows[r - 1][c] = value; return this.rows[r - 1][c]; }
+}
+Sheet.nextId = 0;
+function harness() {
+  const h = { now: '2026-09-11T12:00:00.000Z', account: OWNER, drafts: [], sent: [], labels: {}, calls: { create: 0, list: 0 }, fileBytes: 'PDF approved bytes' };
+  h.prospects = new Sheet('Master Prospect Tracker', ['Company', 'Contact', 'Email', 'Prospect ID', 'Status', 'Next Action', 'Last Activity'], [
+    { Company: 'Synthetic Acceptance', Contact: 'Brian — Test', Email: 'acceptance@example.test', 'Prospect ID': 'PROS-1', Status: 'Lead Found', 'Next Action': 'Create Outreach Draft', 'Last Activity': 'UNCHANGED' }
+  ]);
+  h.follows = new Sheet('Follow-Ups', ['Follow-Up ID', 'Related Prospect ID', 'Follow-Up Type', 'Completed', 'Completed Date', 'Company', 'Notes'], [
+    { 'Follow-Up ID': 'FU-1', 'Related Prospect ID': 'PROS-1', 'Follow-Up Type': 'Executive Brief', Completed: false, Company: 'Synthetic Acceptance', Notes: 'preserve' },
+    { 'Follow-Up ID': 'FU-2', 'Related Prospect ID': 'PROS-1', 'Follow-Up Type': 'Other Task', Completed: false, Company: 'Synthetic Acceptance' },
+    { 'Follow-Up ID': 'FU-3', 'Related Prospect ID': 'PROS-OTHER', 'Follow-Up Type': 'Executive Brief', Completed: false, Company: 'Synthetic Acceptance' }
+  ]);
+  h.reference = { findingSetId: 'FSET-1', version: '1', fingerprint: 'a'.repeat(64), approvalStatus: 'Approved for Client' };
+  h.sets = new Sheet('Assessment Finding Sets', ['Finding Set ID', 'Version', 'Prospect ID', 'Review Status', 'Approval Status', 'Document Eligibility', 'Immutable Hash', 'Snapshot File ID'], [
+    { 'Finding Set ID': 'FSET-1', Version: 1, 'Prospect ID': 'PROS-1', 'Review Status': 'Approved for Client', 'Approval Status': 'Approved for Client', 'Document Eligibility': 'Eligible', 'Immutable Hash': h.reference.fingerprint, 'Snapshot File ID': 'SNAP-1' }
+  ]);
+  h.generationKey = 'GOLDDOC:PROS-1:EXECUTIVEBRIEF:FSET-1:1:' + h.reference.fingerprint;
+  h.activities = new Sheet('Activity Feed', ['Date', 'Company', 'Activity Type', 'Activity Notes', 'Prospect ID', 'Operation Key'], [
+    { Date: new Date('2026-09-11T10:00:00Z'), Company: 'Synthetic Acceptance', 'Activity Type': 'Executive Brief Generated', 'Activity Notes': 'Generated Executive Brief.pdf from approved Finding Quality snapshot FSET-1 v1.', 'Prospect ID': 'PROS-1', 'Operation Key': h.generationKey }
+  ]);
+  h.file = { getName: () => 'Executive Brief.pdf', isTrashed: () => false, getMimeType: () => 'application/pdf', getSize: () => h.fileBytes.length,
+    getId: () => 'PDF-1', getUrl: () => 'https://drive.google.com/file/d/PDF-1/view', getBlob: () => blob(h.fileBytes),
+    getDescription: () => 'Generated by Business Optimization Platform. Operation ' + h.generationKey + '. Artifact SHA-256 ' + sha('PDF approved bytes') + '.' };
+  h.files = [h.file];
+  const sheets = [h.prospects, h.follows, h.sets, h.activities];
+  // Apps Script can return separate service handles for the same sheet.
+  const handle = sheet => sheet && new Proxy(sheet, { get(target, key) { const value = target[key]; return typeof value === 'function' ? value.bind(target) : value; } });
+  h.ss = { getSheetByName: n => handle(sheets.find(s => s.name === n)), getActiveSheet: () => handle(h.activeSheet || h.prospects) };
+  h.prompts = []; h.alerts = [];
+  h.ui = { Button: { OK: 'OK' }, ButtonSet: { OK_CANCEL: 'OK_CANCEL', OK: 'OK' },
+    prompt(title, body) { h.prompts.push(body); return { getSelectedButton: () => 'CANCEL', getResponseText: () => '' }; },
+    alert(...args) { h.alerts.push(args.join(' ')); } };
+  h.message = (id, overrides = {}) => {
+    const value = { id, to: 'acceptance@example.test', from: OWNER, subject: h.content?.subject || '', body: h.content?.plainBody || '', attachments: [blob()], date: new Date('2026-09-11T12:05:00Z'), cc: '', bcc: '', draft: false, ...overrides };
+    return Object.assign(value, { getId: () => value.id, getTo: () => value.to, getFrom: () => value.from, getSubject: () => value.subject, getPlainBody: () => value.body,
+      getAttachments: () => value.attachments, getDate: () => value.date, getCc: () => value.cc, getBcc: () => value.bcc, isDraft: () => value.draft });
+  };
+  const ctx = { console, Date: class extends Date { constructor(...args) { super(...(args.length ? args : [h.now])); } },
+    MASTER_PROSPECT_SHEET: 'Master Prospect Tracker', FOLLOW_UPS_SHEET: 'Follow-Ups', ACTIVITY_FEED_SHEET: 'Activity Feed', MimeType: { PDF: 'application/pdf' },
+    Utilities: { DigestAlgorithm: { SHA_256: 'SHA_256' }, Charset: { UTF_8: 'UTF_8' }, computeDigest(_type, input) { return [...crypto.createHash('sha256').update(typeof input === 'string' ? input : Buffer.from(input)).digest()]; } },
+    Session: { getEffectiveUser: () => ({ getEmail: () => h.account }) },
+    LockService: { getDocumentLock: () => ({ waitLock() {}, releaseLock() {} }) },
+    SpreadsheetApp: { getActiveSpreadsheet: () => h.ss, getUi: () => h.ui },
+    Gmail: { Users: { Messages: { list(_user, options) { h.calls.list++; assert.deepEqual([...options.labelIds], ['SENT']); assert.equal(_user, 'me'); return { messages: h.sent.map(m => ({ id: m.id })), ...(h.pagination || {}) }; },
+      get(_user, id, options) { assert.equal(options.format, 'minimal'); return { id, labelIds: h.labels[id] || ['SENT'] }; } } } },
+    GmailApp: { getDrafts: () => h.drafts, getMessageById: id => h.sent.find(m => m.id === id), createDraft(to, subject, body, options) {
+      h.calls.create++; h.options = options;
+      const message = h.message('draft-message', { to, subject, body, attachments: options.attachments, draft: true });
+      const draft = { getId: () => 'DRAFT-1', getMessage: () => message };
+      if (!h.noPersist) h.drafts.push(draft);
+      if (h.createError) throw Error('Gmail outcome uncertain');
+      return draft;
+    } },
+    escapeHtml_: v => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+  };
+  vm.createContext(ctx);
+  ['SheetHelpers.gs', 'GmailEngine.gs', 'ClientPackageDraftEngine.gs', 'DocumentGenerationEngine.gs', 'ExecutiveBriefDeliveryEngine.gs'].forEach(file => vm.runInContext(fs.readFileSync(path.join(root, file), 'utf8'), ctx, { filename: file }));
+  h.realHeaderTable = ctx.getHeaderTable_;
+  Object.assign(ctx, {
+    requireHumanReviewer_: () => h.account,
+    getHeaderTable_: (sheet, required) => { const headers = Object.fromEntries(sheet.rows[0].map((k, i) => [k, i + 1])); for (const key of required || []) assert.ok(headers[key], key); return { headers, headerRow: 1, lastColumn: sheet.getLastColumn() }; },
+    getRequiredSheet_: (ss, name) => { const sheet = ss.getSheetByName(name); if (!sheet) throw Error('missing sheet'); return sheet; },
+    getValueByHeader_: (row, headers, key) => row[headers[key] - 1] ?? '',
+    findRowsByExactHeaderValue_: (sheet, table, key, value) => sheet.rows.slice(1).flatMap((r, i) => String(r[table.headers[key] - 1]) === String(value) ? [i + 2] : []),
+    getAuditPackageFolder_: () => { if (h.noFolder) return null; let i = 0; return { getFiles: () => ({ hasNext: () => i < h.files.length, next: () => h.files[i++] }) }; },
+    loadApprovedFindingSetForGeneration_: () => { if (h.stale) throw Error('stale snapshot'); return { reference: h.reference }; },
+    assertApprovedFindingSetReference_: r => r,
+    findingQualityDateText_: d => new Date(d).toISOString(),
+    buildExecutiveBriefPdfCorrectionKey_: () => 'CORRECTION-1', executiveBriefCorrectionDescription_: () => 'CORRECTED-DESCRIPTION',
+    refreshSalesOperatingSystem_: () => { throw Error('forbidden refresh'); },
+    confirmExecutiveSnapshotSent: () => { throw Error('forbidden legacy confirmation'); },
+    syncFollowUpForProspectRow_: () => { throw Error('forbidden broad synchronization'); }
+  });
+  h.ctx = ctx;
+  h.context = { ss: h.ss, sheet: h.prospects, table: ctx.getHeaderTable_(h.prospects), selectedRow: 2, prospect: { prospectId: 'PROS-1' } };
+  h.plan = mode => ctx.buildExecutiveBriefDeliveryPlan_(h.context, mode || 'draft');
+  h.draft = () => { const plan = h.plan(); h.content = plan.content; return ctx.createExecutiveBriefDeliveryDraftTransactional_(h.context, plan.operationKey); };
+  h.sendManually = () => { h.now = '2026-09-11T12:10:00Z'; h.sent = [h.message('sent-001')]; h.drafts = []; };
+  h.reconcile = () => { const plan = h.plan('sent'); const sent = ctx.prepareExecutiveBriefSent_(plan); return ctx.reconcileSentExecutiveBriefTransactional_(h.context, sent); };
+  h.events = type => h.activities.rows.slice(1).filter(r => r[2] === type);
+  return h;
+}
+
+function selectedRowHarness(column = 1) {
+  const h = harness();
+  const headers = Array.from({ length: 34 }, (_, i) => ['Company', 'Contact', 'Email', 'Status'][i] || 'Field ' + (i + 1));
+  headers[33] = 'Prospect ID';
+  const row = headers.map(key => h.prospects.field(2, key));
+  h.prospects.rows = [[], [], [], headers, [], [], row];
+  h.prospects.rows[4] = row.map((value, i) => i === 33 ? 'PROS-OTHER' : value);
+  h.prospects.getLastColumn = () => headers.length;
+  h.prospects.activeRange = h.prospects.getRange(7, column);
+  const mockedHeaders = h.ctx.getHeaderTable_;
+  h.ctx.getHeaderTable_ = (sheet, required) => sheet.getSheetId() === h.prospects.getSheetId()
+    ? h.realHeaderTable(sheet, required) : mockedHeaders(sheet, required);
+  return h;
+}
+
+for (const [cell, column] of Object.entries({ A7: 1, B7: 2, C7: 3, D7: 4, Z7: 26, AH7: 34 })) {
+  test('delivery resolves internal Prospect ID from ' + cell + ' with distinct sheet handles', () => {
+    const h = selectedRowHarness(column);
+    assert.notEqual(h.ss.getActiveSheet(), h.ss.getSheetByName('Master Prospect Tracker'));
+    const selected = h.ctx.getSelectedProspectContext_(['Company', 'Contact', 'Email', 'Prospect ID']);
+    assert.equal(selected.selectedRow, 7); assert.equal(selected.table.headers['Prospect ID'], 34);
+    assert.equal(selected.prospect.prospectId, 'PROS-1');
+    assert.equal(h.ctx.buildExecutiveBriefDeliveryPlan_(selected, 'draft').identity.prospectId, 'PROS-1');
+    h.ctx.createExecutiveBriefDeliveryDraft();
+    assert.equal(h.prompts.length, 1); assert.match(h.prompts[0], /Prospect: PROS-1/);
+    assert.equal(h.calls.create, 0); assert.equal(h.alerts.length, 0);
+  });
+}
+
+const selectionBlocks = {
+  header: h => { h.prospects.activeRange = h.prospects.getRange(4, 1); },
+  blank: h => { h.prospects.activeRange = h.prospects.getRange(8, 1); },
+  'multiple rows': h => { h.prospects.activeRange = h.prospects.getRange(7, 1, 2); },
+  'disjoint rows': h => { h.prospects.activeRanges = [h.prospects.getRange(7, 1), h.prospects.getRange(8, 1)]; },
+  'empty range list': h => { h.prospects.activeRanges = []; },
+  'wrong sheet': h => { h.activeSheet = h.follows; },
+  'missing ID': h => { h.prospects.rows[6][33] = ''; },
+  'duplicate ID': h => { h.prospects.rows.push(h.prospects.rows[6].slice()); },
+  'missing ID header': h => { h.prospects.rows[3][33] = 'Prospect Id'; },
+  'duplicate ID header': h => { h.prospects.rows[3][32] = 'Prospect ID'; }
+};
+for (const [name, mutate] of Object.entries(selectionBlocks)) test('menu blocks ' + name + ' before delivery preview or mutation', () => {
+  const h = selectedRowHarness(); mutate(h);
+  const before = snapshot([h.prospects.rows, h.follows.rows, h.activities.rows]);
+  h.ctx.createExecutiveBriefDeliveryDraft();
+  assert.equal(h.prompts.length, 0); assert.equal(h.calls.create, 0); assert.equal(h.calls.list, 0);
+  assert.equal(h.alerts.length, 1);
+  assert.equal(snapshot([h.prospects.rows, h.follows.rows, h.activities.rows]), before);
+});
+
+test('a different sheet ID with the same name and row blocks', () => {
+  const h = harness(); h.context.sheet = { getSheetId: () => -1, getName: () => 'Master Prospect Tracker' };
+  assert.throws(() => h.plan(), /Selected Prospect ID/);
+});
+
+for (const change of ['replace ID', 'move row', 'duplicate ID']) test('selected row identity ' + change + ' after preview blocks before writes', () => {
+  const h = selectedRowHarness();
+  const selected = h.ctx.getSelectedProspectContext_(['Company', 'Contact', 'Email', 'Prospect ID']);
+  const preview = h.ctx.buildExecutiveBriefDeliveryPlan_(selected, 'draft');
+  if (change === 'replace ID') h.prospects.rows[6][33] = 'PROS-OTHER';
+  if (change === 'move row') h.prospects.rows.splice(6, 0, []);
+  if (change === 'duplicate ID') h.prospects.rows.push(h.prospects.rows[6].slice());
+  const before = snapshot([h.prospects.rows, h.follows.rows, h.activities.rows]);
+  assert.throws(() => h.ctx.createExecutiveBriefDeliveryDraftTransactional_(selected, preview.operationKey), /Selected Prospect ID/);
+  assert.equal(h.calls.create, 0); assert.equal(snapshot([h.prospects.rows, h.follows.rows, h.activities.rows]), before);
+});
+
+test('confirmed Company-cell menu selection creates one mocked draft for the exact row', () => {
+  const h = selectedRowHarness();
+  h.ui.prompt = (_title, body) => {
+    h.prompts.push(body);
+    return { getSelectedButton: () => 'OK', getResponseText: () => 'CREATE EXECUTIVE BRIEF DELIVERY DRAFT' };
+  };
+  const before = snapshot([h.prospects.rows, h.follows.rows]);
+  const result = JSON.parse(h.ctx.createExecutiveBriefDeliveryDraft());
+  assert.equal(result.status, 'completed'); assert.equal(h.calls.create, 1);
+  const receipt = JSON.parse(h.events('Executive Brief Delivery Draft Created')[0][3]);
+  assert.equal(receipt.identity.prospectId, 'PROS-1');
+  assert.equal(receipt.identity.pdfHash, sha('PDF approved bytes'));
+  assert.equal(snapshot([h.prospects.rows, h.follows.rows]), before);
+});
+
+test('row identity changes during mocked draft creation leave receipt Pending', () => {
+  const h = harness(); const create = h.ctx.GmailApp.createDraft;
+  h.ctx.GmailApp.createDraft = (...args) => { const draft = create(...args); h.prospects.field(2, 'Prospect ID', 'PROS-OTHER'); return draft; };
+  assert.throws(() => h.draft(), /Selected Prospect ID/);
+  assert.equal(h.calls.create, 1);
+  assert.equal(JSON.parse(h.events('Executive Brief Delivery Draft Created')[0][3]).state, 'Pending');
+  assert.equal(h.events('Executive Brief Delivery Verified').length, 0);
+});
+
+test('draft contains exact copy, one canonical PDF, owner signature and no completion effects', () => {
+  const h = harness(), before = snapshot([h.prospects.rows, h.follows.rows]);
+  const result = h.draft();
+  assert.equal(result.status, 'completed'); assert.equal(h.calls.create, 1);
+  assert.equal(h.content.subject, 'Your Free Business Snapshot — Executive Brief for Synthetic Acceptance');
+  assert.match(h.content.plainBody, /Hi Brian — Test,/); assert.match(h.content.plainBody, /859-404-4351/);
+  assert.match(h.content.plainBody, /I’ve attached the brief, which summarizes the main opportunity/);
+  assert.equal(h.options.attachments.length, 1); assert.equal(sha(h.options.attachments[0].getBytes()), sha('PDF approved bytes'));
+  assert.equal(snapshot([h.prospects.rows, h.follows.rows]), before);
+  assert.equal(h.events('Executive Brief Delivery Draft Created').length, 1);
+  assert.equal(h.events('Executive Brief Delivery Verified').length, 0);
+});
+
+const draftBlocks = {
+  'formula-like company': h => h.prospects.field(2, 'Company', '=1+1'),
+  'missing email': h => h.prospects.field(2, 'Email', ''),
+  'multiple recipients': h => h.prospects.field(2, 'Email', 'a@example.test,b@example.test'),
+  'missing prospect': h => { h.context.prospect.prospectId = ''; },
+  'duplicate prospect': h => h.prospects.rows.push(h.prospects.rows[1].slice()),
+  'wrong selected row': h => { h.context.selectedRow = 3; },
+  'wrong selected sheet': h => { h.context.sheet = h.follows; },
+  'missing follow-up': h => h.follows.field(2, 'Related Prospect ID', 'OTHER'),
+  'ambiguous follow-up': h => h.follows.field(3, 'Follow-Up Type', 'Executive Brief'),
+  'duplicate follow-up ID': h => h.follows.field(4, 'Follow-Up ID', 'FU-1'),
+  'completed follow-up': h => h.follows.field(2, 'Completed', true),
+  'stale snapshot': h => { h.stale = true; },
+  'ineligible set': h => h.sets.field(2, 'Document Eligibility', 'Not Eligible'),
+  'wrong set prospect': h => h.sets.field(2, 'Prospect ID', 'OTHER'),
+  'wrong fingerprint': h => h.sets.field(2, 'Immutable Hash', 'wrong'),
+  'duplicate set': h => h.sets.rows.push(h.sets.rows[1].slice()),
+  'no generation receipt': h => h.activities.rows.pop(),
+  'duplicate generation receipt': h => h.activities.rows.push(h.activities.rows[1].slice()),
+  'wrong generation authority': h => h.activities.field(2, 'Operation Key', 'wrong'),
+  'missing PDF': h => { h.files = []; },
+  'duplicate PDF': h => h.files.push(h.file),
+  'empty PDF': h => { h.fileBytes = ''; },
+  'wrong PDF hash': h => { h.fileBytes = 'altered bytes'; },
+  'wrong owner': h => { h.account = 'other@example.test'; }
+};
+for (const [name, mutate] of Object.entries(draftBlocks)) test('draft blocks ' + name + ' before mutation', () => {
+  const h = harness(); mutate(h); const before = snapshot([h.prospects.rows, h.follows.rows, h.activities.rows]);
+  assert.throws(() => h.draft()); assert.equal(h.calls.create, 0); assert.equal(snapshot([h.prospects.rows, h.follows.rows, h.activities.rows]), before);
+});
+test('owner-confirmed authority must match re-read', () => { const h = harness(); assert.throws(() => h.ctx.createExecutiveBriefDeliveryDraftTransactional_(h.context, 'stale')); assert.equal(h.calls.create, 0); });
+test('exact ready draft is reused without writes or duplicate creation', () => {
+  const h = harness(); h.draft(); const before = snapshot(h.activities.rows), writes = h.activities.writes;
+  assert.equal(h.draft().status, 'already-completed'); assert.equal(h.calls.create, 1); assert.equal(h.activities.writes, writes); assert.equal(snapshot(h.activities.rows), before);
+});
+test('multiple matching drafts block; a mismatched existing draft is never overwritten', () => {
+  const h = harness(); h.draft(); h.drafts.push(h.drafts[0]); assert.throws(() => h.draft(), /Multiple/); assert.equal(h.calls.create, 1);
+  h.drafts.pop(); h.drafts[0].getMessage().body = 'changed'; assert.throws(() => h.draft(), /content identity/);
+});
+test('display-name recipients normalize and an exact unrecorded draft is safely adopted', () => {
+  const h = harness(); const plan = h.plan(); h.content = plan.content;
+  const message = h.message('existing', { to: 'Brian Test <ACCEPTANCE@example.test>', draft: true });
+  h.drafts = [{ getId: () => 'DRAFT-EXISTING', getMessage: () => message }];
+  assert.equal(h.draft().draftId, 'DRAFT-EXISTING'); assert.equal(h.calls.create, 0);
+  assert.equal(h.draft().status, 'already-completed');
+});
+test('invalid draft receipt identity blocks sending', () => {
+  const h = harness(); h.draft(); h.sendManually(); const row = h.activities.rows.length;
+  const receipt = JSON.parse(h.activities.field(row, 'Activity Notes')); receipt.draftId = '';
+  h.activities.field(row, 'Activity Notes', JSON.stringify(receipt)); assert.throws(() => h.reconcile(), /metadata/);
+});
+test('lost Ready receipt write leaves a recoverable pending intent and never creates a second draft', () => {
+  const h = harness(); let once = true;
+  h.activities.fail = (_r, c, value) => { if (c === 4 && String(value).includes('"state":"Ready"') && once) { once = false; return true; } return false; };
+  assert.throws(() => h.draft()); assert.equal(h.calls.create, 1);
+  assert.equal(h.draft().status, 'completed'); assert.equal(h.calls.create, 1);
+});
+test('authority changes while Gmail is creating a draft leave it pending, not accepted', () => {
+  const h = harness(); const create = h.ctx.GmailApp.createDraft;
+  h.ctx.GmailApp.createDraft = (...args) => { const result = create(...args); h.sets.field(2, 'Document Eligibility', 'Not Eligible'); return result; };
+  assert.throws(() => h.draft(), /ineligible/); assert.equal(h.calls.create, 1);
+  assert.equal(JSON.parse(h.events('Executive Brief Delivery Draft Created')[0][3]).state, 'Pending');
+});
+test('lost Gmail create response leaves intent; exact persisted draft can reconcile', () => {
+  const h = harness(); h.createError = true; assert.throws(() => h.draft(), /uncertain/); assert.equal(h.calls.create, 1);
+  h.createError = false; assert.equal(h.draft().status, 'completed'); assert.equal(h.calls.create, 1); assert.equal(h.events('Executive Brief Delivery Draft Created').length, 1);
+});
+test('uncertain create without a visible draft never retries create', () => {
+  const h = harness(); h.createError = true; h.noPersist = true; assert.throws(() => h.draft()); assert.throws(() => h.draft(), /Pending/); assert.equal(h.calls.create, 1);
+});
+test('missing recorded draft blocks recreation after manual send', () => { const h = harness(); h.draft(); h.sendManually(); assert.throws(() => h.draft(), /Recorded draft/); assert.equal(h.calls.create, 1); });
+test('sent reconciliation preserves original Gmail timestamp and exact follow-up identity only', () => {
+  const h = harness(); h.draft(); h.sendManually(); const prospectBefore = snapshot(h.prospects.rows), unrelated = snapshot(h.follows.rows.slice(2));
+  const result = h.reconcile(); assert.equal(result.status, 'completed');
+  assert.equal(h.follows.field(2, 'Completed'), true); assert.equal(h.follows.field(2, 'Completed Date').toISOString(), '2026-09-11T12:05:00.000Z');
+  assert.equal(snapshot(h.prospects.rows), prospectBefore); assert.equal(snapshot(h.follows.rows.slice(2)), unrelated); assert.equal(h.follows.rows.length, 4);
+  const events = h.events('Executive Brief Delivery Verified'); assert.equal(events.length, 1);
+  const receipt = JSON.parse(events[0][3]); assert.equal(receipt.identity.followUpId, 'FU-1'); assert.equal(receipt.identity.prospectId, 'PROS-1'); assert.equal(receipt.identity.pdfHash, sha('PDF approved bytes')); assert.equal(receipt.identity.findingSetId, 'FSET-1');
+  assert.match(receipt.messageReference, /^gmail-message-sha256:[a-f0-9]{64}$/); assert.equal(events[0][0].toISOString(), receipt.sentAt);
+  const before = snapshot([h.activities.rows, h.follows.rows]), writes = h.activities.writes + h.follows.writes;
+  h.now = '2026-09-12T16:00:00Z'; assert.equal(h.reconcile().status, 'already-completed'); assert.equal(snapshot([h.activities.rows, h.follows.rows]), before); assert.equal(h.activities.writes + h.follows.writes, writes);
+});
+// Exact observed text/plain shape, retained locally; no live Gmail or PDF bytes.
+const observedSentBody = [
+  'Hi Brian TESR,', '',
+  'Your Free Business Snapshot Executive Brief is ready.', '',
+  'I’ve attached the brief, which summarizes the main opportunity we',
+  'identified, why it matters, and the recommended next step.', '',
+  'Please review it when you have a chance. If you have questions or would',
+  'like help working through the recommendation, reply to this email.', '',
+  '*Brian Keith Rogers*', 'Founder', 'Rogers Holdings LLC',
+  '859-404-4351 <(859)%20404-4351>', 'rogersholdingsllc.com', OWNER, ''
+].join('\r\n');
+const gmailSignature = (body, bold = true, telephone = true) => body
+  .replace('\nBrian Keith Rogers\n', bold ? '\n*Brian Keith Rogers*\n' : '\nBrian Keith Rogers\n')
+  .replace('\n859-404-4351\n', telephone ? '\n859-404-4351 <(859)%20404-4351>\n' : '\n859-404-4351\n');
+
+test('strict exact hash passes before any Sent fallback inspection', () => {
+  const h = harness(); h.draft(); h.sendManually(); const plan = h.plan('sent');
+  Object.defineProperty(plan.content, 'plainBody', { get() { throw Error('fallback inspected'); } });
+  assert.doesNotThrow(() => h.ctx.assertExecutiveBriefDeliveryMessage_(h.sent[0], plan, true));
+});
+for (const [name, bold, telephone] of [['bold name', true, false], ['telephone annotation', false, true], ['both', true, true]]) {
+  test('Sent-only normalization accepts ' + name + ' and preserves receipt identity and timestamp', () => {
+    const h = harness(); h.draft(); h.sendManually();
+    const draftBefore = snapshot(h.events('Executive Brief Delivery Draft Created'));
+    h.sent[0].body = gmailSignature(h.sent[0].body, bold, telephone);
+    assert.equal(h.reconcile().status, 'completed');
+    assert.equal(snapshot(h.events('Executive Brief Delivery Draft Created')), draftBefore);
+    assert.equal(h.follows.field(2, 'Completed Date').toISOString(), '2026-09-11T12:05:00.000Z');
+    assert.equal(h.follows.field(3, 'Completed'), false); assert.equal(h.follows.field(4, 'Completed'), false);
+    assert.equal(h.reconcile().status, 'already-completed'); assert.equal(h.calls.create, 1);
+  });
+  test('draft verification rejects ' + name + ' instead of applying Sent normalization', () => {
+    const h = harness(); h.draft();
+    h.drafts[0].getMessage().body = gmailSignature(h.content.plainBody, bold, telephone);
+    assert.throws(() => h.draft(), /content identity mismatch/); assert.equal(h.calls.create, 1);
+  });
+}
+test('exact observed Sent body reconciles against the original unchanged contentHash', () => {
+  const h = harness(); h.prospects.field(2, 'Contact', 'Brian TESR'); h.draft(); h.sendManually();
+  const receipt = JSON.parse(h.events('Executive Brief Delivery Draft Created')[0][3]);
+  assert.equal(receipt.identity.contentHash, '254065466cf0aa327155e93cfedf758f2cbcf883dbc3c5277cb123c6e98fe974');
+  assert.equal(sha(h.ctx.executiveBriefDeliveryText_(observedSentBody)), '581ff3aaa2a5857626d67a31b3da468fe17481aedc652575af79d430d97912f9');
+  h.sent[0].body = observedSentBody;
+  assert.equal(h.reconcile().status, 'completed');
+  const verified = JSON.parse(h.events('Executive Brief Delivery Verified')[0][3]);
+  assert.equal(verified.identity.contentHash, receipt.identity.contentHash);
+});
+const normalizedContentBlocks = {
+  'unrelated markdown': body => body.replace('Founder', '*Founder*'),
+  'arbitrary angle brackets': body => body.replace('Founder', 'Founder <extra>'),
+  'different displayed phone': body => body.replace('859-404-4351', '859-404-9999'),
+  'different annotation phone': body => body.replace('(859)%20404-4351', '(859)%20404-9999'),
+  'arbitrary annotation': body => body.replace('<(859)%20404-4351>', '<https://example.test>'),
+  'double bold markers': body => body.replace('*Brian Keith Rogers*', '**Brian Keith Rogers**'),
+  'changed recommendation copy': body => body.replace('reply to this email', 'send payment now'),
+  'changed punctuation': body => body.replace('I’ve', "I've"),
+  'HTML markup': body => body.replace('Founder', '<b>Founder</b>'),
+  'extra link': body => body + '\nhttps://example.test',
+  'extra signature': body => body + '\nBrian Keith Rogers',
+  'annotation outside signature': body => body.replace('Executive Brief is ready.', 'Executive Brief is ready. 859-404-4351 <(859)%20404-4351>')
+};
+for (const [name, mutate] of Object.entries(normalizedContentBlocks)) test('Sent fallback rejects ' + name + ' without writes', () => {
+  const h = harness(); h.draft(); h.sendManually();
+  h.sent[0].body = mutate(gmailSignature(h.sent[0].body));
+  const before = snapshot([h.activities.rows, h.follows.rows, h.prospects.rows]);
+  assert.throws(() => h.reconcile(), /content identity mismatch/);
+  assert.equal(snapshot([h.activities.rows, h.follows.rows, h.prospects.rows]), before);
+});
+
+const sentBlocks = {
+  'wrong recipient': h => { h.sent[0].to = 'wrong@example.test'; },
+  'wrong sender': h => { h.sent[0].from = 'wrong@example.test'; },
+  'wrong subject': h => { h.sent[0].subject = 'wrong'; },
+  'changed body': h => { h.sent[0].body += '\nextra content'; },
+  'missing attachment': h => { h.sent[0].attachments = []; },
+  'wrong attachment hash': h => { h.sent[0].attachments = [blob('wrong')]; },
+  'wrong attachment name': h => { h.sent[0].attachments = [blob('PDF approved bytes', 'wrong.pdf')]; },
+  'additional attachment': h => { h.sent[0].attachments.push(blob()); },
+  'multiple Sent matches': h => h.sent.push(h.message('sent-002')),
+  'no Sent match': h => { h.sent = []; },
+  'incoming message in a sent thread': h => { h.labels['sent-001'] = ['INBOX']; },
+  'draft label': h => { h.labels['sent-001'] = ['SENT', 'DRAFT']; },
+  'wrong content draft flag': h => { h.sent[0].draft = true; },
+  'CC': h => { h.sent[0].cc = 'other@example.test'; },
+  'BCC': h => { h.sent[0].bcc = 'other@example.test'; },
+  'invalid timestamp': h => { h.sent[0].date = new Date('invalid'); },
+  'old message': h => { h.sent[0].date = new Date('2026-01-01'); },
+  'stale current authority': h => { h.stale = true; },
+  'changed canonical PDF': h => { h.fileBytes = 'different'; },
+  'relinked follow-up': h => h.follows.field(2, 'Related Prospect ID', 'OTHER'),
+  'already completed without receipt': h => h.follows.field(2, 'Completed', true),
+  'missing draft receipt': h => h.activities.rows.pop(),
+  'duplicate draft receipt': h => h.activities.rows.push(h.activities.rows.at(-1).slice())
+};
+for (const [name, mutate] of Object.entries(sentBlocks)) test('reconciliation blocks ' + name + ' without writes', () => {
+  const h = harness(); h.draft(); h.sendManually(); mutate(h); const before = snapshot([h.activities.rows, h.follows.rows, h.prospects.rows]);
+  assert.throws(() => h.reconcile()); assert.equal(snapshot([h.activities.rows, h.follows.rows, h.prospects.rows]), before);
+});
+for (const [name, mutate] of Object.entries(sentBlocks)) test('Sent normalization preserves rejection of ' + name, () => {
+  const h = harness(); h.draft(); h.sendManually(); h.sent[0].body = gmailSignature(h.sent[0].body); mutate(h);
+  const before = snapshot([h.activities.rows, h.follows.rows, h.prospects.rows]);
+  assert.throws(() => h.reconcile()); assert.equal(snapshot([h.activities.rows, h.follows.rows, h.prospects.rows]), before);
+});
+test('changed owner preview cannot reconcile', () => { const h = harness(); h.draft(); h.sendManually(); assert.throws(() => h.ctx.reconcileSentExecutiveBriefTransactional_(h.context, {}), /owner review/); });
+test('completion failure rolls back only authorized cells and operation receipt', () => {
+  const h = harness(); h.draft(); h.sendManually(); const before = snapshot([h.follows.rows, h.activities.rows]); let once = true;
+  h.follows.fail = (_r, c, value) => { if (c === 5 && value instanceof Date && once) { once = false; return true; } return false; };
+  assert.throws(() => h.reconcile(), /rolled back/); assert.equal(snapshot([h.follows.rows, h.activities.rows]), before);
+});
+test('concurrent follow-up change before completion is preserved, not rolled back', () => {
+  const h = harness(); h.draft(); h.sendManually(); const activityBefore = snapshot(h.activities.rows);
+  h.activities.fail = (_r, _c, value) => {
+    if (value === 'Executive Brief Delivery Verified') h.follows.field(2, 'Completed Date', 'external change');
+    return false;
+  };
+  assert.throws(() => h.reconcile(), /changed before completion/);
+  assert.equal(h.follows.field(2, 'Completed Date'), 'external change');
+  assert.equal(h.follows.writes, 0);
+  assert.equal(snapshot(h.activities.rows), activityBefore);
+});
+test('tampered verified receipt blocks repeated completion', () => {
+  const h = harness(); h.draft(); h.sendManually(); h.reconcile(); h.activities.field(h.activities.rows.length, 'Activity Notes', '{}'); const before = snapshot(h.follows.rows);
+  assert.throws(() => h.reconcile(), /mismatched/); assert.equal(snapshot(h.follows.rows), before);
+});
+test('operator cancellation is read-only; exact PDF review and manual-send messages are explicit', () => {
+  const h = harness(); const before = snapshot(h.activities.rows); const seen = [];
+  h.ui = { Button: { OK: 'OK' }, ButtonSet: { OK_CANCEL: 'OK_CANCEL', OK: 'OK' }, prompt(title, body) { seen.push(body); return { getSelectedButton: () => 'CANCEL', getResponseText: () => '' }; }, alert() {} };
+  assert.equal(h.ctx.createExecutiveBriefDeliveryDraft(), ''); assert.equal(h.calls.create, 0); assert.equal(snapshot(h.activities.rows), before);
+  assert.match(seen[0], /Review this exact PDF/); assert.match(seen[0], /Brian must manually press Send/); assert.match(seen[0], /FU-1/);
+});
+test('menu bindings, message-level SENT API, and absence of forbidden calls', () => {
+  const menu = fs.readFileSync(path.join(root, 'Menu.gs'), 'utf8');
+  assert.match(menu, /Create Executive Brief Delivery Draft', 'createExecutiveBriefDeliveryDraft'/);
+  assert.match(menu, /Reconcile Sent Executive Brief', 'reconcileSentExecutiveBrief'/);
+  assert.doesNotMatch(source, /sendEmail\s*\(|\.send\s*\(|Messages\.(send|insert|import|modify)|UrlFetchApp|createDiscovery|confirmExecutiveSnapshotSent|syncFollowUpForProspectRow_|completeOpenFollowUpsForCompany_|refreshSalesOperatingSystem_/);
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, 'appsscript.json')));
+  assert.ok(manifest.dependencies.enabledAdvancedServices.some(s => s.serviceId === 'gmail' && s.version === 'v1'));
+});

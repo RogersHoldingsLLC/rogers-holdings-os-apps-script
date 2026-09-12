@@ -44,18 +44,19 @@ function completeProspectClientOperation_(targetStage, title, activityType, acti
       : `${targetStage} confirmed.\n\nClient ID: ${result.clientId}`, ui.ButtonSet.OK);
     return result;
   } catch (error) {
+    const failureDetail = error && error.message ? error.message : String(error);
     console.error('Client/project Drive operation failed', {
       company: context.prospect && context.prospect.company,
       targetStage: targetStage,
-      error: error && error.stack ? error.stack : (error && error.message ? error.message : String(error))
+      error: error && error.stack ? error.stack : failureDetail
     });
     try {
-      setLifecycleOperationMarker_(context, buildLifecycleOperationKey_(context, targetStage), 'Reconciliation Required', `Client/project operation failed and requires retry or review: ${error && error.message ? error.message : String(error)}`);
+      setLifecycleOperationMarker_(context, buildLifecycleOperationKey_(context, targetStage), 'Reconciliation Required', `Client/project operation failed and requires retry or review: ${failureDetail}`);
     } catch (markerError) {
       console.error(markerError);
     }
     const currentAfterFailure = normalizePipelineStage_(context.sheet.getRange(context.selectedRow, context.table.headers.Status).getValue()) || String(context.sheet.getRange(context.selectedRow, context.table.headers.Status).getValue() || '').trim();
-    ui.alert('Business Optimization Platform', `The Drive operation could not be completed. Current CRM Status: ${currentAfterFailure || '(blank)'}. Confirm Drive access, review Lifecycle Operation State and Details, then retry the same action.`, ui.ButtonSet.OK);
+    ui.alert('Business Optimization Platform', `Client/project operation failed: ${failureDetail}\n\nCurrent CRM Status: ${currentAfterFailure || '(blank)'}. Review Lifecycle Operation State and Details, then retry the same action.`, ui.ButtonSet.OK);
     return null;
   } finally {
     lock.releaseLock();
@@ -471,42 +472,63 @@ function convertWonProspectToClient_(context, options) {
   const operationKey = buildLifecycleOperationKey_(context, targetStage);
   ensureLifecycleReconciliationColumns_(context);
   setLifecycleOperationMarker_(context, operationKey, 'Preparing Prerequisites', `Preparing Client and Project records for ${targetStage}.`);
-  const clientSheet = getOrCreateClientsSheet_(context.ss);
-  const clientTable = ensureClientColumns_(clientSheet);
-  const prospectHeaders = ensureProspectConversionColumns_(context.sheet, context.table.headers);
-  const prospectValues = context.sheet.getRange(context.selectedRow, 1, 1, context.sheet.getLastColumn()).getValues()[0];
-  const prospect = buildClientProspectFromRow_(prospectValues, prospectHeaders);
-  const result = upsertClientRecordFromProspect_(clientSheet, clientTable.headers, prospect, {
-    startDate: startOfDay_(new Date()),
-    status: targetStage === 'Client' ? 'Active' : 'Onboarding'
-  });
-  const verifiedClient = verifyPersistedClientRecord_(clientSheet, clientTable, result, prospect, targetStage === 'Client' ? 'Active' : 'Onboarding');
-  const clientValues = verifiedClient.values;
-  const projectResult = upsertProjectFromClient_(context.ss, buildProjectClientModel_(clientValues, clientTable.headers), {
-    status: 'Planning',
-    notes: 'Project created from won prospect conversion.'
-  });
-  const verifiedProject = verifyPersistedProjectRecord_(context.ss, projectResult, buildProjectClientModel_(clientValues, clientTable.headers), projectResult.status || 'Planning');
-  if (!result || !result.clientId || !projectResult || !projectResult.projectId || !verifiedClient.verified || !verifiedProject.verified) {
-    setLifecycleOperationMarker_(context, operationKey, 'Reconciliation Required', 'Client or Project verification did not return the required identifiers.');
-    throw new Error('Client and Project prerequisites could not be verified.');
+  let stage = 'client-sheet-preflight';
+  try {
+    const clientSheet = getOrCreateClientsSheet_(context.ss);
+    const clientTable = ensureClientColumns_(clientSheet);
+    const prospectHeaders = ensureProspectConversionColumns_(context.sheet, context.table.headers);
+    const prospectValues = context.sheet.getRange(context.selectedRow, 1, 1, context.sheet.getLastColumn()).getValues()[0];
+    const prospect = buildClientProspectFromRow_(prospectValues, prospectHeaders);
+    stage = 'client-upsert';
+    const result = upsertClientRecordFromProspect_(clientSheet, clientTable.headers, prospect, {
+      startDate: startOfDay_(new Date()),
+      status: targetStage === 'Client' ? 'Active' : 'Onboarding'
+    });
+    stage = 'client-readback';
+    const verifiedClient = verifyPersistedClientRecord_(clientSheet, clientTable, result, prospect, targetStage === 'Client' ? 'Active' : 'Onboarding');
+    if (!result || !result.clientId || !verifiedClient || !verifiedClient.values) throw new Error('Client verification did not return the required persisted identity.');
+    const clientValues = verifiedClient.values;
+    const projectClient = buildProjectClientModel_(clientValues, clientTable.headers);
+    stage = 'project-upsert';
+    const projectResult = upsertProjectFromClient_(context.ss, projectClient, {
+      status: 'Planning',
+      notes: 'Project created from won prospect conversion.'
+    });
+    stage = 'project-readback';
+    const verifiedProject = verifyPersistedProjectRecord_(context.ss, projectResult, projectClient, projectResult.status || 'Planning');
+    if (!projectResult || !projectResult.projectId || !verifiedProject || !verifiedProject.values) throw new Error('Project verification did not return the required persisted identity.');
+    if (targetStage === 'Client') {
+      stage = 'client-follow-up';
+      syncFollowUpForClient_(context.ss, clientValues, clientTable.headers);
+    }
+    stage = 'client-workspace-drive-readback';
+    refreshClientWorkspaceForClientRow_(context.ss, clientSheet, clientTable.headers, result.rowNumber, { logOpen: false });
+    context.table.headers = prospectHeaders;
+    stage = 'lifecycle-commit';
+    applyConfirmedProspectTransition_(context, targetStage, settings.activityType || 'Client Converted', settings.activityNotes || 'Client conversion completed successfully.', {
+      lockHeld: !!settings.lockHeld,
+      operationKey: operationKey,
+      extraRowValues: targetStage === 'Client' ? { 'Closed Date': new Date() } : {}
+    });
+    if (targetStage === 'Project Started') {
+      stage = 'project-activity-reconciliation';
+      ensureClientProjectActivity_(context.ss, prospect.company, operationKey);
+    }
+    stage = 'operating-system-refresh';
+    refreshSalesOperatingSystem_();
+    return result;
+  } catch (error) {
+    const detail = error && error.message ? error.message : String(error);
+    throw new Error(`Client/project operation failed at ${stage}: ${detail}`);
   }
-  if (targetStage === 'Client') {
-    syncFollowUpForClient_(context.ss, clientValues, clientTable.headers);
-  }
-  refreshClientWorkspaceForClientRow_(context.ss, clientSheet, clientTable.headers, result.rowNumber, { logOpen: false });
-  context.table.headers = prospectHeaders;
-  applyConfirmedProspectTransition_(context, targetStage, settings.activityType || 'Client Converted', settings.activityNotes || 'Client conversion completed successfully.', {
-    lockHeld: !!settings.lockHeld,
-    operationKey: operationKey,
-    extraRowValues: targetStage === 'Client' ? { 'Closed Date': new Date() } : {}
-  });
-  if (projectResult.created) {
-    logPipelineActivity_(context.ss, prospect.company, 'Project Started', 'Project created after Improvement Plan acceptance.');
-  }
-  refreshSalesOperatingSystem_();
+}
 
-  return result;
+function ensureClientProjectActivity_(ss, company, operationKey) {
+  const projectActivityKey = operationKey + ':PROJECT';
+  if (lifecycleActivityExists_(ss, projectActivityKey)) return { created: false, operationKey: projectActivityKey };
+  logPipelineActivity_(ss, company, 'Project Started', `Project prepared after Improvement Plan acceptance. [Operation ${projectActivityKey}]`);
+  if (!lifecycleActivityExists_(ss, projectActivityKey)) throw new Error('Project Started Activity could not be verified after write.');
+  return { created: true, operationKey: projectActivityKey };
 }
 
 function verifyPersistedClientRecord_(sheet, table, result, prospect, expectedStatus) {

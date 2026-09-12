@@ -73,10 +73,11 @@ function renderPreviewFooter_(config) {
 function renderActionButtons_(config) {
   const settings = config || {};
   const generatePdfAction = settings.generatePdfAction || '';
+  const generatePdfPayload = encodeURIComponent(JSON.stringify(settings.generatePdfPayload || {}));
   const gmailAction = settings.gmailAction || 'createOutreachGmailDraft';
   return [
     '<div class="button-row">',
-    `<button class="primary" type="button" onclick="runPreviewServerAction_(this, '${escapeHtml_(generatePdfAction)}', 'Generating PDF…', 'PDF generated successfully.')">Generate PDF</button>`,
+    `<button class="primary" type="button" onclick="runPreviewServerAction_(this, '${escapeHtml_(generatePdfAction)}', 'Generating PDF…', 'PDF generated successfully.', '${escapeHtml_(generatePdfPayload)}')">Generate PDF</button>`,
     `<button type="button" onclick="runPreviewServerAction_(this, '${escapeHtml_(gmailAction)}', 'Creating Gmail draft…', 'Gmail draft created successfully.')">Create Gmail Draft</button>`,
     '<button type="button" onclick="google.script.host.close()">Close</button>',
     '</div>'
@@ -107,106 +108,155 @@ function renderPreviewList_(items) {
   }).join('') + '</ul>';
 }
 
-function showExecutiveSnapshotPreview_(prospect, reportFile) {
+function showExecutiveSnapshotPreview_(prospect, documentPlan) {
   prospect = normalizeClientProspect_(prospect);
-  const safeReportFile = getClientSafeReportFile_(prospect, reportFile || {});
-  const findings = filterClientEligibleEvidence_([].concat(safeReportFile.findings || [], getSmartFindings_(prospect)), prospect, reportFile || {}, 'finding');
-  const scoreContext = getReportScoreContext_(prospect, reportFile || {});
-  const executiveIntelligence = getExecutiveBusinessIntelligenceForReport_(prospect, safeReportFile);
-  const clientIntelligence = executiveBusinessClientContent_(executiveIntelligence);
+  const verifiedPlan = requireGoldStandardPreviewPlan_(documentPlan, 'executiveBrief');
+  const input = verifiedPlan.input;
+  const content = verifiedPlan.content;
+  const checkedEvidence = content.evidenceReferences.map(function(item) { return '<p><span class="check-badge">&#10003; Checked</span> ' + escapeHtml_(item) + '</p>'; }).join('');
   const bodyHtml = [
     '<div class="hero-card">',
     '<div class="hero-label">Executive Brief</div>',
     `<h2>${escapeHtml_(prospect.company || 'Selected Company')}</h2>`,
-    `<p>${escapeHtml_(clientIntelligence.consultantOpeningLetter || 'We identified practical opportunities that may help customers find, trust, and contact the business more easily.')}</p>`,
+    `<p><b>Prepared:</b> ${escapeHtml_(input.preparedDate)}</p>`,
+    `<p>${escapeHtml_(content.summary)}</p>`,
     '</div>',
-    '<div class="card-grid">',
-    renderPreviewCard_('Digital Presence Score', `<div class="big-number">${escapeHtml_(scoreContext.displayScore)}</div><p><strong>${escapeHtml_(scoreContext.severityLabel)}</strong></p><p>${escapeHtml_(scoreContext.safeFallbackLanguage)}</p>`),
-    renderPreviewCard_('Recommended First Step', `<p>${escapeHtml_(buildExecutiveSnapshotFirstStep_(prospect))}</p>`),
-    '</div>',
-    renderPreviewCard_('Top Opportunities', renderPreviewList_(buildExecutiveSnapshotOpportunities_(prospect, findings).slice(0, 3))),
-    renderPreviewCard_('Key Observation', `<p>${escapeHtml_(clientIntelligence.immediateStandout || buildExecutiveSnapshotBiggestOpportunity_(prospect, buildExecutiveSnapshotOpportunities_(prospect, findings), reportFile || {}))}</p>` + buildExecutiveSnapshotEvidenceHtml_(prospect, safeReportFile))
+    renderPreviewCard_('Main Problem', `<p><strong>${escapeHtml_(content.title)}</strong></p>`),
+    renderPreviewCard_('What We Saw', `<p>${escapeHtml_(content.observation)}</p>`),
+    renderPreviewCard_('Why This Matters', `<p>${escapeHtml_(content.consequence)}</p>`),
+    content.synthesis ? renderPreviewCard_('What This Means', `<p>${escapeHtml_(content.synthesis)}</p>`) : '',
+    renderPreviewCard_(content.clearFixLabel, `<p>${escapeHtml_(content.clearFix)}</p>`),
+    renderPreviewCard_('What Should Happen', `<p>${escapeHtml_(content.expectedResult)}</p>`),
+    renderPreviewCard_('How to Check the Fix', `<p>${escapeHtml_(content.completionTest)}</p>`),
+    renderPreviewCard_('Where We Looked', checkedEvidence),
+    content.limitations.length ? renderPreviewCard_('What We Did Not Test', renderPreviewList_(content.limitations)) : '',
+    content.secondaryPriorities.length ? renderPreviewCard_('Additional Approved Priorities', renderPreviewList_(content.secondaryPriorities)) : '',
+    renderPreviewCard_('Next Step', `<p>${escapeHtml_(content.nextStep)}</p>`),
+    renderPreviewCard_('Want Help With This Fix?', `<p>${escapeHtml_(content.helpCta)}</p>`)
   ].join('');
 
   SpreadsheetApp.getUi().showModalDialog(createPreviewDialog_({
     title: 'Executive Brief',
-    company: prospect.company,
-    website: prospect.website,
+    company: input.company,
+    website: input.website,
+    assessmentDate: input.preparedDateIso,
     bodyHtml: bodyHtml,
-    generatePdfAction: 'generateExecutiveSnapshot',
+    generatePdfAction: 'generateExecutiveBriefPdfFromPreview',
+    generatePdfPayload: documentPlan.approvedFindingSetReference,
     editable: false
   }), 'Executive Brief');
 }
 
-function showDigitalBusinessAssessmentPreview_(prospect, reportFile) {
+function showDigitalBusinessAssessmentPreview_(prospect, documentPlan) {
   prospect = normalizeClientProspect_(prospect);
-  const safeReportFile = getClientSafeReportFile_(prospect, reportFile || {});
-  const findings = filterClientEligibleEvidence_([].concat(safeReportFile.findings || [], getSmartFindings_(prospect)), prospect, reportFile || {}, 'finding');
-  const opportunities = buildAuditOpportunities_(prospect, findings, getAuditReportTextFromReportFile_(safeReportFile), safeReportFile);
-  let cards = buildConsultingFindingCards_(prospect, opportunities, safeReportFile);
-  cards = enforcePdfFindingEvidenceQuality_(prospect, safeReportFile, cards);
-  const executiveIntelligence = getExecutiveBusinessIntelligenceForReport_(prospect, safeReportFile);
-  const clientIntelligence = executiveBusinessClientContent_(executiveIntelligence);
+  const verifiedPlan = requireGoldStandardPreviewPlan_(documentPlan, 'assessment');
+  const input = verifiedPlan.input;
+  const content = verifiedPlan.content;
+  const overview = [
+    ['Main goal', content.overview.primaryBusinessObjective],
+    ['What customers should do', content.overview.desiredCustomerAction],
+    ['Main service', content.overview.primaryService],
+    ['Who needs the service', content.overview.targetCustomer],
+    ['Area served', content.overview.serviceArea],
+    ['Rule to follow', content.overview.knownConstraints]
+  ].filter(function(row) { return row[1]; }).map(function(row) { return '<p><b>' + escapeHtml_(row[0]) + ':</b> ' + escapeHtml_(row[1]) + '</p>'; }).join('');
+  const scope = content.scope.map(function(item) {
+    const status = item.checked ? '<span class="check-badge">&#10003; Checked</span>' : escapeHtml_(item.status);
+    return '<div class="approved-evidence"><p><strong>' + escapeHtml_(item.channel) + '</strong></p><p>' + status + '</p><p><b>How it helps:</b> ' + escapeHtml_(item.role) + '</p>' + (item.limitation ? '<p><b>What we did not check:</b> ' + escapeHtml_(item.limitation) + '</p>' : '') + '</div>';
+  }).join('');
+  const methodology = content.methodology.map(function(item) {
+    return '<div class="approved-evidence"><p><b>Where we checked:</b> ' + escapeHtml_(item.whereChecked) + '</p><p><b>Test record:</b> ' + escapeHtml_(item.testRecord) + '</p><p><b>What we checked:</b> ' + escapeHtml_(item.whatChecked) + '</p><p><b>What we did:</b> ' + escapeHtml_(item.whatDone) + '</p><p><b>What we found:</b> ' + escapeHtml_(item.whatFound) + '</p></div>';
+  }).join('');
+  const findings = content.findings.map(function(item) {
+    const evidence = item.evidence.map(function(evidenceItem) { return '<p><b>Observed result:</b> ' + escapeHtml_(evidenceItem.observedResult) + '</p>'; }).join('');
+    const basis = item.showConsequenceBasis ? '<p><b>Why we know this:</b> ' + escapeHtml_(item.consequenceBasis) + '</p>' : '';
+    return '<div class="approved-finding" data-finding-id="' + escapeHtml_(item.findingId) + '"><p><strong>' + escapeHtml_(item.title) + '</strong></p><p><b>What we saw:</b> ' + escapeHtml_(item.observation) + '</p><p><b>What should happen:</b> ' + escapeHtml_(item.expectedCondition) + '</p><p><b>Why this matters:</b> ' + escapeHtml_(item.consequence) + '</p>' + basis + '<p><b>What to change:</b> ' + escapeHtml_(item.recommendation) + '</p>' + (item.implementationLocation ? '<p><b>Where to change it:</b> ' + escapeHtml_(item.implementationLocation) + '</p>' : '') + '<p><b>How to check the fix:</b> ' + escapeHtml_(item.completionTest) + '</p>' + evidence + (item.limitations.length ? '<p><b>What we did not test:</b> ' + escapeHtml_(item.limitations.join('; ')) + '</p>' : '') + '</div>';
+  }).join('');
   const bodyHtml = [
     '<div class="hero-card">',
     '<div class="hero-label">Digital Business Assessment</div>',
-    `<h2>${escapeHtml_(prospect.company || 'Selected Company')}</h2>`,
-    '<p>Executive summary, findings, evidence, and practical recommendations.</p>',
+    `<h2>${escapeHtml_(input.company)}</h2>`,
+    `<p><b>Prepared:</b> ${escapeHtml_(input.preparedDate)}</p>`,
+    '<p>We checked the saved facts. This report shows what we found.</p>',
     '</div>',
-    '<div class="card-grid">',
-    renderPreviewCard_('Executive Summary', `<p>${escapeHtml_(clientIntelligence.executiveSummary || buildDeliverablePreviewAssessmentSummary_(prospect, cards))}</p>`),
-    renderPreviewCard_('Recommended Focus', `<p>${escapeHtml_(buildRecommendedNextStep_(prospect, safeReportFile))}</p>`),
-    '</div>',
-    renderPreviewCard_('Findings', consultingFindingCardsHtml_(cards, getAuditEvidenceObject_(prospect, safeReportFile))),
-    renderPreviewCard_('Recommendations', clientIntelligence.available && executiveIntelligence.opportunities.length ? renderPreviewList_(executiveIntelligence.opportunities.map(function(item) { return item.recommendedAction; })) : priorityRoadmapHtml_(prospect, safeReportFile))
+    renderPreviewCard_('What We Checked', '<p>' + escapeHtml_(content.overview.purpose) + '</p>' + overview),
+    scope ? renderPreviewCard_('Where We Looked', scope) : '',
+    methodology ? renderPreviewCard_('How We Checked', methodology) : '',
+    content.evidenceNotes.length ? renderPreviewCard_('Important Evidence Note', renderPreviewList_(content.evidenceNotes)) : '',
+    renderPreviewCard_('What We Found', findings),
+    content.limitations.length ? renderPreviewCard_('What We Did Not Check', renderPreviewList_(content.limitations)) : '',
+    renderPreviewCard_('What Happens Next', '<p>' + escapeHtml_(content.conclusion) + '</p><p>' + escapeHtml_(content.nextStep) + '</p>')
   ].join('');
 
   SpreadsheetApp.getUi().showModalDialog(createPreviewDialog_({
     title: 'Digital Business Assessment',
-    company: prospect.company,
-    website: prospect.website,
+    company: input.company,
+    website: input.website,
+    assessmentDate: input.preparedDateIso,
     bodyHtml: bodyHtml,
-    generatePdfAction: 'generateAuditPackage',
+    generatePdfAction: 'generateDigitalBusinessAssessmentPdfFromPreview',
+    generatePdfPayload: documentPlan.approvedFindingSetReference,
     gmailAction: 'sendAuditPackage',
     editable: false
   }), 'Digital Business Assessment');
 }
 
-function showImprovementPlanPreview_(prospect, proposal) {
+function showImprovementPlanPreview_(prospect, documentPlan) {
   prospect = normalizeClientProspect_(prospect);
-  proposal = Object.assign({}, proposal || {}, {
-    company: normalizeClientBusinessName_(proposal && proposal.company)
-  });
-  const recommendedPackage = buildRecommendedPackage_(prospect);
-  const scoreContext = getReportScoreContext_(prospect, prospect.reportFile || {});
-  const recommendationLabel = scoreContext.scoreVerified ? 'Executive Recommendation' : 'Preliminary Service Option';
-  const recommendationText = scoreContext.scoreVerified
-    ? (proposal.recommendedService || recommendedPackage.name || 'Recommended service package')
-    : `To confirm during discovery: ${proposal.recommendedService || recommendedPackage.name || 'Recommended service package'}`;
+  const verifiedPlan = requireGoldStandardPreviewPlan_(documentPlan, 'improvementPlan');
+  const input = verifiedPlan.input;
+  const content = verifiedPlan.content;
   const bodyHtml = [
     '<div class="hero-card">',
     '<div class="hero-label">Improvement Plan</div>',
-    `<h2>${escapeHtml_(proposal.company || prospect.company || 'Selected Company')}</h2>`,
-    '<p>A practical path from assessment findings to measurable business improvement.</p>',
+    `<h2>${escapeHtml_(input.company)}</h2>`,
+    `<p><b>Prepared:</b> ${escapeHtml_(input.preparedDate)}</p>`,
+    `<p>${escapeHtml_(content.subtitle)}</p>`,
     '</div>',
-    '<div class="card-grid">',
-    renderPreviewCard_(recommendationLabel, `<p>${escapeHtml_(recommendationText)}</p>`, { editable: true, field: 'executiveRecommendation' }),
-    renderPreviewCard_('Estimated Investment', `<p>${escapeHtml_(recommendedPackage.investment || 'Final investment confirmed after scope review')}</p>`, { editable: true, field: 'investment' }),
-    '</div>',
-    renderPreviewCard_('Recommended Scope', deliverableCardsHtml_(recommendedPackage.deliverables), { editable: true, field: 'scope' }),
-    renderPreviewCard_('Business Outcomes', `<p>${escapeHtml_(proposal.impact || proposalImpactFromService_(proposal.recommendedService, prospect))}</p>`, { editable: true, field: 'businessOutcomes' }),
-    renderPreviewCard_('Next Steps', proposalNextStepsHtml_(prospect), { editable: true, field: 'nextSteps' })
+    renderPreviewCard_('Goal', '<p>' + escapeHtml_(content.objective) + '</p>'),
+    renderPreviewCard_('Steps to Fix It', renderGoldStandardImprovementPreviewActions_(content.actions)),
+    content.planLimitations.length ? renderPreviewCard_('What Else We Did Not Test', renderPreviewList_(content.planLimitations)) : '',
+    content.sequence.length ? renderPreviewCard_('Steps', renderPreviewList_(content.sequence)) : '',
+    renderPreviewCard_('Next Step', '<p>' + escapeHtml_(content.nextStep) + '</p>')
   ].join('');
 
   SpreadsheetApp.getUi().showModalDialog(createPreviewDialog_({
     title: 'Improvement Plan',
-    company: proposal.company || prospect.company,
-    website: proposal.website || prospect.website,
+    company: input.company,
+    website: input.website,
+    assessmentDate: input.preparedDateIso,
     bodyHtml: bodyHtml,
-    generatePdfAction: 'generateAuditPackage',
+    generatePdfAction: 'generateImprovementPlanPdfFromPreview',
+    generatePdfPayload: documentPlan.approvedFindingSetReference,
     gmailAction: 'createOutreachGmailDraft',
-    editable: true
+    editable: false
   }), 'Improvement Plan');
+}
+
+function requireGoldStandardPreviewPlan_(plan, documentType) {
+  if (!plan || plan.documentType !== documentType || !plan.input || !plan.input.preparedDate || !plan.input.preparedDateIso || !plan.approvedFindingSetReference) {
+    throw new Error('A verified Gold Standard document plan is required for preview.');
+  }
+  return plan;
+}
+
+function renderGoldStandardPreviewEvidence_(input) {
+  return renderPreviewList_((input.evidence || []).map(function(item) { return item.label + ': ' + item.detail; }));
+}
+
+function renderGoldStandardPreviewFindings_(input) {
+  return (input.findings || []).map(function(item) {
+    return '<div class="approved-finding" data-finding-id="' + escapeHtml_(item.key) + '"><p><strong>' + escapeHtml_(item.category) + '</strong></p><p><b>Observation:</b> ' + escapeHtml_(item.observation) + '</p><p><b>Business consequence:</b> ' + escapeHtml_(item.businessMeaning) + '</p>' + (item.recommendation ? '<p><b>Recommendation:</b> ' + escapeHtml_(item.recommendation) + '</p>' : '') + '</div>';
+  }).join('');
+}
+
+function renderGoldStandardImprovementPreviewActions_(actions) {
+  return (actions || []).map(function(item) {
+    const path = item.showImplementationPath ? ' ' + escapeHtml_(item.implementationPath) : '';
+    const completion = item.showCompletionTest ? '<p><b>How to check the fix:</b> ' + escapeHtml_(item.completionTest) + '</p>' : '';
+    const outcome = item.showIntendedOutcome ? '<p><b>What should happen:</b> ' + escapeHtml_(item.intendedOutcome) + '</p>' : '';
+    return '<div class="approved-action" data-action-id="' + escapeHtml_(item.actionId) + '"><p><strong>' + ('0' + item.sequence).slice(-2) + ' · ' + escapeHtml_(item.title) + '</strong></p><p><b>What to change:</b> ' + escapeHtml_(item.exactChange) + '</p><p><b>Where to change it:</b> ' + escapeHtml_(item.implementationLocation) + '</p>' + outcome + '<p><b>Who will do it:</b> ' + escapeHtml_(item.ownership) + path + '</p>' + (item.dependencies.length ? '<div><b>What we need first:</b>' + renderPreviewList_(item.dependencies) + '</div>' : '') + (item.limitations.length ? '<p><b>What we did not test:</b> ' + escapeHtml_(item.limitations.join('; ')) + '</p>' : '') + completion + '</div>';
+  }).join('');
 }
 
 function showOutreachEmailPreview_(prospect, drafts, recipient) {
@@ -275,6 +325,7 @@ function renderPreviewStyles_() {
     '.preview-card p{line-height:1.55;margin:0 0 8px;}',
     '.card-content[contenteditable=true]{outline:2px solid #c8a15a;background:#fff;padding:10px;border-radius:5px;}',
     '.big-number{font-size:38px;font-weight:700;color:#9b7528;line-height:1;}',
+    '.check-badge{display:inline-block;background:#9b7528;color:#fff;border-radius:11px;padding:3px 8px;font-size:11px;font-weight:700;white-space:nowrap;}',
     'ul{margin:0;padding-left:20px;} li{margin-bottom:7px;line-height:1.45;}',
     '.muted{color:#6f6a60;}',
     '.gmail-preview{border:1px solid #dedede;border-radius:8px;background:#fff;overflow:hidden;}',
@@ -295,8 +346,9 @@ function renderPreviewClientScript_() {
   return [
     '<script>',
     'function setPreviewButtonsDisabled_(disabled){document.querySelectorAll(".button-row button").forEach(function(button){button.disabled=disabled;});}',
-    'function previewFailureMessage_(error){var detail=error&&error.message?error.message:"";return detail?"Action could not be completed. "+detail:"Action could not be completed. Please try again.";}',
-    'function runPreviewServerAction_(button,fn,pendingMessage,successMessage){if(!fn){setStatus_("This action is not available from this preview.");return;}setPreviewButtonsDisabled_(true);setStatus_(pendingMessage||"Working…");try{google.script.run.withSuccessHandler(function(){setPreviewButtonsDisabled_(false);setStatus_(successMessage||"Action completed successfully.");}).withFailureHandler(function(error){setPreviewButtonsDisabled_(false);setStatus_(previewFailureMessage_(error));})[fn]();}catch(e){setPreviewButtonsDisabled_(false);setStatus_(previewFailureMessage_(e));}}',
+    'function previewFailureMessage_(error){var detail=error&&error.message?error.message:"";return detail||"Document generation could not be completed safely. Do not retry until the operation has been reconciled.";}',
+    'function parsePreviewServerReceipt_(value){if(typeof value!=="string"){throw new Error("Document generation returned an unsafe response. The committed operation must be reconciled before retry.");}var result=JSON.parse(value);if(!result||result.ok!==true||!result.operationKey){throw new Error("Document generation returned an invalid receipt. The committed operation must be reconciled before retry.");}return result;}',
+    'function runPreviewServerAction_(button,fn,pendingMessage,successMessage,encodedPayload){if(!fn){setStatus_("This action is not available from this preview.");return;}setPreviewButtonsDisabled_(true);setStatus_(pendingMessage||"Working…");try{var payload=encodedPayload?JSON.parse(decodeURIComponent(encodedPayload)):{};google.script.run.withSuccessHandler(function(value){try{var result=parsePreviewServerReceipt_(value);setPreviewButtonsDisabled_(false);var warning=result.warning?" "+result.warning:"";var retry=result.idempotent?" Existing verified generation reconciled.":"";setStatus_((successMessage||"Action completed successfully.")+retry+warning);}catch(error){setPreviewButtonsDisabled_(false);setStatus_(previewFailureMessage_(error));}}).withFailureHandler(function(error){setPreviewButtonsDisabled_(false);setStatus_(previewFailureMessage_(error));})[fn](payload);}catch(e){setPreviewButtonsDisabled_(false);setStatus_(previewFailureMessage_(e));}}',
     'function setStatus_(message){var el=document.getElementById("previewStatus");if(el){el.textContent=message;}}',
     '</script>'
   ].join('');

@@ -3019,74 +3019,24 @@ function buildAuditPackageOutreachText_(drafts) {
 }
 
 function generateProposal() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const ui = SpreadsheetApp.getUi();
-  const sheet = ss.getActiveSheet();
-
-  if (!sheet || sheet.getName() !== MASTER_PROSPECT_SHEET) {
-    ui.alert(
-      'Business Optimization Platform',
-      'Select a prospect row on the Master Prospect Tracker sheet first.',
-      ui.ButtonSet.OK
-    );
-    return;
+  const context = getSelectedProspectContext_(['Company', 'Prospect ID']);
+  if (!context) return;
+  const prospect = buildSelectedProspectForAuditPackage_(context);
+  try {
+    const plan = buildGoldStandardDocumentPlan_('improvementPlan', prospect, {});
+    showImprovementPlanPreview_(prospect, plan);
+  } catch (error) {
+    SpreadsheetApp.getUi().alert('Business Optimization Platform', error && error.message ? error.message : String(error), SpreadsheetApp.getUi().ButtonSet.OK);
   }
+}
 
-  const selectedRow = sheet.getActiveRange().getRow();
-  const table = getHeaderTable_(sheet, [
-    'Company',
-    'Website',
-    'Audit Score',
-    'Audit Outcome',
-    'Priority Tier'
-  ]);
-
-  if (selectedRow <= table.headerRow) {
-    ui.alert(
-      'Business Optimization Platform',
-      'Select a data row below the Master Prospect Tracker header row.',
-      ui.ButtonSet.OK
-    );
-    return;
-  }
-
-  const values = sheet.getRange(selectedRow, 1, 1, table.lastColumn).getValues()[0];
-  const prospect = {
-    prospectId: getValueByHeader_(values, table.headers, 'Prospect ID'),
-    company: getValueByHeader_(values, table.headers, 'Company'),
-    website: getValueByHeader_(values, table.headers, 'Website'),
-    auditScore: getValueByHeader_(values, table.headers, 'Audit Score'),
-    auditOutcome: getValueByHeader_(values, table.headers, 'Audit Outcome'),
-    priorityTier: getValueByHeader_(values, table.headers, 'Priority Tier'),
-    offerService: getValueByHeader_(values, table.headers, 'Offer / Service'),
-    notes: getValueByHeader_(values, table.headers, 'Notes')
-  };
-
-  if (!prospect.company) {
-    ui.alert(
-      'Business Optimization Platform',
-      'The selected row does not have a Company value.',
-      ui.ButtonSet.OK
-    );
-    return;
-  }
-
-  const reportFile = buildLocalAuditReportInput_(prospect);
-  const goldStandardInput = buildGoldStandardDeliverableInput_(prospect, reportFile);
-  applySmartFindingsToProspect_(sheet, table.headers, selectedRow, prospect);
-  const proposal = buildProposal_(prospect);
-  const folder = getOrCreateAuditPackageFolder_(prospect.company);
-  const file = upsertAuditPackageBlobFile_(
-    folder,
-    'Improvement Plan.pdf',
-    buildGoldStandardImprovementPlanPdfBlob_(goldStandardInput)
-  );
-  showProposalModal_(prospect, proposal);
-  setIfHeaderCell_(sheet, table.headers, selectedRow, 'Next Action', 'Confirm Improvement Plan Sent');
-  logProposalGenerated_(ss, prospect, proposal);
-  updateSelectedProspectLastActivity_(sheet, table.headers, selectedRow);
-  refreshSalesOperatingSystem_();
-  return { folder: folder, file: file, proposal: proposal };
+function generateImprovementPlanPdfFromPreview(approvedFindingSetReference) {
+  const context = getSelectedProspectContext_(['Company', 'Prospect ID']);
+  if (!context) return;
+  const prospect = buildSelectedProspectForAuditPackage_(context);
+  return serializeGoldStandardGenerationClientResult_(executeGoldStandardDocumentGeneration_(context, prospect, 'improvementPlan', approvedFindingSetReference, {
+    'Next Action': 'Confirm Improvement Plan Sent'
+  }));
 }
 
 function buildProposal_(prospect) {

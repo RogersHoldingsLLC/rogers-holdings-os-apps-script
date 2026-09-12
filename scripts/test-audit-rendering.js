@@ -2,13 +2,13 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const crypto = require('crypto');
 
 const root = path.resolve(__dirname, '..');
 const pdfSource = fs.readFileSync(path.join(root, 'PdfEngine.gs'), 'utf8');
 const goldStandardSource = fs.readFileSync(path.join(root, 'GoldStandardDeliverables.gs'), 'utf8');
 const previewSource = fs.readFileSync(path.join(root, 'DeliverablePreviewEngine.gs'), 'utf8');
 const digitalPresenceSource = fs.readFileSync(path.join(root, 'DigitalPresenceAssessmentEngine.gs'), 'utf8');
-const auditPdfPaginationFunction = goldStandardSource.slice(goldStandardSource.indexOf('function buildGoldStandardAssessmentHtml_'), goldStandardSource.indexOf('function buildGoldStandardImprovementPlanHtml_'));
 
 assert.doesNotMatch(pdfSource, /Business-Specific Consultation|Consultant review status:/, 'client PDF source contains no duplicate consultation section or internal review label');
 assert.doesNotMatch(previewSource, /Consultant Review|Needs Consultant Review|Insufficient Evidence|clientDeliveryAllowed|requiresReview/, 'client preview source contains no internal workflow status language');
@@ -16,13 +16,9 @@ assert.match(goldStandardSource, /\.page\{[^}]*height:11in[^}]*overflow:hidden[^
 assert.match(goldStandardSource, /\.content-page\{padding-top:\.92in\}/, 'content pages clear the repeated header deterministically');
 assert.match(goldStandardSource, /\.finding\{[^}]*break-inside:avoid-page[^}]*page-break-inside:avoid/, 'finding cards remain atomic');
 assert.match(goldStandardSource, /\.action\{[^}]*break-inside:avoid-page/, 'roadmap actions remain atomic');
-assert.match(auditPdfPaginationFunction, /GoldStandardAssessment', '06'|Digital Business Assessment', '06'/, 'assessment roadmap is emitted on an explicit sixth page');
-assert.match(goldStandardSource, /buildGoldStandardImprovementPlanHtml_[\s\S]*Improvement Plan', '04'/, 'Improvement Plan decisions close is emitted on an explicit fourth page');
 assert.match(pdfSource, /To confirm during discovery:/, 'preliminary classification priorities are explicitly labeled rather than presented as verified findings');
 assert.doesNotMatch(pdfSource.slice(pdfSource.indexOf('function trustChecklistHtml_'), pdfSource.indexOf('function buildCompetitivePositionSection_')), /!textIncludesAny_/, 'checklist does not convert unknown evidence into PASS');
 assert.match(digitalPresenceSource, /scoreAllowed === false/, 'score display has an explicit inspection-confidence safeguard');
-const auditPdfFunction = goldStandardSource.slice(goldStandardSource.indexOf('function buildGoldStandardAssessmentHtml_'), goldStandardSource.indexOf('function buildGoldStandardImprovementPlanHtml_'));
-assert.strictEqual((auditPdfFunction.match(/Executive Conclusion/g) || []).length, 1, 'assessment renders one executive conclusion');
 const proposalPdfFunction = pdfSource.slice(pdfSource.indexOf('function buildProposalPdfBlob_'), pdfSource.indexOf('function buildExecutiveSnapshotPdfBlob_'));
 assert.match(proposalPdfFunction, /buildGoldStandardImprovementPlanPdfBlob_\(buildGoldStandardDeliverableInput_/, 'Improvement Plan PDF uses the shared reviewed input boundary');
 const improvementPreviewFunction = previewSource.slice(previewSource.indexOf('function showImprovementPlanPreview_'), previewSource.indexOf('function showOutreachEmailPreview_'));
@@ -65,6 +61,7 @@ vm.runInContext(fs.readFileSync(path.join(root, 'Config.gs'), 'utf8'), context, 
 vm.runInContext(fs.readFileSync(path.join(root, 'BusinessSnapshotIntake.gs'), 'utf8'), context, { filename: 'BusinessSnapshotIntake.gs' });
 vm.runInContext(fs.readFileSync(path.join(root, 'SheetHelpers.gs'), 'utf8'), context, { filename: 'SheetHelpers.gs' });
 vm.runInContext(fs.readFileSync(path.join(root, 'Menu.gs'), 'utf8'), context, { filename: 'Menu.gs' });
+vm.runInContext(fs.readFileSync(path.join(root, 'FindingQualityEngine.gs'), 'utf8'), context, { filename: 'FindingQualityEngine.gs' });
 vm.runInContext(goldStandardSource, context, { filename: 'GoldStandardDeliverables.gs' });
 vm.runInContext(fs.readFileSync(path.join(root, 'AuditEngine.gs'), 'utf8'), context, { filename: 'AuditEngine.gs' });
 vm.runInContext(fs.readFileSync(path.join(root, 'GmailEngine.gs'), 'utf8'), context, { filename: 'GmailEngine.gs' });
@@ -78,6 +75,7 @@ assert.match(aboutHtml, /2026\.08\.10-rc/, 'About displays the release-candidate
 assert.match(aboutHtml, /not yet approved for production/, 'About identifies the production gate');
 
 const verified = {
+  prospectId: 'PROS-LOCAL-RENDER',
   company: 'Acceptance Test Co',
   website: 'https://example.test',
   auditScore: 82,
@@ -138,10 +136,58 @@ context.getSmartFindings_ = () => [{
   source: 'Website screenshot',
   supportingEvidence: 'The captured homepage first screen contains no prominent contact action.'
 }];
+// Seed immutable saved fixtures at the verified-storage boundary. Production
+// rendering still validates the reference, finding authority and exact lineage.
+const renderingFixture = JSON.parse(fs.readFileSync(path.join(root, 'tests/fixtures/fq1-plain-draft-v2.json'), 'utf8'));
+const renderingSnapshots = new Map();
+function seedRenderingSnapshot(fixture) {
+  const snapshot = context.deepFreezeGoldStandard_(JSON.parse(JSON.stringify(fixture)));
+  const fingerprint = crypto.createHash('sha256').update(JSON.stringify(snapshot)).digest('hex');
+  const reference = Object.freeze({ findingSetId: 'FSET-LOCAL-RENDER', version: '1', fingerprint, approvalStatus: 'Approved for Client' });
+  renderingSnapshots.set(fingerprint, snapshot);
+  return reference;
+}
+const defaultRenderingReference = seedRenderingSnapshot(renderingFixture);
+let renderingAuthorityAvailable = true;
+context.loadApprovedFindingSetForGeneration_ = (prospect, options = {}) => {
+  const reference = context.assertApprovedFindingSetReferenceShape_(options.approvedFindingSetReference || defaultRenderingReference);
+  if (!renderingAuthorityAvailable || prospect.prospectId !== verified.prospectId ||
+      reference.findingSetId !== defaultRenderingReference.findingSetId || reference.version !== '1' ||
+      !renderingSnapshots.has(reference.fingerprint)) throw context.findingQualityGenerationLockError_();
+  return { reference, reviewedInput: renderingSnapshots.get(reference.fingerprint) };
+};
+for (const count of [1, 3]) {
+  const fixture = JSON.parse(JSON.stringify(renderingFixture));
+  fixture.findings = Array.from({ length: count }, (_, index) => ({
+    ...renderingFixture.findings[0], key: 'FND-LOCAL-' + index
+  }));
+  fixture.recommendations = fixture.findings.map((finding, index) => ({
+    ...renderingFixture.recommendations[0], key: 'REC-LOCAL-' + index, findingKey: finding.key
+  }));
+  fixture.actions = fixture.recommendations.map((recommendation, index) => ({
+    ...renderingFixture.actions[0], key: 'ACT-LOCAL-' + index, recommendationKey: recommendation.key, sequence: index + 1
+  }));
+  const options = { approvedFindingSetReference: seedRenderingSnapshot(fixture) };
+  const assessment = context.buildGoldStandardDocumentPlan_('assessment', verified, {}, options);
+  const plan = context.buildGoldStandardDocumentPlan_('improvementPlan', verified, {}, options);
+  assert.strictEqual((assessment.pdfHtml.match(/class="page /g) || []).length, count + 2, 'assessment has cover, scope and one page per actionable finding');
+  assert.strictEqual((assessment.pdfHtml.match(/class="diagnostic"/g) || []).length, count, 'every approved diagnostic is emitted once');
+  assert.strictEqual((assessment.pdfHtml.match(/What Happens Next/g) || []).length, 1, 'assessment renders one closing next step');
+  assert.strictEqual((plan.pdfHtml.match(/class="page /g) || []).length, count + 1, 'Improvement Plan has cover and one page per approved action');
+  assert.strictEqual((plan.pdfHtml.match(/class="action execution-action"/g) || []).length, count, 'every approved execution action is emitted once');
+  assert.strictEqual((plan.pdfHtml.match(/<h3>Next step<\/h3>/g) || []).length, 1, 'Improvement Plan closes once after the final action');
+  assert.deepStrictEqual(Array.from(assessment.semantics.recommendationIds), fixture.recommendations.map(item => item.key));
+  assert.deepStrictEqual(Array.from(plan.semantics.completionTests), fixture.actions.map(item => item.completionTest));
+}
+assert.throws(() => context.buildGoldStandardDocumentPlan_('assessment', verified, {}, {
+  approvedFindingSetReference: { ...defaultRenderingReference, fingerprint: 'unknown' }
+}), /Client deliverable generation is locked/, 'unseeded authority cannot render a client document');
+
 context.buildOutreachDrafts_ = () => ({ subject: 'Assessment', initialEmail: 'Body' });
 context.buildProposal_ = () => ({});
-context.getOrCreateAuditPackageFolder_ = () => ({ getName: () => 'Acceptance Test Co' });
-context.storeAuditPackageFiles_ = () => [{ getName: () => 'Digital Business Assessment.pdf' }];
+let packageMutationCalls = 0;
+context.getOrCreateAuditPackageFolder_ = () => { packageMutationCalls += 1; return { getName: () => 'Acceptance Test Co' }; };
+context.storeAuditPackageFiles_ = () => { packageMutationCalls += 1; return [{ getName: () => 'Digital Business Assessment.pdf' }]; };
 context.ensureSheetColumns_ = () => ({ headers: {} });
 context.setIfHeaderCell_ = () => {};
 context.updateSelectedProspectLastActivity_ = () => {};
@@ -151,6 +197,12 @@ let unexpectedGmailDraftCalls = 0;
 context.GmailApp = {
   createDraft() { unexpectedGmailDraftCalls += 1; }
 };
+renderingAuthorityAvailable = false;
+assert.throws(() => context.generateAuditPackageForContext_({ sheet: {}, ss: {}, selectedRow: 2 }, verified), /Client deliverable generation is locked/);
+assert.strictEqual(packageMutationCalls, 0, 'missing approved snapshot blocks before folder or artifact creation');
+assert.deepStrictEqual(packageActivities, [], 'missing approved snapshot emits no success Activity');
+assert.strictEqual(unexpectedGmailDraftCalls, 0, 'missing approved snapshot does not create a draft');
+renderingAuthorityAvailable = true;
 const packageResult = context.generateAuditPackageForContext_({ sheet: {}, ss: {}, selectedRow: 2 }, verified);
 assert.strictEqual(endpointReportRequests, 0, 'local assessment rendering does not request the endpoint report');
 assert.strictEqual(packageResult.reportFile.websiteScreenshotBase64, verified.websiteScreenshotBase64);

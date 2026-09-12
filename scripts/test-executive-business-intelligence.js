@@ -285,11 +285,39 @@ const executivePdfFunction = executivePdfSource.slice(executivePdfSource.indexOf
 assert.match(executivePdfFunction, /getReportScoreContext_\(prospect, reportFile \|\| \{\}\)/, 'Executive Snapshot PDF uses authoritative score context');
 assert.doesNotMatch(executivePdfFunction, /getDigitalPresenceAssessment_\(prospect\.auditScore\)/, 'Executive Snapshot PDF does not read raw score directly');
 
-const previewSourceForScore = fs.readFileSync(path.join(root, 'DeliverablePreviewEngine.gs'), 'utf8');
-const executivePreviewFunction = previewSourceForScore.slice(previewSourceForScore.indexOf('function showExecutiveSnapshotPreview_'), previewSourceForScore.indexOf('function showDigitalBusinessAssessmentPreview_'));
-assert.match(executivePreviewFunction, /getReportScoreContext_\(prospect, reportFile \|\| \{\}\)/, 'Executive Snapshot preview uses authoritative score context');
-assert.match(executivePreviewFunction, /scoreContext\.displayScore/, 'Executive Snapshot preview renders shared display score');
-assert.doesNotMatch(executivePreviewFunction, /getDigitalPresenceAssessment_\(prospect\.auditScore\)/, 'Executive Snapshot preview does not read raw score directly');
+// The restored client preview consumes an approved document plan, not legacy
+// audit-score output. Exercise that boundary with mocked UI services only.
+const previewDialogs = [];
+const originalPreviewDialog = context.createPreviewDialog_;
+context.SpreadsheetApp = { getUi: () => ({ showModalDialog: (dialog) => previewDialogs.push(dialog) }) };
+context.createPreviewDialog_ = (settings) => plain(settings);
+const approvedPreviewReference = { findingSetId: 'FSET-EBI-TEST', version: '1', fingerprint: 'synthetic-approved-fingerprint', approvalStatus: 'Approved for Client' };
+const approvedPreviewPlan = {
+  documentType: 'executiveBrief',
+  approvedFindingSetReference: approvedPreviewReference,
+  input: { company: 'Synthetic Preview Company', website: 'https://preview.example.test', preparedDate: 'September 12, 2026', preparedDateIso: '2026-09-12' },
+  content: {
+    summary: 'Approved evidence found an unclear request link.', title: 'Clarify the request link',
+    observation: 'The Services page uses an ambiguous link label.', consequence: 'Visitors cannot identify the request form.',
+    clearFixLabel: 'One Clear Fix', clearFix: 'Label the link Request Service.', expectedResult: 'The form is identifiable from Services.',
+    completionTest: 'Verify the labeled link reaches the request form.', evidenceReferences: ['Reviewed Services page link'],
+    limitations: [], secondaryPriorities: [], nextStep: 'Review the proposed label.', helpCta: 'Ask about implementation support.'
+  }
+};
+try {
+  const unverifiedProspect = { company: 'Synthetic Preview Company', auditScore: 0, notes: 'Unreviewed raw-score narrative.' };
+  assert.throws(() => context.showExecutiveSnapshotPreview_(unverifiedProspect, null), /verified Gold Standard document plan/, 'preview rejects a missing approved plan');
+  assert.throws(() => context.showExecutiveSnapshotPreview_(unverifiedProspect, { ...approvedPreviewPlan, documentType: 'assessment' }), /verified Gold Standard document plan/, 'preview rejects a plan for another document');
+  assert.strictEqual(previewDialogs.length, 0, 'invalid plans cannot open a client preview');
+  context.showExecutiveSnapshotPreview_(unverifiedProspect, approvedPreviewPlan);
+  assert.strictEqual(previewDialogs.length, 1);
+  assert.match(previewDialogs[0].bodyHtml, /Approved evidence found an unclear request link/);
+  assert.doesNotMatch(previewDialogs[0].bodyHtml, /0\s*\/\s*100|Critical Digital Issues Detected|Unreviewed raw-score narrative/, 'client preview never substitutes raw score or unreviewed narrative for approved content');
+  assert.deepStrictEqual(previewDialogs[0].generatePdfPayload, approvedPreviewReference, 'generation receives the exact approved finding-set reference');
+} finally {
+  context.createPreviewDialog_ = originalPreviewDialog;
+  delete context.SpreadsheetApp;
+}
 
 const fixtureSmartFindings = context.getSmartFindings_;
 context.getSmartFindings_ = () => [];
@@ -358,8 +386,8 @@ const pdfSource = fs.readFileSync(path.join(root, 'PdfEngine.gs'), 'utf8');
 const previewSource = fs.readFileSync(path.join(root, 'DeliverablePreviewEngine.gs'), 'utf8');
 const proposalPdfFunction = pdfSource.slice(pdfSource.indexOf('function buildProposalPdfBlob_'), pdfSource.indexOf('function buildExecutiveSnapshotPdfBlob_'));
 const improvementPreviewFunction = previewSource.slice(previewSource.indexOf('function showImprovementPlanPreview_'), previewSource.indexOf('function showOutreachEmailPreview_'));
-assert.doesNotMatch(proposalPdfFunction, /getExecutiveBusinessIntelligenceForReport_|executiveBusinessIntelligence/i, 'Improvement Plan PDF remains on the approved legacy path');
-assert.doesNotMatch(improvementPreviewFunction, /getExecutiveBusinessIntelligenceForReport_|executiveBusinessIntelligence/i, 'Improvement Plan preview remains on the approved legacy path');
+assert.doesNotMatch(proposalPdfFunction, /getExecutiveBusinessIntelligenceForReport_|executiveBusinessIntelligence/i, 'Improvement Plan PDF does not inject unapproved EBI output');
+assert.doesNotMatch(improvementPreviewFunction, /getExecutiveBusinessIntelligenceForReport_|executiveBusinessIntelligence/i, 'Improvement Plan preview does not inject unapproved EBI output');
 
 assert.strictEqual(context.executiveBusinessGenericRecommendation_('Improve your website.'), true, 'generic recommendation detector rejects filler');
 assert.strictEqual(context.executiveBusinessGenericRecommendation_('Place verified roofing project proof beside the estimate request.'), false, 'specific actions are allowed');
